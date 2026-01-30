@@ -2091,7 +2091,7 @@ void DatabaseReplicated::restoreDatabaseInKeeper(ContextPtr)
     initDatabaseReplica(zookeeper, LoadingStrictnessLevel::CREATE);
 
     /// Force the database to recover to update the restored metadata
-    auto current_zookeeper = getContext()->getZooKeeper();
+    auto current_zookeeper = getZooKeeper();
     current_zookeeper->set(replica_path + "/digest", DatabaseReplicatedDDLWorker::FORCE_AUTO_RECOVERY_DIGEST);
     reinitializeDDLWorker();
 }
