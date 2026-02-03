@@ -1371,7 +1371,12 @@ void ZooKeeper::pushRequest(RequestInfo && info)
 
         /// Capture component name from thread-local storage if not already set
         if (info.component.empty())
+        {
+            auto current_component = Coordination::getCurrentComponent();
+            if (current_component.empty())
+                throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Current component is empty, please set it for your scope using Coordination::setCurrentComponent");
             info.component = Coordination::getCurrentComponent();
+        }
 
         auto maybe_zk_log = getZooKeeperLog();
         if (maybe_zk_log)

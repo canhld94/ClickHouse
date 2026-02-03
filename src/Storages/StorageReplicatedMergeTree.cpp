@@ -465,6 +465,7 @@ StorageReplicatedMergeTree::StorageReplicatedMergeTree(
     mutations_finalizing_task->deactivate();
 
     bool has_zookeeper = getContext()->hasZooKeeper() || getContext()->hasAuxiliaryZooKeeper(zookeeper_info.zookeeper_name);
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::StorageReplicatedMergeTree");
     if (has_zookeeper)
     {
         /// It's possible for getZooKeeper() to timeout if zookeeper host(s) can't
@@ -3868,6 +3869,7 @@ void StorageReplicatedMergeTree::queueUpdatingTask()
     try
     {
         auto zookeeper = getZooKeeperAndAssertNotStaticStorage();
+        auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::queueUpdatingTask");
         if (is_readonly)
         {
             /// Note that we need to check shutdown_prepared_called, not shutdown_called, since the table will be marked as readonly
@@ -3912,6 +3914,7 @@ void StorageReplicatedMergeTree::mutationsUpdatingTask()
 {
     try
     {
+        auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::mutationsUpdatingTask");
         queue.updateMutations(getZooKeeper(), mutations_updating_task->getWatchCallback());
     }
     catch (const Coordination::Exception & e)
@@ -3950,6 +3953,7 @@ ReplicatedMergeTreeQueue::SelectedEntryPtr StorageReplicatedMergeTree::selectQue
 
 bool StorageReplicatedMergeTree::processQueueEntry(ReplicatedMergeTreeQueue::SelectedEntryPtr selected_entry)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::processQueueEntry");
     LogEntryPtr & entry = selected_entry->log_entry;
     return queue.processEntry([this]{ return getZooKeeper(); }, entry, [&](LogEntryPtr & entry_to_process)
     {
@@ -5580,6 +5584,7 @@ MergeTreeData::MutableDataPartPtr StorageReplicatedMergeTree::fetchExistsPart(
 void StorageReplicatedMergeTree::startup()
 {
     LOG_TRACE(log, "Starting up table");
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::startup");
     startOutdatedAndUnexpectedDataPartsLoadingTask();
     if (attach_thread)
     {

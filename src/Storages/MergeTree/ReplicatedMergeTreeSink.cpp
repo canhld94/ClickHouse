@@ -1163,6 +1163,7 @@ void ReplicatedMergeTreeSink::onFinish()
         return;
 
     ZooKeeperWithFaultInjectionPtr zookeeper = createKeeper("ReplicatedMergeTreeSink::onFinish");
+    auto component_guard = Coordination::setCurrentComponent("ReplicatedMergeTreeSink::onFinish");
     finishDelayed(zookeeper);
 }
 

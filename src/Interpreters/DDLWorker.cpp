@@ -1164,6 +1164,7 @@ bool DDLWorker::initializeMainThread()
     DB::setThreadName(ThreadName::DDL_WORKER);
     LOG_DEBUG(log, "Initializing DDLWorker thread");
 
+    auto component_guard = Coordination::setCurrentComponent("DDLWorker::initializeMainThread");
     while (!stop_flag)
     {
         try
@@ -1227,6 +1228,7 @@ void DDLWorker::runMainThread()
 
     DB::setThreadName(ThreadName::DDL_WORKER);
     LOG_INFO(log, "Starting DDLWorker thread");
+    auto component_guard = Coordination::setCurrentComponent("DDLWorker::runMainThread");
     while (!stop_flag)
     {
         try
@@ -1505,6 +1507,7 @@ void DDLWorker::runCleanupThread()
     DB::setThreadName(ThreadName::DDL_WORKER_CLEANUP);
     LOG_DEBUG(log, "Started DDLWorker cleanup thread");
 
+    auto component_guard = Coordination::setCurrentComponent("DDLWorker::cleanupThread");
     Int64 last_cleanup_time_seconds = 0;
     while (!stop_flag)
     {
