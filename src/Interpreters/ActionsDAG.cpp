@@ -2479,13 +2479,16 @@ bool ActionsDAG::isFilterAlwaysFalseForDefaultValueInputs(const std::string & fi
         return false;
     }
 
+    if (!filter_with_default_value_inputs)
+        return false;
+
     const auto * filter_with_default_value_inputs_filter_node = filter_with_default_value_inputs->getOutputs()[0];
     if (!filter_with_default_value_inputs_filter_node->column || !isColumnConst(*filter_with_default_value_inputs_filter_node->column))
         return false;
 
     const auto & constant_type = filter_with_default_value_inputs_filter_node->result_type;
     auto which_constant_type = WhichDataType(constant_type);
-    if (!which_constant_type.isUInt8() && !which_constant_type.isNothing())
+    if (!which_constant_type.isUInt8() && !which_constant_type.isNothing() && !which_constant_type.isNullable())
         return false;
 
     Field value;

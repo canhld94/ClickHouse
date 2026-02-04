@@ -517,9 +517,6 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
             if (!join_header->has(name))
                 continue;
 
-            /// Skip if type is changed. Push down expression expect equal types.
-            if (!input_header->getByName(name).type->equals(*join_header->getByName(name).type))
-                continue;
 
             available_input_columns_for_filter.push_back(name);
         }
@@ -620,10 +617,10 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
     /// 2. move filter within JOIN step, potentially changing JoinKind
     /// 3. push filter/expression out of JOIN (from pre-filter)
 
-    auto fix_predicate_for_join_logical_step = [&](ActionsDAG filter_dag, ActionsDAG side_dag)
+    auto fix_predicate_for_join_logical_step = [&](ActionsDAG filter_dag, ActionsDAG pre_filter_dag)
     {
-        projectDagInputs(side_dag);
-        filter_dag = ActionsDAG::merge(std::move(side_dag), std::move(filter_dag));
+        projectDagInputs(pre_filter_dag);
+        filter_dag = ActionsDAG::merge(std::move(pre_filter_dag), std::move(filter_dag));
         auto & outputs = filter_dag.getOutputs();
         outputs.resize(1);
 
@@ -632,13 +629,36 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
         return filter_dag;
     };
 
+    auto get_required_pre_actions = [&](const auto & join_actions, const auto & filter_dag_inputs)
+    {
+        std::vector<JoinActionRef> required_actions;
+        auto join_actions_it = join_actions.begin();
+        for (const auto * filter_node : filter_dag_inputs)
+        {
+            while (join_actions_it != join_actions.end())
+            {
+                if (join_actions_it->getColumnName() == filter_node->result_name)
+                {
+                    required_actions.push_back(*join_actions_it);
+                    ++join_actions_it;
+                    break;
+                }
+                ++join_actions_it;
+            }
+        }
+        return required_actions;
+    };
+
     if (join_filter_push_down_actions.left_stream_filter_to_push_down)
     {
         if (logical_join)
         {
-            auto side_dag = JoinExpressionActions::getSubDAG(equivalent_expressions | std::views::transform([](const auto & pair) { return pair.first; }));
+            const auto & filter_dag_inputs = join_filter_push_down_actions.left_stream_filter_to_push_down->getInputs();
+            std::vector<JoinActionRef> required_actions_from_join = get_required_pre_actions(logical_join->getOutputActions(), filter_dag_inputs);
+            required_actions_from_join.append_range(equivalent_expressions | std::views::transform([](const auto & pair) { return pair.first; }));
+            auto pre_filter_dag = JoinExpressionActions::getSubDAG(required_actions_from_join);
             *join_filter_push_down_actions.left_stream_filter_to_push_down = fix_predicate_for_join_logical_step(
-                std::move(*join_filter_push_down_actions.left_stream_filter_to_push_down), std::move(side_dag));
+                std::move(*join_filter_push_down_actions.left_stream_filter_to_push_down), std::move(pre_filter_dag));
             join_filter_push_down_actions.left_stream_filter_removes_filter = true;
         }
 
@@ -662,9 +682,12 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
     {
         if (logical_join)
         {
-            auto side_dag = JoinExpressionActions::getSubDAG(equivalent_expressions | std::views::transform([](const auto & pair) { return pair.second; }));
+            const auto & filter_dag_inputs = join_filter_push_down_actions.right_stream_filter_to_push_down->getInputs();
+            std::vector<JoinActionRef> required_actions_from_join = get_required_pre_actions(logical_join->getOutputActions(), filter_dag_inputs);
+            required_actions_from_join.append_range(equivalent_expressions | std::views::transform([](const auto & pair) { return pair.second; }));
+            auto pre_filter_dag = JoinExpressionActions::getSubDAG(required_actions_from_join);
             *join_filter_push_down_actions.right_stream_filter_to_push_down = fix_predicate_for_join_logical_step(
-                std::move(*join_filter_push_down_actions.right_stream_filter_to_push_down), std::move(side_dag));
+                std::move(*join_filter_push_down_actions.right_stream_filter_to_push_down), std::move(pre_filter_dag));
             join_filter_push_down_actions.right_stream_filter_removes_filter = true;
         }
 
