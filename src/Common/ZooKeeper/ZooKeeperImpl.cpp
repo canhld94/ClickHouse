@@ -77,9 +77,19 @@ namespace CurrentMetrics
     extern const Metric ZooKeeperWatch;
 }
 
-namespace DB::ServerSetting
+namespace DB
+{
+
+namespace ServerSetting
 {
     extern const ServerSettingsInt32 os_threads_nice_value_zookeeper_client_send_receive;
+}
+
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+}
+
 }
 
 namespace HistogramMetrics
