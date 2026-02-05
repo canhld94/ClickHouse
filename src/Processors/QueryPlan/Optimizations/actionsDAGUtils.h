@@ -46,6 +46,20 @@ struct MatchedTrees
     using Matches = std::unordered_map<const ActionsDAG::Node *, Match>;
 };
 
+/// Match nodes from outer_dag to nodes in inner_dag.
+///
+/// This function finds correspondences between expression trees. For each node in outer_dag,
+/// it tries to find an equivalent node in inner_dag. This is used for:
+/// - Projection optimization: matching query expressions to pre-computed projection expressions
+/// - Read-in-order optimization: matching sort expressions to table ordering
+///
+/// @param inner_dag - nodes to match against (e.g., projection's pre-aggregation expressions)
+/// @param outer_dag - nodes to find matches for (e.g., query's expressions)
+/// @param check_monotonicity - if true, also track monotonic function chains for ordering optimizations
+/// @param ignore_materialize_identity - if true, treat materialize(x) and identity(x) as equivalent to x.
+///        This is needed for views which automatically wrap columns with these functions.
+///
+/// @return A map from outer_dag nodes to their matches in inner_dag.
 MatchedTrees::Matches matchTrees(
     const ActionsDAG::NodeRawConstPtrs & inner_dag,
     const ActionsDAG & outer_dag,
