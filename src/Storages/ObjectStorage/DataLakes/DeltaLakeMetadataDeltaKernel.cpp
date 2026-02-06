@@ -18,6 +18,7 @@
 #include <Core/Settings.h>
 #include <Common/logger_useful.h>
 #include <Common/assert_cast.h>
+#include <Common/FailPoint.h>
 #include <Storages/ObjectStorage/Utils.h>
 #include <Interpreters/DeltaMetadataLog.h>
 
@@ -26,6 +27,11 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int SUPPORT_IS_DISABLED;
+}
+
+namespace FailPoints
+{
+    extern const char delta_lake_metadata_iterate_pause[];
 }
 
 namespace Setting
@@ -125,6 +131,9 @@ ObjectIterator DeltaLakeMetadataDeltaKernel::iterate(
     ContextPtr context) const
 {
     logMetadataFiles(context);
+
+    FailPointInjection::pauseFailPoint(FailPoints::delta_lake_metadata_iterate_pause);
+
     std::lock_guard lock(table_snapshot_mutex);
     return table_snapshot->iterate(filter_dag, callback, list_batch_size);
 }

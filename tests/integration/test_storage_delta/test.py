@@ -4104,3 +4104,83 @@ def test_network_activity_with_system_tables(started_cluster):
             f"SELECT count() FROM system.text_log WHERE query_id = '{query_id}' AND message LIKE '%Initialized scan state%'"
         )
     )
+
+
+def test_schema_change_race_condition(started_cluster):
+    instance = started_cluster.instances["node1"]
+    spark = started_cluster.spark_session
+    TABLE_NAME = randomize_table_name("test_schema_race")
+
+    delta_path = f"/{TABLE_NAME}"
+
+    data = spark.range(100).selectExpr(
+        "id as a",
+        "id * 2 as b",
+        "id * 3 as c"
+    )
+    write_delta_from_df(spark, data, delta_path)
+
+    default_upload_directory(started_cluster, "s3", delta_path, "")
+    create_delta_table(instance, "s3", TABLE_NAME, started_cluster)
+
+    initial_count = int(instance.query(f"SELECT count() FROM {TABLE_NAME}").strip())
+    assert initial_count == 100, f"Expected 100 rows, got {initial_count}"
+
+    instance.query("SYSTEM ENABLE FAILPOINT delta_lake_metadata_iterate_pause")
+
+    result_holder = {"result": None, "error": None}
+
+    from concurrent.futures import ThreadPoolExecutor
+    import concurrent.futures
+
+    executor = ThreadPoolExecutor(max_workers=2)
+
+    wait_future = executor.submit(
+        lambda: instance.query("SYSTEM WAIT FAILPOINT delta_lake_metadata_iterate_pause PAUSE", timeout=30)
+    )
+
+    time.sleep(1)
+
+    def run_query():
+        try:
+            result = instance.query(
+                f"SELECT count() FROM {TABLE_NAME} WHERE sleepEachRow(0.01) = 0",
+                settings={"max_threads": 1, "allow_experimental_delta_kernel_rs": 1},
+                timeout=60
+            )
+            result_holder["result"] = int(result.strip())
+        except Exception as e:
+            result_holder["error"] = e
+
+    query_future = executor.submit(run_query)
+
+    concurrent.futures.wait([wait_future], timeout=15)
+
+    if wait_future.exception() is not None:
+        instance.query("SYSTEM DISABLE FAILPOINT delta_lake_metadata_iterate_pause")
+        raise Exception("Test setup failed - failpoint not hit")
+
+    df = spark.read.format("delta").load(delta_path)
+    df_filtered = df.filter("a < 50")
+    df_filtered.write.format("delta").mode("overwrite").save(delta_path)
+
+    default_upload_directory(started_cluster, "s3", delta_path, "")
+
+    second_query_count = int(instance.query(f"SELECT count() FROM {TABLE_NAME}").strip())
+
+    instance.query("SYSTEM NOTIFY FAILPOINT delta_lake_metadata_iterate_pause")
+
+    concurrent.futures.wait([query_future], timeout=60)
+
+    instance.query("SYSTEM DISABLE FAILPOINT delta_lake_metadata_iterate_pause")
+
+    if result_holder["error"]:
+        raise result_holder["error"]
+
+    first_query_count = result_holder["result"]
+
+    if first_query_count == 50:
+        raise Exception(f"Bug detected: First query saw updated snapshot (50 rows) instead of its original snapshot (100 rows)! "
+                       f"Second query (which ran while first was paused) returned {second_query_count} rows.")
+
+    assert first_query_count == 100, f"Expected first query to see 100 rows, got {first_query_count}"
