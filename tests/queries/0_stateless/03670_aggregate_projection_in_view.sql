@@ -1,5 +1,7 @@
 -- { echo ON }
 
+SET enable_parallel_replicas = 0;
+
 DROP TABLE IF EXISTS t;
 DROP TABLE IF EXISTS v;
 
