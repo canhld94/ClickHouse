@@ -107,6 +107,8 @@ public:
     /// Otherwise return information about column size on disk.
     ColumnSize getColumnSize(const String & column_name) const;
     const ColumnSizeByName & getColumnSizes() const;
+    /// Return the size of all files required to read the specified subcolumn.
+    ColumnSize getSubcolumnSize(const String & /*subcolumn_name*/) const;
 
     virtual std::optional<time_t> getColumnModificationTime(const String & column_name) const = 0;
 
@@ -662,10 +664,17 @@ private:
     mutable ColumnSize total_columns_size;
     /// Size for each column, calculated once in calcuateColumnSizesOnDisk
     mutable ColumnSizeByName columns_sizes;
-
     mutable ColumnSize total_secondary_indices_size;
 
     mutable IndexSizeByName secondary_index_sizes;
+
+    /// Sometimes we need to calculate the size of all files required to read a specific subcolumn.
+    /// We do it on the first request and save it in the subcolumns_sizes_cache.
+    /// But as number of different subcolumns can be infinite (because of dynamic subcolumns),
+    /// we restrict the cache size and invalidate it when it reaches the maximum allowed size.
+    mutable std::mutex subcolumns_sizes_cache_mutex;
+    static constexpr size_t MAX_SUBCOLUMNS_SIZES_CACHE_SIZE = 1000;
+    mutable ColumnSizeByName subcolumns_sizes_cache;
 
 protected:
     /// Total size on disk, not only columns. May not contain size of
@@ -693,6 +702,9 @@ protected:
     /// Fill each_columns_size and total_size with sizes from columns files on
     /// disk using columns and checksums.
     virtual void calculateEachColumnSizes(ColumnSizeByName & each_columns_size, ColumnSize & total_size) const = 0;
+
+    /// Calculate the size of all files required to read a specified subcolumn.
+    virtual ColumnSize calculateSubcolumnSize(const String & /*subcolumn_name*/) const { return {}; }
 
     std::optional<String> getRelativePathForDetachedPart(const String & prefix, bool broken) const;
 
