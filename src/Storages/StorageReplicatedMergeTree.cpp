@@ -1363,6 +1363,7 @@ void StorageReplicatedMergeTree::drop()
     /// or metadata of staled replica were removed manually,
     /// in this case, has_metadata_in_zookeeper = false, and we also permit to drop the table.
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::drop");
     bool maybe_has_metadata_in_zookeeper = !has_metadata_in_zookeeper.has_value() || *has_metadata_in_zookeeper;
     zkutil::ZooKeeperPtr zookeeper;
     if (maybe_has_metadata_in_zookeeper)
@@ -4031,6 +4032,7 @@ bool StorageReplicatedMergeTree::scheduleDataProcessingJob(BackgroundJobsAssigne
     if (queue.actions_blocker.isCancelled())
         return false;
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::scheduleDataProcessingJob");
     /// This object will mark the element of the queue as running.
     ReplicatedMergeTreeQueue::SelectedEntryPtr selected_entry = selectQueueEntry();
 
@@ -4121,6 +4123,7 @@ void StorageReplicatedMergeTree::mergeSelectingTask()
     if (!is_leader)
         return;
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::mergeSelectingTask");
     FailPointInjection::pauseFailPoint(FailPoints::rmt_merge_selecting_task_pause_when_scheduled);
 
     const auto storage_settings_ptr = getSettings();
@@ -4365,6 +4368,7 @@ void StorageReplicatedMergeTree::mutationsFinalizingTask()
 {
     bool needs_reschedule = false;
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::mutationsFinalizingTask");
     try
     {
         auto zookeeper = getZooKeeperAndAssertNotStaticStorage();
@@ -5223,6 +5227,7 @@ bool StorageReplicatedMergeTree::fetchPart(
     if (isStaticStorage())
         throw Exception(ErrorCodes::TABLE_IS_READ_ONLY, "Table is in readonly mode due to static storage");
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::fetchPart");
     auto zookeeper = zookeeper_ ? zookeeper_ : getZooKeeper();
     const auto part_info = MergeTreePartInfo::fromPartName(part_name, format_version);
 
@@ -5807,6 +5812,8 @@ void StorageReplicatedMergeTree::shutdown(bool)
     if (shutdown_called.exchange(true))
         return;
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::shutdown");
+
     LOG_TRACE(log, "Shutdown started");
 
     if (refresh_parts_task)
@@ -5936,6 +5943,7 @@ void StorageReplicatedMergeTree::read(
     const size_t max_block_size,
     const size_t num_streams)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::read");
     const auto & settings = local_context->getSettingsRef();
 
     /// The `select_sequential_consistency` setting has two meanings:
@@ -6172,6 +6180,7 @@ bool StorageReplicatedMergeTree::optimize(
     bool cleanup,
     ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::optimize");
     /// NOTE: exclusive lock cannot be used here, since this may lead to deadlock (see comments below),
     /// but it should be safe to use non-exclusive to avoid dropping parts that may be required for processing queue.
     auto table_lock = lockForShare(query_context->getCurrentQueryId(), query_context->getSettingsRef()[Setting::lock_acquire_timeout]);
@@ -6512,6 +6521,7 @@ PartitionBlockNumbersHolder StorageReplicatedMergeTree::allocateBlockNumbersInAf
 void StorageReplicatedMergeTree::alter(
     const AlterCommands & commands, ContextPtr query_context, AlterLockHolder & table_lock_holder)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::alter");
     assertNotReadonly();
 
     auto table_id = getStorageID();
@@ -6890,6 +6900,7 @@ bool StorageReplicatedMergeTree::getFakePartCoveringAllPartsInPartition(
 void StorageReplicatedMergeTree::restoreMetadataInZooKeeper(
     const ZooKeeperRetriesInfo & zookeeper_retries_info, bool is_called_during_attach)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::restoreMetadataInZooKeeper");
     LOG_INFO(log, "Restoring replica metadata");
 
     if (!is_called_during_attach && !initialization_done)
@@ -6979,6 +6990,7 @@ void StorageReplicatedMergeTree::dropPartNoWaitNoThrow(const String & part_name)
 
 void StorageReplicatedMergeTree::dropPart(const String & part_name, bool detach, ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::dropPart");
     assertNotReadonly();
     if (!is_leader)
         throw Exception(ErrorCodes::NOT_A_LEADER, "DROP PART cannot be done on this replica because it is not a leader");
@@ -6994,6 +7006,7 @@ void StorageReplicatedMergeTree::dropPart(const String & part_name, bool detach,
 
 void StorageReplicatedMergeTree::dropPartition(const ASTPtr & partition, bool detach, ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::dropPartition");
     assertNotReadonly();
     if (!is_leader)
         throw Exception(ErrorCodes::NOT_A_LEADER, "DROP PARTITION cannot be done on this replica because it is not a leader");
@@ -7046,6 +7059,7 @@ void StorageReplicatedMergeTree::truncate(
     if (!is_leader)
         throw Exception(ErrorCodes::NOT_A_LEADER, "TRUNCATE cannot be done on this replica because it is not a leader");
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::truncate");
     waitForOutdatedPartsToBeLoaded();
     zkutil::ZooKeeperPtr zookeeper = getZooKeeperAndAssertNotReadonly();
     auto partitions = zookeeper->getChildren(fs::path(zookeeper_path) / "block_numbers");
@@ -7060,6 +7074,7 @@ PartitionCommandsResultInfo StorageReplicatedMergeTree::attachPartition(
     if (!are_restoring_replica)
         assertNotReadonly();
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::attachPartition");
     PartitionCommandsResultInfo results;
     PartsTemporaryRename renamed_parts(*this, DETACHED_DIR_NAME);
     MutableDataPartsVector loaded_parts = tryLoadPartsToAttach(command, query_context, renamed_parts);
@@ -7498,6 +7513,7 @@ bool StorageReplicatedMergeTree::tryWaitForReplicaToProcessLogEntry(
 
 void StorageReplicatedMergeTree::getStatus(ReplicatedStatus & res, bool with_zk_fields)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::getStatus");
     auto zookeeper = tryGetZooKeeper();
     const auto storage_settings_ptr = getSettings();
 
@@ -7625,6 +7641,7 @@ time_t StorageReplicatedMergeTree::getAbsoluteDelay() const
 
 void StorageReplicatedMergeTree::getReplicaDelays(time_t & out_absolute_delay, time_t & out_relative_delay)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::getReplicaDelays");
     assertNotReadonly();
 
     time_t current_time = time(nullptr);
@@ -7719,6 +7736,7 @@ void StorageReplicatedMergeTree::fetchPartition(
     bool fetch_part,
     ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::fetchPartition");
     auto settings = getSettings();
 
     Macros::MacroExpansionInfo info;
@@ -8019,6 +8037,7 @@ void StorageReplicatedMergeTree::mutate(const MutationCommands & commands, Conte
     /// After all needed parts are mutated (i.e. all active parts have the mutation version greater than
     /// the version of this mutation), the mutation is considered done and can be deleted.
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::mutate");
     delayMutationOrThrowIfNeeded(&partial_shutdown_event, query_context);
 
     ReplicatedMergeTreeMutationEntry mutation_entry;
@@ -8123,6 +8142,7 @@ std::vector<MergeTreeMutationStatus> StorageReplicatedMergeTree::getMutationsSta
 
 CancellationCode StorageReplicatedMergeTree::killMutation(const String & mutation_id)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::killMutation");
     assertNotReadonly();
 
     zkutil::ZooKeeperPtr zookeeper = getZooKeeperAndAssertNotReadonly();
@@ -8228,6 +8248,7 @@ void StorageReplicatedMergeTree::waitForCommittingOpsToFinish(zkutil::ZooKeeperP
 
 QueryPipeline StorageReplicatedMergeTree::updateLightweight(const MutationCommands & commands, ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::updateLightweight");
     auto context_copy = Context::createCopy(query_context);
     const auto zookeeper = getZooKeeperAndAssertNotReadonly();
 
@@ -8641,6 +8662,7 @@ void StorageReplicatedMergeTree::clearBlocksInPartition(
 void StorageReplicatedMergeTree::replacePartitionFrom(
     const StoragePtr & source_table, const ASTPtr & partition, bool replace, ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::replacePartitionFrom");
     /// First argument is true, because we possibly will add new data to current table.
     auto lock1 = lockForShare(query_context->getCurrentQueryId(), query_context->getSettingsRef()[Setting::lock_acquire_timeout]);
     auto lock2 = source_table->lockForShare(query_context->getCurrentQueryId(), query_context->getSettingsRef()[Setting::lock_acquire_timeout]);
@@ -8984,6 +9006,7 @@ std::unique_ptr<ReplicatedMergeTreeLogEntryData> StorageReplicatedMergeTree::rep
 
 void StorageReplicatedMergeTree::movePartitionToTable(const StoragePtr & dest_table, const ASTPtr & partition, ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::movePartitionToTable");
     auto dest_table_storage = std::dynamic_pointer_cast<StorageReplicatedMergeTree>(dest_table);
     if (!dest_table_storage)
         throw Exception(ErrorCodes::NOT_IMPLEMENTED,
@@ -9488,6 +9511,7 @@ void StorageReplicatedMergeTree::onActionLockRemove(StorageActionBlockType actio
 
 bool StorageReplicatedMergeTree::waitForProcessingQueue(UInt64 max_wait_milliseconds, SyncReplicaMode sync_mode, std::unordered_set<String> source_replicas)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::waitForProcessingQueue");
     /// Let's fetch new log entries firstly
     queue.pullLogsToQueue(getZooKeeperAndAssertNotReadonly(), {}, ReplicatedMergeTreeQueue::SYNC);
 
@@ -9843,6 +9867,7 @@ std::optional<CheckResult> StorageReplicatedMergeTree::checkDataNext(DataValidat
     if (shutdown_called || partial_shutdown_called)
         throw Exception(ErrorCodes::ABORTED, "Table shutdown was called");
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::checkDataNext");
     if (auto part = assert_cast<DataValidationTasks *>(check_task_list.get())->next())
     {
         try

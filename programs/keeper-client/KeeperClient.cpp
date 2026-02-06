@@ -7,6 +7,7 @@
 #include <Common/EventNotifier.h>
 #include <Common/ZooKeeper/IKeeper.h>
 #include <Common/ZooKeeper/ZooKeeperArgs.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/filesystemHelpers.h>
 #include <Common/ZooKeeper/ZooKeeper.h>
 #include <Parsers/parseQuery.h>
@@ -243,6 +244,7 @@ bool KeeperClient::processQueryText(const String & text, bool is_interactive)
     std::chrono::milliseconds current_sleep{100};
     size_t i = 0;
 
+    auto component_guard = Coordination::setCurrentComponent("KeeperClient::processQueryText");
     while (true)
     {
         try
@@ -464,6 +466,7 @@ void KeeperClient::connectToKeeper()
     if (!new_zk_args.identity.empty())
         new_zk_args.auth_scheme = "digest";
     zk_args = new_zk_args;
+    auto component_guard = Coordination::setCurrentComponent("KeeperClient::connectToKeeper");
     zookeeper = zkutil::ZooKeeper::createWithoutKillingPreviousSessions(std::move(new_zk_args));
 }
 

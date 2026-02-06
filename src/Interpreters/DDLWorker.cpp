@@ -1083,6 +1083,7 @@ void DDLWorker::createStatusDirs(const std::string & node_path, const ZooKeeperP
 
 String DDLWorker::enqueueQuery(DDLLogEntry & entry, const ZooKeeperRetriesInfo & retries_info)
 {
+    auto component_guard = Coordination::setCurrentComponent("DDLWorker::enqueueQuery");
     if (stop_flag)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Can't enqueue a query after shutdown");
 

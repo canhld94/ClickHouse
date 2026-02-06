@@ -5,6 +5,7 @@
 #include <Poco/UUID.h>
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Poco/Util/Application.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/quoteString.h>
 #include <Common/setThreadName.h>
 #include <Common/ISlotControl.h>
@@ -4969,6 +4970,7 @@ void Context::reloadZooKeeperIfChanged(const ConfigurationPtr & config) const
 {
     bool server_started = isServerCompletelyStarted();
 
+    auto component_guard = Coordination::setCurrentComponent("Context::reloadZooKeeperIfChanged");
     std::lock_guard lock(shared->zookeeper_mutex);
     shared->zookeeper_config = config;
 

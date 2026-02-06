@@ -1204,6 +1204,7 @@ void InterpreterSystemQuery::restartReplicas(ContextMutablePtr system_context)
 
 void InterpreterSystemQuery::dropReplica(ASTSystemQuery & query)
 {
+    auto component_guard = Coordination::setCurrentComponent("InterpreterSystemQuery::dropReplica");
     if (query.replica.empty())
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Replica name is empty");
 

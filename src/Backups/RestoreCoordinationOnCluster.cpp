@@ -47,6 +47,7 @@ RestoreCoordinationOnCluster::~RestoreCoordinationOnCluster() = default;
 
 void RestoreCoordinationOnCluster::startup()
 {
+    auto component_guard = Coordination::setCurrentComponent("RestoreCoordinationOnCluster::startup");
     stage_sync.startup();
     createRootNodes();
 }
@@ -84,6 +85,7 @@ bool RestoreCoordinationOnCluster::isRestoreQuerySentToOtherHosts() const
 
 Strings RestoreCoordinationOnCluster::setStage(const String & new_stage, const String & message, bool sync)
 {
+    auto component_guard = Coordination::setCurrentComponent("RestoreCoordinationOnCluster::setStage");
     stage_sync.setStage(new_stage, message);
     if (sync)
         return stage_sync.waitHostsReachStage(all_hosts_without_initiator, new_stage);
@@ -92,6 +94,7 @@ Strings RestoreCoordinationOnCluster::setStage(const String & new_stage, const S
 
 void RestoreCoordinationOnCluster::setError(std::exception_ptr exception, bool throw_if_error)
 {
+    auto component_guard = Coordination::setCurrentComponent("RestoreCoordinationOnCluster::setError");
     stage_sync.setError(exception, throw_if_error);
 }
 
@@ -307,6 +310,7 @@ bool RestoreCoordinationOnCluster::acquireInsertingDataForKeeperMap(const String
 
 void RestoreCoordinationOnCluster::generateUUIDForTable(ASTCreateQuery & create_query)
 {
+    auto component_guard = Coordination::setCurrentComponent("RestoreCoordinationOnCluster::generateUUIDForTable");
     String query_str = create_query.formatWithSecretsOneLine();
     CreateQueryUUIDs new_uuids{create_query, /* generate_random= */ true, /* force_random= */ true};
     String new_uuids_str = new_uuids.toString();

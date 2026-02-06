@@ -198,6 +198,7 @@ BackupCoordinationOnCluster::~BackupCoordinationOnCluster() = default;
 
 void BackupCoordinationOnCluster::startup()
 {
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::startup");
     stage_sync.startup();
     createRootNodes();
 }
@@ -235,6 +236,7 @@ bool BackupCoordinationOnCluster::isBackupQuerySentToOtherHosts() const
 
 Strings BackupCoordinationOnCluster::setStage(const String & new_stage, const String & message, bool sync)
 {
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::setStage");
     stage_sync.setStage(new_stage, message);
     if (sync)
         return stage_sync.waitHostsReachStage(all_hosts_without_initiator, new_stage);
@@ -243,6 +245,7 @@ Strings BackupCoordinationOnCluster::setStage(const String & new_stage, const St
 
 void BackupCoordinationOnCluster::setError(std::exception_ptr exception, bool throw_if_error)
 {
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::setError");
     stage_sync.setError(exception, throw_if_error);
 }
 
@@ -754,6 +757,7 @@ void BackupCoordinationOnCluster::addFileInfos(BackupFileInfos && file_infos_)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "addFileInfos() must not be called after preparing");
     }
 
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::addFileInfos");
     /// Serialize `file_infos_` and write it to ZooKeeper's nodes.
     String file_infos_str = FileInfos::serialize(file_infos_);
     serializeToMultipleZooKeeperNodes(zookeeper_path + "/file_infos/" + current_host, file_infos_str, "addFileInfos");
@@ -761,6 +765,7 @@ void BackupCoordinationOnCluster::addFileInfos(BackupFileInfos && file_infos_)
 
 BackupFileInfos BackupCoordinationOnCluster::getFileInfos() const
 {
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::getFileInfos");
     std::lock_guard lock{file_infos_mutex};
     prepareFileInfos();
     return file_infos->getFileInfos(current_host);
@@ -768,6 +773,7 @@ BackupFileInfos BackupCoordinationOnCluster::getFileInfos() const
 
 BackupFileInfos BackupCoordinationOnCluster::getFileInfosForAllHosts() const
 {
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::getFileInfosForAllHosts");
     std::lock_guard lock{file_infos_mutex};
     prepareFileInfos();
     return file_infos->getFileInfosForAllHosts();
@@ -807,6 +813,7 @@ bool BackupCoordinationOnCluster::startWritingFile(size_t data_file_index)
         if (writing_files.contains(data_file_index))
             return false;
     }
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::startWritingFile");
 
     /// Store in Zookeeper that this host is the only host which is allowed to write this file.
     bool host_is_assigned = false;

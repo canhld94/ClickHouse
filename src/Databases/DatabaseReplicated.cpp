@@ -233,6 +233,7 @@ String DatabaseReplicated::getFullReplicaName(const String & shard, const String
 
 void DatabaseReplicated::getStatus(ReplicatedStatus & response, const bool with_zk_fields) const
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::getStatus");
     auto zookeeper = getZooKeeper();
 
     response.is_readonly = is_readonly;
@@ -301,6 +302,7 @@ std::pair<String, String> DatabaseReplicated::parseFullReplicaName(const String 
 
 ClusterPtr DatabaseReplicated::tryGetCluster() const
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::tryGetCluster");
     std::lock_guard lock{mutex};
     if (cluster)
         return cluster;
@@ -487,6 +489,7 @@ ClusterPtr DatabaseReplicated::getClusterImpl(bool all_groups) const
 
 ReplicasInfo DatabaseReplicated::tryGetReplicasInfo(const ClusterPtr & cluster_) const
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::tryGetReplicasInfo");
     Strings paths;
 
     paths.emplace_back(fs::path(zookeeper_path) / "max_log_ptr");
@@ -896,6 +899,7 @@ void DatabaseReplicated::createReplicaNodesInZooKeeper(const zkutil::ZooKeeperPt
 void DatabaseReplicated::beforeLoadingMetadata(ContextMutablePtr context_, LoadingStrictnessLevel mode)
 {
     DatabaseAtomic::beforeLoadingMetadata(context_, mode);
+    auto compoment_guard = Coordination::setCurrentComponent("DatabaseReplicated::beforeLoadingMetadata");
     tryConnectToZooKeeperAndInitDatabase(mode);
 }
 
@@ -1350,6 +1354,8 @@ void DatabaseReplicated::checkQueryValid(const ASTPtr & query, ContextPtr query_
 
 BlockIO DatabaseReplicated::tryEnqueueReplicatedDDL(const ASTPtr & query, ContextPtr query_context, QueryFlags flags, DDLGuardPtr && database_guard)
 {
+    auto compoment_guard = Coordination::setCurrentComponent("DatabaseReplicated::tryEnqueueReplicatedDDL");
+
     waitDatabaseStarted();
 
     if (!DatabaseCatalog::instance().canPerformReplicatedDDLQueries())
@@ -2013,6 +2019,8 @@ void DatabaseReplicated::drop(ContextPtr context_)
         return;
     }
 
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::drop");
+
     waitDatabaseStarted();
 
     auto current_zookeeper = getZooKeeper();
@@ -2067,6 +2075,7 @@ void DatabaseReplicated::stopReplication()
 
 void DatabaseReplicated::shutdown()
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::shutdown");
     stopReplication();
     {
         std::lock_guard lock{ddl_worker_mutex};

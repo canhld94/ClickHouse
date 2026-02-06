@@ -28,6 +28,7 @@
 #include <Common/noexcept_scope.h>
 #include <Common/quoteString.h>
 #include <Common/threadPoolCallbackRunner.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 
 #include <algorithm>
 #include <mutex>
@@ -988,6 +989,7 @@ DatabaseCatalog & DatabaseCatalog::instance()
 
 void DatabaseCatalog::shutdown(std::function<void()> shutdown_system_logs)
 {
+    auto compoment_guard = Coordination::setCurrentComponent("DatabaseCatalog::shutdown");
     // The catalog might not be initialized yet by init(global_context). It can
     // happen if some exception was thrown on first steps of startup.
     if (database_catalog)
