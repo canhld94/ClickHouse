@@ -12,11 +12,14 @@ INSERT INTO t1 VALUES (4000, 'b'), (5000, 'a');
 INSERT INTO t2 VALUES (5000, 1), (5000, 2), (6000, 3);
 INSERT INTO t3 VALUES (5000, 1), (5000, 2), (5000, 3), (7000, 10);
 
+SET enable_analyzer = 1;
 SET query_plan_join_swap_table = 0;
 SET query_plan_optimize_join_order_limit = 0;
 SET join_use_nulls = 1;
 SET query_plan_convert_outer_join_to_inner_join = 1;
 SET optimize_move_to_prewhere = 1;
+SET enable_join_runtime_filters = 0;
+SET enable_parallel_replicas = 0;
 
 SELECT l.name || '_' || toString(r.val + 1) || toTypeName(r.val) || '_' || toString(r2.val2 + 1) || toTypeName(r2.val2)
 FROM t1 AS l
