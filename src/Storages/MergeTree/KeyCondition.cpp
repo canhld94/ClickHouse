@@ -1439,7 +1439,7 @@ bool applyDeterministicDagToColumn(
     {
         dag.actions->execute(block, false, true);
     }
-    catch (...)
+    catch (const Exception &)
     {
         /// If any error occurs during the execution of the DAG, we cannot transform the constant
         return false;
