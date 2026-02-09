@@ -430,6 +430,7 @@ void BackupCoordinationOnCluster::addReplicatedDataPath(
             throw Exception(ErrorCodes::LOGICAL_ERROR, "addReplicatedDataPath() must not be called after preparing");
     }
 
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::addReplicatedDataPath");
     auto holder = with_retries.createRetriesControlHolder("addReplicatedDataPath");
     holder.retries_ctl.retryLoop(
     [&, &zk = holder.faulty_zookeeper]()
@@ -545,6 +546,7 @@ void BackupCoordinationOnCluster::addReplicatedAccessFilePath(const String & acc
             throw Exception(ErrorCodes::LOGICAL_ERROR, "addReplicatedAccessFilePath() must not be called after preparing");
     }
 
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::addReplicatedAccessFilePath");
     auto holder = with_retries.createRetriesControlHolder("addReplicatedAccessFilePath");
     holder.retries_ctl.retryLoop(
         [&, &zk = holder.faulty_zookeeper]()
@@ -561,6 +563,7 @@ void BackupCoordinationOnCluster::addReplicatedAccessFilePath(const String & acc
 
 Strings BackupCoordinationOnCluster::getReplicatedAccessFilePaths(const String & access_zk_path, AccessEntityType access_entity_type) const
 {
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::getReplicatedAccessFilePaths");
     std::lock_guard lock{replicated_access_mutex};
     prepareReplicatedAccess();
     return replicated_access->getFilePaths(access_zk_path, access_entity_type, current_host);
@@ -610,6 +613,7 @@ void BackupCoordinationOnCluster::addReplicatedSQLObjectsDir(const String & load
             throw Exception(ErrorCodes::LOGICAL_ERROR, "addReplicatedSQLObjectsDir() must not be called after preparing");
     }
 
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::addReplicatedSQLObjectsDir");
     auto holder = with_retries.createRetriesControlHolder("addReplicatedSQLObjectsDir");
     holder.retries_ctl.retryLoop(
         [&, &zk = holder.faulty_zookeeper]()
@@ -634,6 +638,7 @@ void BackupCoordinationOnCluster::addReplicatedSQLObjectsDir(const String & load
 
 Strings BackupCoordinationOnCluster::getReplicatedSQLObjectsDirs(const String & loader_zk_path, UserDefinedSQLObjectType object_type) const
 {
+    auto component_guard = Coordination::setCurrentComponent("BackupCoordinationOnCluster::getReplicatedSQLObjectsDirs");
     std::lock_guard lock{replicated_sql_objects_mutex};
     prepareReplicatedSQLObjects();
     return replicated_sql_objects->getDirectories(loader_zk_path, object_type, current_host);

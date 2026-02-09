@@ -1336,6 +1336,7 @@ void InterpreterSystemQuery::dropStorageReplicasFromDatabase(const String & quer
 DatabasePtr InterpreterSystemQuery::restoreDatabaseFromKeeperPath(
     const String & zookeeper_path, const String & full_replica_name, const String & restoring_database_name)
 {
+    auto component_guard = Coordination::setCurrentComponent("InterpreterSystemQuery::restoreDatabaseFromKeeperPath");
     auto zookeeper = getContext()->getZooKeeper();
 
     String metadata_path = zookeeper_path + "/metadata";

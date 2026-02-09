@@ -404,6 +404,7 @@ void StorageObjectStorageQueue::startup()
         return;
     }
 
+    auto component_guard = Coordination::setCurrentComponent("StorageObjectStorageQueue::startup");
     /// Create metadata in keeper if it does not exits yet.
     /// Create a persistent node for the table under /registry node.
     bool created_new_metadata = false;
@@ -458,6 +459,8 @@ void StorageObjectStorageQueue::shutdown(bool is_drop)
 {
     if (shutdown_called)
         return;
+
+    auto component_guard = Coordination::setCurrentComponent("StorageObjectStorageQueue::shutdown");
 
     /// Unregister table from local Queue storages factory.
     /// (which allows to  to execute shutdown of Queue tables

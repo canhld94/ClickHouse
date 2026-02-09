@@ -1950,7 +1950,8 @@ ASTPtr DatabaseReplicated::parseQueryFromMetadataOnDisk(const String & table_nam
 void DatabaseReplicated::dropReplica(
     DatabaseReplicated * database, const String & database_zookeeper_path, const String & shard, const String & replica, bool throw_if_noop)
 {
-    assert(!database || database_zookeeper_path == database->zookeeper_path);
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::dropReplica");
+    chassert(!database || database_zookeeper_path == database->zookeeper_path);
 
     String full_replica_name = shard.empty() ? replica : getFullReplicaName(shard, replica);
 
@@ -1994,6 +1995,7 @@ void DatabaseReplicated::dropReplica(
 
 void DatabaseReplicated::restoreDatabaseMetadataInKeeper(ContextPtr)
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::restoreDatabaseMetadataInKeeper");
     waitDatabaseStarted();
 
     /// Stop the DDL worker before restoring metadata to prevent a race condition:
@@ -2404,6 +2406,7 @@ void DatabaseReplicated::createTableRestoredFromBackup(
     std::shared_ptr<IRestoreCoordination> restore_coordination,
     UInt64 timeout_ms)
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::createTableRestoredFromBackup");
     waitDatabaseStarted();
 
     /// Because of the replication multiple nodes can try to restore the same tables again and failed with "Table already exists"

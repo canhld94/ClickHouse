@@ -1091,6 +1091,8 @@ void ObjectStorageQueueMetadata::filterOutForProcessor(Strings & paths, const St
 
 void ObjectStorageQueueMetadata::updateRegistryFunc()
 {
+    auto component_guard = Coordination::setCurrentComponent("ObjectStorageQueueMetadata::updateRegistry");
+
     try
     {
         Coordination::EventPtr wait_event = std::make_shared<Poco::Event>();

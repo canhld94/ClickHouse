@@ -127,6 +127,7 @@ static void checkReplicaPathExists(ASTCreateQuery & create_query, ContextPtr loc
     info.table_id = table_id;
     info.expand_special_macros_only = false;
 
+    auto component_guard = Coordination::setCurrentComponent("DatabaseOrdinary::checkReplicaPathExists");
     const auto & server_settings = local_context->getServerSettings();
     String replica_path = server_settings[ServerSetting::default_replica_path];
     String zookeeper_path = local_context->getMacros()->expand(replica_path, info);

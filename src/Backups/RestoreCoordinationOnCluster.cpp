@@ -219,6 +219,7 @@ bool RestoreCoordinationOnCluster::acquireInsertingDataIntoReplicatedTable(const
 
 bool RestoreCoordinationOnCluster::acquireReplicatedAccessStorage(const String & access_storage_zk_path)
 {
+    auto component_guard = Coordination::setCurrentComponent("RestoreCoordinationOnCluster::acquireReplicatedAccessStorage");
     bool result = false;
     auto holder = with_retries.createRetriesControlHolder("acquireReplicatedAccessStorage");
     holder.retries_ctl.retryLoop(
@@ -245,6 +246,7 @@ bool RestoreCoordinationOnCluster::acquireReplicatedAccessStorage(const String &
 
 bool RestoreCoordinationOnCluster::acquireReplicatedSQLObjects(const String & loader_zk_path, UserDefinedSQLObjectType object_type)
 {
+    auto component_guard = Coordination::setCurrentComponent("RestoreCoordinationOnCluster::acquireReplicatedSQLObjects");
     bool result = false;
     auto holder = with_retries.createRetriesControlHolder("acquireReplicatedSQLObjects");
     holder.retries_ctl.retryLoop(

@@ -4617,6 +4617,7 @@ void recordZooKeeperConnectionLoss()
 
 zkutil::ZooKeeperPtr Context::getZooKeeper() const
 {
+    auto component_guard = Coordination::setCurrentComponent("Context::getZooKeeper");
     std::lock_guard lock(shared->zookeeper_mutex);
 
     const auto & config = shared->zookeeper_config ? *shared->zookeeper_config : getConfigRef();
@@ -4878,6 +4879,7 @@ void Context::updateKeeperConfiguration([[maybe_unused]] const Poco::Util::Abstr
 
 zkutil::ZooKeeperPtr Context::getAuxiliaryZooKeeper(const String & name) const
 {
+    auto component_guard = Coordination::setCurrentComponent("Context::getAuxiliaryZooKeeper");
     std::lock_guard lock(shared->auxiliary_zookeepers_mutex);
     const auto config_name = "auxiliary_zookeepers." + name;
 

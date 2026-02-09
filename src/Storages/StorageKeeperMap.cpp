@@ -1149,6 +1149,7 @@ private:
 
 void StorageKeeperMap::backupData(BackupEntriesCollector & backup_entries_collector, const String & data_path_in_backup, const std::optional<ASTs> & /*partitions*/)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageKeeperMap::backupData");
     auto coordination = backup_entries_collector.getBackupCoordination();
     coordination->addKeeperMapTable(zk_root_path, table_unique_id, data_path_in_backup);
 

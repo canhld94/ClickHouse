@@ -1551,6 +1551,7 @@ bool StorageReplicatedMergeTree::dropReplica(
 
 bool StorageReplicatedMergeTree::dropReplica(const String & drop_replica, LoggerPtr logger)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::dropReplica");
     zkutil::ZooKeeperPtr zookeeper = getZooKeeperIfTableShutDown();
 
     /// NOTE it's not atomic: replica may become active after this check, but before dropReplica(...)
@@ -5931,6 +5932,7 @@ StorageReplicatedMergeTree::~StorageReplicatedMergeTree()
 
 PartitionIdToMaxBlock StorageReplicatedMergeTree::getMaxAddedBlocks() const
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::getMaxAddedBlocks");
     PartitionIdToMaxBlock max_added_blocks;
 
     for (const auto & data_part : getDataPartsForInternalUsage())
@@ -7204,6 +7206,7 @@ void StorageReplicatedMergeTree::checkTableCanBeRenamed(const StorageID & new_na
 
 void StorageReplicatedMergeTree::rename(const String & new_path_to_table_data, const StorageID & new_table_id)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::rename");
     checkTableCanBeRenamed(new_table_id);
     MergeTreeData::rename(new_path_to_table_data, new_table_id);
 
@@ -8014,6 +8017,7 @@ void StorageReplicatedMergeTree::fetchPartition(
 
 void StorageReplicatedMergeTree::forgetPartition(const ASTPtr & partition, ContextPtr query_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::forgetPartition");
     zkutil::ZooKeeperPtr zookeeper = getZooKeeperAndAssertNotReadonly();
 
     String partition_id = getPartitionIDFromQuery(partition, query_context);
@@ -8444,6 +8448,7 @@ void StorageReplicatedMergeTree::clearOldPartsAndRemoveFromZKImpl(zkutil::ZooKee
 
 void StorageReplicatedMergeTree::forcefullyRemoveBrokenOutdatedPartFromZooKeeperBeforeDetaching(const String & part_name)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::forcefullyRemoveBrokenOutdatedPartFromZooKeeperBeforeDetaching");
     /// An outdated part is broken and we are going to move it do detached/
     /// But we need to remove it from ZooKeeper as well. Otherwise it will be considered as "lost forever".
 
@@ -11299,6 +11304,7 @@ void StorageReplicatedMergeTree::createAndStoreFreezeMetadata(DiskPtr disk, Data
 
 void StorageReplicatedMergeTree::applyMetadataChangesToCreateQueryForBackup(const ASTPtr & create_query) const
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::applyMetadataChangesToCreateQueryForBackup");
     try
     {
         /// Try to adjust the create query using values from ZooKeeper.
@@ -11326,6 +11332,7 @@ void StorageReplicatedMergeTree::backupData(
     /// But then we don't add them to the BackupEntriesCollector right away,
     /// because we need to coordinate them with other replicas (other replicas can have better parts).
 
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::backupData");
     const auto & backup_settings = backup_entries_collector.getBackupSettings();
     auto local_context = backup_entries_collector.getContext();
     auto zookeeper_retries_info = backup_entries_collector.getZooKeeperRetriesInfo();
@@ -11403,6 +11410,7 @@ void StorageReplicatedMergeTree::backupData(
                                  my_parts_backup_entries = std::move(parts_backup_entries),
                                  &backup_entries_collector]()
     {
+        auto local_component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::post_collecting_task");
         Strings data_paths = coordination->getReplicatedDataPaths(my_full_zookeeper_path);
         std::vector<fs::path> data_paths_fs;
         data_paths_fs.reserve(data_paths.size());
@@ -11436,6 +11444,7 @@ void StorageReplicatedMergeTree::backupData(
 
 void StorageReplicatedMergeTree::restoreDataFromBackup(RestorerFromBackup & restorer, const String & data_path_in_backup, const std::optional<ASTs> & partitions)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::restoreDataFromBackup");
     if (!restorer.getRestoreCoordination()->acquireInsertingDataIntoReplicatedTable(zookeeper_info.full_path))
     {
         /// Other replica is already restoring the data of this table.
@@ -11465,6 +11474,7 @@ void StorageReplicatedMergeTree::restoreDataFromBackup(RestorerFromBackup & rest
 
 void StorageReplicatedMergeTree::attachRestoredParts(MutableDataPartsVector && parts)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageReplicatedMergeTree::attachRestoredParts");
     auto metadata_snapshot = getInMemoryMetadataPtr();
 
     auto sink = std::make_shared<ReplicatedMergeTreeSink>(
