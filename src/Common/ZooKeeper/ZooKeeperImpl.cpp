@@ -87,7 +87,7 @@ namespace ServerSetting
 
 namespace ErrorCodes
 {
-    extern const int LOGICAL_ERROR;
+    extern const int NO_ZOOKEEPER;
 }
 
 }
@@ -1384,7 +1384,7 @@ void ZooKeeper::pushRequest(RequestInfo && info)
         {
             auto current_component = Coordination::getCurrentComponent();
             if (current_component.empty())
-                throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Current component is empty, please set it for your scope using Coordination::setCurrentComponent");
+                throw DB::Exception(DB::ErrorCodes::NO_ZOOKEEPER, "Current component is empty, please set it for your scope using Coordination::setCurrentComponent");
             info.component = Coordination::getCurrentComponent();
         }
 
