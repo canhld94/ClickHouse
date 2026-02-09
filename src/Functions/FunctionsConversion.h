@@ -1500,6 +1500,302 @@ enum class BehaviourOnErrorFromString : uint8_t
     ConvertReturnZeroOnErrorTag
 };
 
+
+template <typename FromFieldType, typename ColVecToData, typename ColVecFromData>
+static void convertToBool(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+{
+    for (size_t i = 0; i < input_rows_count; i++)
+        vec_to[i] = vec_from[i] != FromFieldType(0);
+}
+
+template <typename ColVecToData, typename ColVecFromData>
+static void convertFromUUIDToUInt128(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+{
+    static_assert(
+        std::is_same_v<DataTypeUInt128::FieldType, DataTypeUUID::FieldType::UnderlyingType>,
+        "UInt128 and UUID types must be same");
+
+    for (size_t i = 0; i < input_rows_count; i++)
+    {
+        vec_to[i].items[1] = vec_from[i].toUnderType().items[0];
+        vec_to[i].items[0] = vec_from[i].toUnderType().items[1];
+    }
+}
+
+template <typename ColVecToData, typename ColVecFromData>
+static void convertFromUInt128toIPv6(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+{
+    static_assert(
+        std::is_same_v<DataTypeUInt128::FieldType, DataTypeIPv6::FieldType::UnderlyingType>,
+        "IPv6 and UInt128 types must be same");
+
+    for (size_t i = 0; i < input_rows_count; i++)
+    {
+        vec_to[i].toUnderType().items[1] = std::byteswap(vec_from[i].items[0]);
+        vec_to[i].toUnderType().items[0] = std::byteswap(vec_from[i].items[1]);
+    }
+}
+
+template <typename ColVecToData, typename ColVecFromData>
+static void convertFromIPv6ToUInt128(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+{
+    static_assert(
+        std::is_same_v<DataTypeUInt128::FieldType, DataTypeIPv6::FieldType::UnderlyingType>,
+        "UInt128 and IPv6 types must be same");
+
+    for (size_t i = 0; i < input_rows_count; i++)
+    {
+        vec_to[i].items[1] = std::byteswap(vec_from[i].toUnderType().items[0]);
+        vec_to[i].items[0] = std::byteswap(vec_from[i].toUnderType().items[1]);
+    }
+}
+
+template <typename ToFieldType, typename ColVecToData>
+static void convertDateTimeToZero(ColVecToData & vec_to, size_t input_rows_count)
+{
+    for (size_t i = 0; i < input_rows_count; i++)
+        vec_to[i] = static_cast<ToFieldType>(0);
+}
+
+template <typename ColVecToData, typename ColVecFromData>
+static void convertFromIPv6ToIPv4(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count, const ColumnWithTypeAndName & named_from)
+{
+    const uint8_t ip4_cidr[] {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00};
+
+    for (size_t i = 0; i < input_rows_count; i++)
+    {
+        const uint8_t * src = reinterpret_cast<const uint8_t *>(&vec_from[i].toUnderType());
+        if (!matchIPv6Subnet(src, ip4_cidr, 96))
+        {
+            char addr[IPV6_MAX_TEXT_LENGTH + 1] {};
+            char * paddr = addr;
+            formatIPv6(src, paddr);
+
+            throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "IPv6 {} in column {} is not in IPv4 mapping block", addr, named_from.column->getName());
+        }
+
+        uint8_t * dst = reinterpret_cast<uint8_t *>(&vec_to[i].toUnderType());
+        if constexpr (std::endian::native == std::endian::little)
+        {
+            dst[0] = src[15];
+            dst[1] = src[14];
+            dst[2] = src[13];
+            dst[3] = src[12];
+        }
+        else
+        {
+            dst[0] = src[12];
+            dst[1] = src[13];
+            dst[2] = src[14];
+            dst[3] = src[15];
+        }
+    }
+}
+
+template <typename ColVecToData, typename ColVecFromData>
+static void convertFromIPv4ToIPv6(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+{
+    for (size_t i = 0; i < input_rows_count; i++)
+    {
+        const uint8_t * src = reinterpret_cast<const uint8_t *>(&vec_from[i].toUnderType());
+        uint8_t * dst = reinterpret_cast<uint8_t *>(&vec_to[i].toUnderType());
+        std::memset(dst, '\0', IPV6_BINARY_LENGTH);
+        dst[10] = dst[11] = 0xff;
+
+        if constexpr (std::endian::native == std::endian::little)
+        {
+            dst[12] = src[3];
+            dst[13] = src[2];
+            dst[14] = src[1];
+            dst[15] = src[0];
+        }
+        else
+        {
+            dst[12] = src[0];
+            dst[13] = src[1];
+            dst[14] = src[2];
+            dst[15] = src[3];
+        }
+    }
+}
+
+template <typename ToFieldType, typename ColVecToData, typename ColVecFromData>
+static void convertFromUInt64ToIPv4(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+{
+    for (size_t i = 0; i < input_rows_count; i++)
+        vec_to[i] = static_cast<ToFieldType>(static_cast<IPv4::UnderlyingType>(vec_from[i]));
+}
+
+template <typename ToFieldType, typename ColVecToData, typename ColVecFromData>
+static void convertToUnixTimestampFromDate(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+{
+    for (size_t i = 0; i < input_rows_count; i++)
+        vec_to[i] = static_cast<ToFieldType>(vec_from[i] * DATE_SECONDS_PER_DAY);
+}
+
+template <typename Additions, typename FromDataType, typename ToDataType, typename ColTo, typename ColFrom>
+static ColumnPtr convertDecimal(ColTo && col_to, ColFrom & col_from, size_t input_rows_count)
+{
+    const auto & vec_from = col_from->getData();
+    auto & vec_to = col_to->getData();
+
+    if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+    {
+        using ToFieldType = typename ToDataType::FieldType;
+        ColumnUInt8::MutablePtr col_null_map_to = ColumnUInt8::create(input_rows_count, false);
+        ColumnUInt8::Container & vec_null_map_to = col_null_map_to->getData();
+
+        for (size_t i = 0; i < input_rows_count; i++)
+        {
+            ToFieldType result;
+            bool convert_result = false;
+
+            if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeDecimal<ToDataType>)
+                convert_result = tryConvertDecimals<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), col_to->getScale(), result);
+            else if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeNumber<ToDataType>)
+                convert_result = tryConvertFromDecimal<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), result);
+            else if constexpr (IsDataTypeNumber<FromDataType> && IsDataTypeDecimal<ToDataType>)
+                convert_result = tryConvertToDecimal<FromDataType, ToDataType>(vec_from[i], col_to->getScale(), result);
+
+            if (convert_result)
+                vec_to[i] = result;
+            else
+            {
+                vec_to[i] = static_cast<ToFieldType>(0);
+                vec_null_map_to[i] = true;
+            }
+        }
+
+        return ColumnNullable::create(std::forward<ColTo>(col_to), std::move(col_null_map_to));
+    }
+    else
+    {
+        for (size_t i = 0; i < input_rows_count; ++i)
+        {
+            if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeDecimal<ToDataType>)
+                vec_to[i] = convertDecimals<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), col_to->getScale());
+            else if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeNumber<ToDataType>)
+                vec_to[i] = convertFromDecimal<FromDataType, ToDataType>(vec_from[i], col_from->getScale());
+            else if constexpr (IsDataTypeNumber<FromDataType> && IsDataTypeDecimal<ToDataType>)
+                vec_to[i] = convertToDecimal<FromDataType, ToDataType>(vec_from[i], col_to->getScale());
+            else
+                throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "Unsupported data type in conversion function");
+        }
+
+        return std::forward<ColTo>(col_to);
+    }
+}
+
+
+template <typename Additions, typename FromFieldType, typename ToFieldType, typename ColVecToData, typename ColVecFromData>
+static ColumnPtr convertNumericGeneral(
+    typename ColumnVector<ToFieldType>::MutablePtr && col_to,
+    ColVecToData & vec_to,
+    ColVecFromData & vec_from,
+    size_t input_rows_count,
+    const ColumnWithTypeAndName & named_from,
+    const DataTypePtr & result_type)
+{
+    ColumnUInt8::MutablePtr col_null_map_to;
+    ColumnUInt8::Container * vec_null_map_to = nullptr;
+
+    if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+    {
+        col_null_map_to = ColumnUInt8::create(input_rows_count, false);
+        vec_null_map_to = &col_null_map_to->getData();
+    }
+
+    for (size_t i = 0; i < input_rows_count; ++i)
+    {
+        /// Handle NaN/Inf when converting from float to integer
+        if constexpr (is_floating_point<FromFieldType> && !is_floating_point<ToFieldType>)
+        {
+            if (!isFinite(vec_from[i]))
+            {
+                if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+                {
+                    vec_to[i] = 0;
+                    (*vec_null_map_to)[i] = true;
+                    continue;
+                }
+                else
+                    throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "Unexpected inf or nan to integer conversion");
+            }
+        }
+
+        /// Accurate conversion with overflow checks
+        if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>
+                || std::is_same_v<Additions, AccurateConvertStrategyAdditions>)
+        {
+            bool convert_result = accurate::convertNumeric(vec_from[i], vec_to[i]);
+
+            if (!convert_result)
+            {
+                if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+                {
+                    vec_to[i] = 0;
+                    (*vec_null_map_to)[i] = true;
+                }
+                else
+                {
+                    throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "Value in column {} cannot be safely converted into type {}",
+                        named_from.column->getName(), result_type->getName());
+                }
+            }
+        }
+#if defined(__aarch64__)
+        /// ARM64 optimized conversion: UInt64 -> BFloat16
+        else if constexpr (std::is_same_v<FromFieldType, UInt64> && std::is_same_v<ToFieldType, BFloat16>)
+        {
+            const UInt64* __restrict s = &vec_from[i];
+            BFloat16* __restrict d = &vec_to[i];
+            size_t remaining = input_rows_count - i;
+
+#if !defined(OS_DARWIN)
+            _Pragma("clang loop vectorize_width(4) interleave_count(2)")
+#endif
+            for (size_t j = 0; j < remaining; ++j)
+            {
+                double tmp = static_cast<double>(s[j]);
+                float f = static_cast<float>(tmp);
+                d[j] = BFloat16(f);
+            }
+
+            i += remaining - 1;
+        }
+        /// ARM64 optimized conversion: UInt64 -> Float32
+        else if constexpr (std::is_same_v<FromFieldType, UInt64> && std::is_same_v<ToFieldType, Float32>)
+        {
+            const UInt64* __restrict s = &vec_from[i];
+            Float32* __restrict d = &vec_to[i];
+            size_t remaining = input_rows_count - i;
+
+#if !defined(OS_DARWIN)
+            _Pragma("clang loop vectorize_width(4) interleave_count(2)")
+#endif
+            for (size_t j = 0; j < remaining; ++j)
+            {
+                double tmp = static_cast<double>(s[j]);
+                d[j] = Float32(tmp);
+            }
+
+            i += remaining - 1;
+        }
+#endif
+        /// Default: simple static_cast conversion
+        else
+        {
+            vec_to[i] = static_cast<ToFieldType>(vec_from[i]);
+        }
+    }
+
+    if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+        return ColumnNullable::create(std::move(col_to), std::move(col_null_map_to));
+    else
+        return std::move(col_to);
+}
+
+
 /** Conversion of number types to each other, enums to numbers, dates and datetimes to numbers and back: done by straight assignment.
   *  (Date is represented internally as number of days from some day; DateTime - as unix timestamp)
   */
@@ -2171,264 +2467,111 @@ struct ConvertImpl
             auto & vec_to = col_to->getData();
             vec_to.resize(input_rows_count);
 
-            ColumnUInt8::MutablePtr col_null_map_to;
-            ColumnUInt8::Container * vec_null_map_to [[maybe_unused]] = nullptr;
-            if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
+            /// Helper macro to wrap result in Nullable if needed (creates empty null map for special conversions)
+            #define RETURN_NULLABLE_IF_NEEDED(col_name) \
+                do { \
+                    if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>) \
+                    { \
+                        ColumnUInt8::MutablePtr col_null_map_to = ColumnUInt8::create(input_rows_count, false); \
+                        return ColumnNullable::create(std::move(col_name), std::move(col_null_map_to)); \
+                    } \
+                    else \
+                        return col_name; \
+                } while (false)
+
+            /// Bool conversion
+            if constexpr (std::is_same_v<ToDataType, DataTypeUInt8>)
             {
-                col_null_map_to = ColumnUInt8::create(input_rows_count, false);
-                vec_null_map_to = &col_null_map_to->getData();
-            }
-
-            bool result_is_bool = isBool(result_type);
-            for (size_t i = 0; i < input_rows_count; ++i)
-            {
-                if constexpr (std::is_same_v<ToDataType, DataTypeUInt8>)
+                if (isBool(result_type))
                 {
-                    if (result_is_bool)
-                    {
-                        vec_to[i] = vec_from[i] != FromFieldType(0);
-                        continue;
-                    }
-                }
-
-                if constexpr (std::is_same_v<FromDataType, DataTypeUUID> && std::is_same_v<ToDataType, DataTypeUInt128>)
-                {
-                    static_assert(
-                        std::is_same_v<DataTypeUInt128::FieldType, DataTypeUUID::FieldType::UnderlyingType>,
-                        "UInt128 and UUID types must be same");
-
-                    vec_to[i].items[1] = vec_from[i].toUnderType().items[0];
-                    vec_to[i].items[0] = vec_from[i].toUnderType().items[1];
-                }
-                else if constexpr (std::is_same_v<FromDataType, DataTypeIPv6> && std::is_same_v<ToDataType, DataTypeUInt128>)
-                {
-                    static_assert(
-                        std::is_same_v<DataTypeUInt128::FieldType, DataTypeIPv6::FieldType::UnderlyingType>,
-                        "UInt128 and IPv6 types must be same");
-
-                    vec_to[i].items[1] = std::byteswap(vec_from[i].toUnderType().items[0]);
-                    vec_to[i].items[0] = std::byteswap(vec_from[i].toUnderType().items[1]);
-                }
-                else if constexpr (std::is_same_v<FromDataType, DataTypeUInt128> && std::is_same_v<ToDataType, DataTypeIPv6>)
-                {
-                    static_assert(
-                        std::is_same_v<DataTypeUInt128::FieldType, DataTypeIPv6::FieldType::UnderlyingType>,
-                        "IPv6 and UInt128 types must be same");
-
-                    vec_to[i].toUnderType().items[1] = std::byteswap(vec_from[i].items[0]);
-                    vec_to[i].toUnderType().items[0] = std::byteswap(vec_from[i].items[1]);
-                }
-                else if constexpr (std::is_same_v<FromDataType, DataTypeUUID> != std::is_same_v<ToDataType, DataTypeUUID>)
-                {
-                    throw Exception(ErrorCodes::NOT_IMPLEMENTED,
-                                    "Conversion between numeric types and UUID is not supported. "
-                                    "Probably the passed UUID is unquoted");
-                }
-                else if constexpr (
-                    (std::is_same_v<FromDataType, DataTypeIPv4> != std::is_same_v<ToDataType, DataTypeIPv4>)
-                    && !(is_any_of<FromDataType, DataTypeUInt8, DataTypeUInt16, DataTypeUInt32, DataTypeUInt64, DataTypeIPv6>
-                        || is_any_of<ToDataType, DataTypeUInt32, DataTypeUInt64, DataTypeUInt128, DataTypeUInt256, DataTypeIPv6>))
-                {
-                    throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Conversion from {} to {} is not supported",
-                                    TypeName<typename FromDataType::FieldType>, TypeName<typename ToDataType::FieldType>);
-                }
-                else if constexpr (std::is_same_v<FromDataType, DataTypeIPv6> != std::is_same_v<ToDataType, DataTypeIPv6>
-                    && !(std::is_same_v<ToDataType, DataTypeIPv4> || std::is_same_v<FromDataType, DataTypeIPv4>))
-                {
-                    throw Exception(ErrorCodes::NOT_IMPLEMENTED,
-                                    "Conversion between numeric types and IPv6 is not supported. "
-                                    "Probably the passed IPv6 is unquoted");
-                }
-                else if constexpr (
-                    ((std::is_same_v<FromDataType, DataTypeDate> || std::is_same_v<FromDataType, DataTypeDate32>)
-                        && (std::is_same_v<ToDataType, DataTypeTime> || std::is_same_v<ToDataType, DataTypeTime64>))
-                    || ((std::is_same_v<ToDataType, DataTypeDate> || std::is_same_v<ToDataType, DataTypeDate32>)
-                        && (std::is_same_v<FromDataType, DataTypeTime> || std::is_same_v<FromDataType, DataTypeTime64>)))
-                {
-                    vec_to[i] = static_cast<ToFieldType>(0); // when we convert date toTime, we should have 000:00:00 as a result, and conversely
-                }
-                /// Time64->Time64 scale conversion is handled by the generic decimal conversion logic below.
-                else if constexpr (IsDataTypeDecimal<FromDataType> || IsDataTypeDecimal<ToDataType>)
-                {
-                    if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
-                    {
-                        ToFieldType result;
-                        bool convert_result = false;
-
-                        if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeDecimal<ToDataType>)
-                            convert_result = tryConvertDecimals<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), col_to->getScale(), result);
-                        else if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeNumber<ToDataType>)
-                            convert_result = tryConvertFromDecimal<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), result);
-                        else if constexpr (IsDataTypeNumber<FromDataType> && IsDataTypeDecimal<ToDataType>)
-                            convert_result = tryConvertToDecimal<FromDataType, ToDataType>(vec_from[i], col_to->getScale(), result);
-
-                        if (convert_result)
-                            vec_to[i] = result;
-                        else
-                        {
-                            vec_to[i] = static_cast<ToFieldType>(0);
-                            (*vec_null_map_to)[i] = true;
-                        }
-                    }
-                    else
-                    {
-                        if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeDecimal<ToDataType>)
-                            vec_to[i] = convertDecimals<FromDataType, ToDataType>(vec_from[i], col_from->getScale(), col_to->getScale());
-                        else if constexpr (IsDataTypeDecimal<FromDataType> && IsDataTypeNumber<ToDataType>)
-                            vec_to[i] = convertFromDecimal<FromDataType, ToDataType>(vec_from[i], col_from->getScale());
-                        else if constexpr (IsDataTypeNumber<FromDataType> && IsDataTypeDecimal<ToDataType>)
-                            vec_to[i] = convertToDecimal<FromDataType, ToDataType>(vec_from[i], col_to->getScale());
-                        else
-                            throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "Unsupported data type in conversion function");
-                    }
-                }
-                else if constexpr (std::is_same_v<ToDataType, DataTypeIPv4> && std::is_same_v<FromDataType, DataTypeIPv6>)
-                {
-                    const uint8_t ip4_cidr[] {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00};
-                    const uint8_t * src = reinterpret_cast<const uint8_t *>(&vec_from[i].toUnderType());
-                    if (!matchIPv6Subnet(src, ip4_cidr, 96))
-                    {
-                        char addr[IPV6_MAX_TEXT_LENGTH + 1] {};
-                        char * paddr = addr;
-                        formatIPv6(src, paddr);
-
-                        throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "IPv6 {} in column {} is not in IPv4 mapping block", addr, named_from.column->getName());
-                    }
-
-                    uint8_t * dst = reinterpret_cast<uint8_t *>(&vec_to[i].toUnderType());
-                    if constexpr (std::endian::native == std::endian::little)
-                    {
-                        dst[0] = src[15];
-                        dst[1] = src[14];
-                        dst[2] = src[13];
-                        dst[3] = src[12];
-                    }
-                    else
-                    {
-                        dst[0] = src[12];
-                        dst[1] = src[13];
-                        dst[2] = src[14];
-                        dst[3] = src[15];
-                    }
-                }
-                else if constexpr (std::is_same_v<ToDataType, DataTypeIPv6> && std::is_same_v<FromDataType, DataTypeIPv4>)
-                {
-                    const uint8_t * src = reinterpret_cast<const uint8_t *>(&vec_from[i].toUnderType());
-                    uint8_t * dst = reinterpret_cast<uint8_t *>(&vec_to[i].toUnderType());
-                    std::memset(dst, '\0', IPV6_BINARY_LENGTH);
-                    dst[10] = dst[11] = 0xff;
-
-                    if constexpr (std::endian::native == std::endian::little)
-                    {
-                        dst[12] = src[3];
-                        dst[13] = src[2];
-                        dst[14] = src[1];
-                        dst[15] = src[0];
-                    }
-                    else
-                    {
-                        dst[12] = src[0];
-                        dst[13] = src[1];
-                        dst[14] = src[2];
-                        dst[15] = src[3];
-                    }
-                }
-                else if constexpr (std::is_same_v<ToDataType, DataTypeIPv4> && std::is_same_v<FromDataType, DataTypeUInt64>)
-                {
-                    vec_to[i] = static_cast<ToFieldType>(static_cast<IPv4::UnderlyingType>(vec_from[i]));
-                }
-                else if constexpr (std::is_same_v<Name, NameToUnixTimestamp>
-                    && (std::is_same_v<FromDataType, DataTypeDate> || std::is_same_v<FromDataType, DataTypeDate32>))
-                {
-                    vec_to[i] = static_cast<ToFieldType>(vec_from[i] * DATE_SECONDS_PER_DAY);
-                }
-                else
-                {
-                    /// If From Data is Nan or Inf and we convert to integer type, throw exception
-                    if constexpr (is_floating_point<FromFieldType> && !is_floating_point<ToFieldType>)
-                    {
-                        if (!isFinite(vec_from[i]))
-                        {
-                            if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
-                            {
-                                vec_to[i] = 0;
-                                (*vec_null_map_to)[i] = true;
-                                continue;
-                            }
-                            else
-                                throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "Unexpected inf or nan to integer conversion");
-                        }
-                    }
-
-                    if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>
-                            || std::is_same_v<Additions, AccurateConvertStrategyAdditions>)
-                    {
-                        bool convert_result = accurate::convertNumeric(vec_from[i], vec_to[i]);
-
-                        if (!convert_result)
-                        {
-                            if (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
-                            {
-                                vec_to[i] = 0;
-                                (*vec_null_map_to)[i] = true;
-                            }
-                            else
-                            {
-                                throw Exception(ErrorCodes::CANNOT_CONVERT_TYPE, "Value in column {} cannot be safely converted into type {}",
-                                    named_from.column->getName(), result_type->getName());
-                            }
-                        }
-                    }
-#if defined(__aarch64__)
-                    else if constexpr (std::is_same_v<FromFieldType, UInt64> && std::is_same_v<ToFieldType, BFloat16>)
-                    {
-                        const UInt64* __restrict s = &vec_from[i];
-                        BFloat16* __restrict d = &vec_to[i];
-
-                        size_t remaining = input_rows_count - i;
-
-#if !defined(OS_DARWIN)
-                        _Pragma("clang loop vectorize_width(4) interleave_count(2)")
-#endif
-                        for (size_t j = 0; j < remaining; ++j)
-                        {
-                            double tmp = static_cast<double>(s[j]);
-                            float f = static_cast<float>(tmp);
-                            d[j] = BFloat16(f);
-                        }
-
-                        i += remaining - 1;
-                    }
-                    else if constexpr (std::is_same_v<FromFieldType, UInt64> && std::is_same_v<ToFieldType, Float32>)
-                    {
-                        const UInt64* __restrict s = &vec_from[i];
-                        Float32* __restrict d = &vec_to[i];
-
-                        size_t remaining = input_rows_count - i;
-
-#if !defined(OS_DARWIN)
-                        _Pragma("clang loop vectorize_width(4) interleave_count(2)")
-#endif
-                        for (size_t j = 0; j < remaining; ++j)
-                        {
-                            double tmp = static_cast<double>(s[j]);
-                            d[j] = Float32(tmp);
-                        }
-
-                        i += remaining - 1;
-                    }
-#endif
-                    else
-                    {
-                        vec_to[i] = static_cast<ToFieldType>(vec_from[i]);
-                    }
+                    convertToBool<FromFieldType>(vec_to, vec_from, input_rows_count);
+                    RETURN_NULLABLE_IF_NEEDED(col_to);
                 }
             }
 
-            if constexpr (std::is_same_v<Additions, AccurateOrNullConvertStrategyAdditions>)
-                return ColumnNullable::create(std::move(col_to), std::move(col_null_map_to));
+            /// UUID <-> UInt128 conversions
+            if constexpr (std::is_same_v<FromDataType, DataTypeUUID> && std::is_same_v<ToDataType, DataTypeUInt128>)
+            {
+                convertFromUUIDToUInt128(vec_to, vec_from, input_rows_count);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+
+            /// IPv6 <-> UInt128 conversions
+            if constexpr (std::is_same_v<FromDataType, DataTypeIPv6> && std::is_same_v<ToDataType, DataTypeUInt128>)
+            {
+                convertFromIPv6ToUInt128(vec_to, vec_from, input_rows_count);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+            else if constexpr (std::is_same_v<FromDataType, DataTypeUInt128> && std::is_same_v<ToDataType, DataTypeIPv6>)
+            {
+                convertFromUInt128toIPv6(vec_to, vec_from, input_rows_count);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+
+            /// Date/Time conversions
+            else if constexpr (
+                ((std::is_same_v<FromDataType, DataTypeDate> || std::is_same_v<FromDataType, DataTypeDate32>)
+                    && (std::is_same_v<ToDataType, DataTypeTime> || std::is_same_v<ToDataType, DataTypeTime64>))
+                || ((std::is_same_v<ToDataType, DataTypeDate> || std::is_same_v<ToDataType, DataTypeDate32>)
+                    && (std::is_same_v<FromDataType, DataTypeTime> || std::is_same_v<FromDataType, DataTypeTime64>)))
+            {
+                convertDateTimeToZero<ToFieldType>(vec_to, input_rows_count);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+
+            /// IPv4 <-> IPv6 conversions
+            else if constexpr (std::is_same_v<ToDataType, DataTypeIPv4> && std::is_same_v<FromDataType, DataTypeIPv6>)
+            {
+                convertFromIPv6ToIPv4(vec_to, vec_from, input_rows_count, named_from);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+            else if constexpr (std::is_same_v<ToDataType, DataTypeIPv6> && std::is_same_v<FromDataType, DataTypeIPv4>)
+            {
+                convertFromIPv4ToIPv6(vec_to, vec_from, input_rows_count);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+
+            /// UInt64 -> IPv4 conversion
+            else if constexpr (std::is_same_v<ToDataType, DataTypeIPv4> && std::is_same_v<FromDataType, DataTypeUInt64>)
+            {
+                convertFromUInt64ToIPv4<ToFieldType>(vec_to, vec_from, input_rows_count);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+
+            /// Date to Unix timestamp conversion
+            else if constexpr (std::is_same_v<Name, NameToUnixTimestamp>
+                && (std::is_same_v<FromDataType, DataTypeDate> || std::is_same_v<FromDataType, DataTypeDate32>))
+            {
+                convertToUnixTimestampFromDate<ToFieldType>(vec_to, vec_from, input_rows_count);
+                RETURN_NULLABLE_IF_NEEDED(col_to);
+            }
+
+            /// Type compatibility checks
+            else if constexpr (std::is_same_v<FromDataType, DataTypeUUID> != std::is_same_v<ToDataType, DataTypeUUID>)
+                throw Exception(ErrorCodes::NOT_IMPLEMENTED,
+                                "Conversion between numeric types and UUID is not supported. "
+                                "Probably the passed UUID is unquoted");
+            else if constexpr (
+                (std::is_same_v<FromDataType, DataTypeIPv4> != std::is_same_v<ToDataType, DataTypeIPv4>)
+                && !(is_any_of<FromDataType, DataTypeUInt8, DataTypeUInt16, DataTypeUInt32, DataTypeUInt64, DataTypeIPv6>
+                    || is_any_of<ToDataType, DataTypeUInt32, DataTypeUInt64, DataTypeUInt128, DataTypeUInt256, DataTypeIPv6>))
+                throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Conversion from {} to {} is not supported",
+                                TypeName<typename FromDataType::FieldType>, TypeName<typename ToDataType::FieldType>);
+            else if constexpr (std::is_same_v<FromDataType, DataTypeIPv6> != std::is_same_v<ToDataType, DataTypeIPv6>
+                && !(std::is_same_v<ToDataType, DataTypeIPv4> || std::is_same_v<FromDataType, DataTypeIPv4>))
+                throw Exception(ErrorCodes::NOT_IMPLEMENTED,
+                                "Conversion between numeric types and IPv6 is not supported. "
+                                "Probably the passed IPv6 is unquoted");
+
+            /// Decimal conversions
+            else if constexpr (IsDataTypeDecimal<FromDataType> || IsDataTypeDecimal<ToDataType>)
+                return convertDecimal<Additions, FromDataType, ToDataType>(std::move(col_to), col_from, input_rows_count);
+
+            /// General numeric conversion
             else
-                return col_to;
+                return convertNumericGeneral<Additions, FromFieldType, ToFieldType>(std::move(col_to), vec_to, vec_from, input_rows_count, named_from, result_type);
+
+#undef RETURN_NULLABLE_IF_NEEDED
         }
     }
 };
