@@ -647,6 +647,7 @@ TransactionLog::TransactionsList TransactionLog::getTransactionsList() const
 
 void TransactionLog::sync() const
 {
+    auto component_guard = Coordination::setCurrentComponent("TransactionLog::sync");
     Strings entries_list = getZooKeeper()->getChildren(zookeeper_path_log);
     chassert(!entries_list.empty());
     ::sort(entries_list.begin(), entries_list.end());

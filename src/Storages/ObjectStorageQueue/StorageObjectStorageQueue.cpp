@@ -34,6 +34,7 @@
 #include <Common/FailPoint.h>
 #include <Common/Macros.h>
 #include <Common/ProfileEvents.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/ZooKeeper/ZooKeeperRetries.h>
 #include <Common/randomSeed.h>
 
@@ -286,6 +287,7 @@ StorageObjectStorageQueue::StorageObjectStorageQueue(
     , keep_data_in_keeper(keep_data_in_keeper_)
     , use_hive_partitioning((*queue_settings_)[ObjectStorageQueueSetting::use_hive_partitioning])
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageObjectStorageQueue::StorageObjectStorageQueue");
     const auto & read_path = configuration->getPathForRead();
     if (read_path.path.empty())
     {

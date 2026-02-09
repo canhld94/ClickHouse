@@ -836,6 +836,7 @@ SinkToStoragePtr StorageKeeperMap::write(const ASTPtr & /*query*/, const Storage
 
 void StorageKeeperMap::truncate(const ASTPtr &, const StorageMetadataPtr &, ContextPtr local_context, TableExclusiveLockHolder &)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageKeeperMap::truncate");
     checkTable<true>(local_context);
     const auto & settings = local_context->getSettingsRef();
     ZooKeeperRetriesControl zk_retry{
@@ -1547,6 +1548,7 @@ void StorageKeeperMap::checkMutationIsPossible(const MutationCommands & commands
 
 void StorageKeeperMap::mutate(const MutationCommands & commands, ContextPtr local_context)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageKeeperMap::mutate");
     checkTable<true>(local_context);
 
     if (commands.empty())
