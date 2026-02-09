@@ -288,14 +288,14 @@ The key for partitioning by month allows reading only those data blocks which co
 
 The primary key can contain expressions, not only column names. These expressions are not limited to simple function chains: they can be arbitrary expression trees (for example, nested functions and composite expressions), as long as they are deterministic.
 
-An expression is **deterministic** if it always returns the same result for the same input values (for example: `toDate()`, `lower()`, `left()`, `cityHash64()`, `toUUID()`; unlike `now()` or `rand()`). If the primary key contains deterministic expressions, ClickHouse can apply them to constant values from the query and use the result to build conditions on the primary key index. This enables data skipping for predicates like `=`, `IN`, and `has`.
+An expression is **deterministic** if it always returns the same result for the same input values (for example: `length()`, `toDate()`, `lower()`, `left()`, `cityHash64()`, `toUUID()`; unlike `now()` or `rand()`). If the primary key contains deterministic expressions, ClickHouse can apply them to constant values from the query and use the result to build conditions on the primary key index. This enables data skipping for predicates like `=`, `IN`, and `has`.
 
 A common use case is to keep the primary key compact (e.g. store a hash instead of a long `String`), while still allowing predicates on the original column to use the index.
 
 Example of a deterministic (but non-injective) primary key:
 ```sql
 ENGINE = MergeTree()
-ORDER BY cityHash64(user_id)
+ORDER BY length(user_id)
 ```
 
 Example predicates that can use the index:
@@ -305,7 +305,7 @@ SELECT * FROM table WHERE user_id IN ('alice', 'bob');
 SELECT * FROM table WHERE has(['alice', 'bob'], user_id);
 ```
 
-In these cases, ClickHouse computes `cityHash64('alice')` (and other constants) once and uses the hash values to narrow the ranges in the primary key index. Since hashing is **not injective**, different `user_id` values can share the same hash, so the index may read extra granules (false positives). The result remains correct because the original predicate (`user_id = ...`, `IN`, etc.) is still applied after reading.
+In these cases, ClickHouse computes `length('alice')` (and other constants) once and uses the length values to narrow the ranges in the primary key index. Since length of a string is **not injective**, different `user_id` strings can share the same length, so the index may read extra granules (false positives). The result remains correct because the original predicate (`user_id = ...`, `IN`, etc.) is still applied after reading.
 
 If the deterministic expression is also **injective** (different inputs cannot produce the same output for the argument types used), additionally ClickHouse can effectively use the index for the negated forms: `!=`, `NOT IN`, and `NOT has(...)`. For example, `reverse(p)` and `hex(p)` are injective for `String`.
 
