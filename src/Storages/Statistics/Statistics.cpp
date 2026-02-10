@@ -138,7 +138,7 @@ Float64 ColumnStatistics::estimateLess(const Field & val) const
 
 Float64 ColumnStatistics::estimateGreater(const Field & val) const
 {
-    /// Comparisons with NaN are always false, so `x < NaN` has zero selectivity.
+    /// Comparisons with NaN are always false, so `x > NaN` has zero selectivity.
     if (val.isNaN())
         return 0;
 
@@ -147,7 +147,7 @@ Float64 ColumnStatistics::estimateGreater(const Field & val) const
 
 Float64 ColumnStatistics::estimateEqual(const Field & val) const
 {
-    /// Comparisons with NaN are always false, so `x < NaN` has zero selectivity.
+    /// Comparisons with NaN are always false, so `x = NaN` has zero selectivity.
     if (val.isNaN())
         return 0;
 
