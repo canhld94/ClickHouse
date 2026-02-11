@@ -15,6 +15,7 @@
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnTuple.h>
+#include <Columns/ColumnObject.h>
 
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeEnum.h>
@@ -35,7 +36,7 @@
 #include <Common/FunctionDocumentation.h>
 
 #include <Interpreters/Context.h>
-
+#include <IO/WriteBufferFromVector.h>
 #include "config.h"
 
 
@@ -83,6 +84,32 @@ concept Preparable = requires (T t)
 
 class FunctionJSONHelpers
 {
+private:
+    /// converts JSON object column to string column in batch by serializing each JSON object into string.
+    static ColumnPtr convertObjectToStringColumn(
+        const ColumnPtr & arg_json,
+        const DataTypePtr & json_type,
+        size_t input_rows_count,
+        const FormatSettings & format_settings)
+    {
+        auto string_col = ColumnString::create();
+        auto & chars = string_col->getChars();
+        auto & offsets = string_col->getOffsets();
+        offsets.reserve(input_rows_count);
+
+        auto serializer = json_type->getDefaultSerialization();
+        WriteBufferFromVector<ColumnString::Chars> wb(chars);
+
+        for (size_t i = 0; i < input_rows_count; ++i)
+        {
+            serializer->serializeTextJSON(*arg_json, i, wb, format_settings);
+            offsets.push_back(wb.count());
+        }
+        wb.finalize();
+
+        return string_col;
+    }
+
 public:
     template <typename Name, template <typename> typename Impl, typename JSONParser, bool case_insensitive = false>
     class Executor
@@ -96,11 +123,38 @@ public:
             if (arguments.empty())
                 throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} requires at least one argument", String(Name::name));
 
-            const auto & first_column = arguments[0];
-            if (!isString(first_column.type))
+            auto first_column = arguments[0];
+            if (!isString(first_column.type) && !isObject(first_column.type))
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                                "The first argument of function {} should be a string containing JSON, illegal type: "
+                                "The first argument of function {} should be a string containing JSON or JSON object, illegal type: "
                                 "{}", String(Name::name), first_column.type->getName());
+
+            if (isObject(first_column.type))
+            {
+                const IColumn * data_col = first_column.column.get();
+                const auto * col_json_const = typeid_cast<const ColumnConst *>(data_col);
+
+                if (col_json_const)
+                {
+                    data_col = col_json_const->getDataColumnPtr().get();
+                    /// optimization step: serialize the single underlying value ONCE and wrap it as 'ColumnConst'.
+                    auto converted_single = FunctionJSONHelpers::convertObjectToStringColumn(
+                        col_json_const->getDataColumnPtr(),
+                        first_column.type,
+                        1,
+                        format_settings);
+                    first_column.column = ColumnConst::create(converted_single, col_json_const->size());
+                }
+                else
+                {
+                    first_column.column = FunctionJSONHelpers::convertObjectToStringColumn(
+                        first_column.column,
+                        first_column.type,
+                        input_rows_count,
+                        format_settings);
+                }
+                first_column.type = std::make_shared<DataTypeString>();
+            }
 
             const ColumnPtr & arg_json = first_column.column;
             const auto * col_json_const = typeid_cast<const ColumnConst *>(arg_json.get());
