@@ -4946,6 +4946,7 @@ static void reloadZooKeeperIfChangedImpl(
     bool server_started,
     const Int32 send_receive_os_threads_nice_value)
 {
+    auto component_guard = Coordination::setCurrentComponent("Context::reloadZooKeeperIfChangedImpl");
     static constexpr auto reason = "Config changed";
     if (!zk || zk->configChanged(*config, config_name))
     {

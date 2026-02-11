@@ -1157,6 +1157,7 @@ void StorageKeeperMap::backupData(BackupEntriesCollector & backup_entries_collec
     /// assign each path to a single table only.
     auto post_collecting_task = [coordination, &backup_entries_collector, my_data_path_in_backup = data_path_in_backup, this]
     {
+        auto local_component_guard = Coordination::setCurrentComponent("StorageKeeperMap::post_collecting_task");
         auto path_with_data = coordination->getKeeperMapDataPath(zk_root_path);
         if (path_with_data != my_data_path_in_backup)
         {

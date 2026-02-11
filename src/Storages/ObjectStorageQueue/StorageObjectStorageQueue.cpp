@@ -733,6 +733,8 @@ void StorageObjectStorageQueue::threadFunc(size_t streaming_tasks_index)
     if (shutdown_called)
         return;
 
+    auto component_guard = Coordination::setCurrentComponent("StorageObjectStorageQueue::threadFunc");
+
     const auto storage_id = getStorageID();
 
     if (getContext()->getS3QueueDisableStreaming())
@@ -1295,6 +1297,7 @@ void StorageObjectStorageQueue::alter(
     ContextPtr local_context,
     AlterLockHolder &)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageObjectStorageQueue::alter");
     if (commands.isSettingsAlter())
     {
         auto table_id = getStorageID();
