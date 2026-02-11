@@ -175,38 +175,19 @@ public:
     ACTION(Float32) \
     ACTION(Float64)
 
-    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count) const override
-    {
-        switch (result_type->getTypeId())
-        {
-        #define ON_TYPE(type) \
-            case TypeIndex::type: \
-                return executeWithResultType<type>(arguments, input_rows_count); \
-                break;
-
-            SUPPORTED_TYPES(ON_TYPE)
-        #undef ON_TYPE
-
-            default:
-                throw Exception(ErrorCodes::LOGICAL_ERROR, "Unexpected result type {}", result_type->getName());
-        }
-    }
-
-private:
-    template <typename ResultType>
-    ColumnPtr executeWithResultType(const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
+    ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr & /*result_type*/, size_t input_rows_count) const override
     {
         DataTypePtr type_x = typeid_cast<const DataTypeArray *>(arguments[0].type.get())->getNestedType();
 
         switch (type_x->getTypeId())
         {
-#define ON_TYPE(type) \
+        #define ON_TYPE(type) \
             case TypeIndex::type: \
-                return executeWithResultTypeAndLeftType<ResultType, type>(arguments, input_rows_count); \
+                return executeWithLeftType<type>(arguments, input_rows_count); \
                 break;
 
             SUPPORTED_TYPES(ON_TYPE)
-#undef ON_TYPE
+        #undef ON_TYPE
 
             default:
                 throw Exception(
@@ -218,8 +199,9 @@ private:
         }
     }
 
-    template <typename ResultType, typename LeftType>
-    ColumnPtr executeWithResultTypeAndLeftType(const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
+private:
+    template <typename LeftType>
+    ColumnPtr executeWithLeftType(const ColumnsWithTypeAndName & arguments, size_t input_rows_count) const
     {
         DataTypePtr type_y = typeid_cast<const DataTypeArray *>(arguments[1].type.get())->getNestedType();
 
@@ -227,7 +209,7 @@ private:
         {
         #define ON_TYPE(type) \
             case TypeIndex::type: \
-                return executeWithResultTypeAndLeftTypeAndRightType<ResultType, LeftType, type>(arguments[0].column, arguments[1].column, input_rows_count); \
+                return executeWithLeftAndRightType<LeftType, type>(arguments[0].column, arguments[1].column, input_rows_count); \
                 break;
 
             SUPPORTED_TYPES(ON_TYPE)
@@ -241,6 +223,19 @@ private:
                     getName(),
                     type_y->getName());
         }
+    }
+
+    template <typename LeftType, typename RightType>
+    ColumnPtr executeWithLeftAndRightType(ColumnPtr col_x, ColumnPtr col_y, size_t input_rows_count) const
+    {
+        /// Compute result type from input types, matching getReturnType logic.
+        /// This avoids an extra dispatch level (10x fewer template instantiations).
+        using ResultType = std::conditional_t<
+            std::is_same_v<LeftType, Float32> && std::is_same_v<RightType, Float32>,
+            Float32,
+            typename NumberTraits::ResultOfAdditionMultiplication<LeftType, RightType>::Type>;
+
+        return executeWithResultTypeAndLeftTypeAndRightType<ResultType, LeftType, RightType>(col_x, col_y, input_rows_count);
     }
 
     template <typename ResultType, typename LeftType, typename RightType>
