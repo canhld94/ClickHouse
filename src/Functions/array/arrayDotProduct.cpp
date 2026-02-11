@@ -3,8 +3,10 @@
 #include <Common/TargetSpecific.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>
-#include <Functions/FunctionBinaryArithmetic.h>
+#include <Common/TargetSpecific.h>
+#include <DataTypes/NumberTraits.h>
 #include <Functions/FunctionFactory.h>
+#include <Functions/FunctionHelpers.h>
 #include <Functions/IFunction.h>
 #include <Functions/castTypeToEither.h>
 #include <Interpreters/Context_fwd.h>
@@ -47,7 +49,7 @@ struct DotProduct
                 if constexpr (std::is_same_v<LeftType, Float32> && std::is_same_v<RightType, Float32>)
                     result_type = std::make_shared<DataTypeFloat32>();
                 else
-                    result_type = std::make_shared<DataTypeFromFieldType<ResultType>>();
+                    result_type = std::make_shared<DataTypeNumber<ResultType>>();
                 return true;
             });
         });
