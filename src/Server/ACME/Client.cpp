@@ -249,9 +249,9 @@ void Client::refreshCertificatesTask(const Poco::Util::AbstractConfiguration & c
                 log,
                 "Certificate order lock {} is active; retrying after {}ms",
                 std::string(active_order_path),
-                REFRESH_TASK_AFTER_ERROR_MS
+                REFRESH_TASK_HAPPY_PATH_MS
             );
-            refresh_certificates_task->scheduleAfter(REFRESH_TASK_AFTER_ERROR_MS);
+            refresh_certificates_task->scheduleAfter(REFRESH_TASK_HAPPY_PATH_MS);
             return;
         }
 
@@ -265,9 +265,9 @@ void Client::refreshCertificatesTask(const Poco::Util::AbstractConfiguration & c
                     log,
                     "Certificate order lock {} is active; retrying after {}ms",
                     std::string(active_order_path),
-                    REFRESH_TASK_AFTER_ERROR_MS
+                    REFRESH_TASK_HAPPY_PATH_MS
                 );
-                refresh_certificates_task->scheduleAfter(REFRESH_TASK_AFTER_ERROR_MS);
+                refresh_certificates_task->scheduleAfter(REFRESH_TASK_HAPPY_PATH_MS);
                 return;
             }
 
@@ -290,9 +290,9 @@ void Client::refreshCertificatesTask(const Poco::Util::AbstractConfiguration & c
                 log,
                 "Certificate order lock {} is active; retrying after {}ms",
                 std::string(active_order_path),
-                REFRESH_TASK_AFTER_ERROR_MS
+                REFRESH_TASK_HAPPY_PATH_MS
             );
-            refresh_certificates_task->scheduleAfter(REFRESH_TASK_AFTER_ERROR_MS);
+            refresh_certificates_task->scheduleAfter(REFRESH_TASK_HAPPY_PATH_MS);
             return;
         }
 
@@ -326,7 +326,7 @@ void Client::refreshCertificatesTask(const Poco::Util::AbstractConfiguration & c
             LOG_DEBUG(log, "Finalizing order {}", order_url);
             api->finalizeOrder(order_data.finalize_url, domains, key);
 
-            refresh_certificates_task->scheduleAfter(REFRESH_TASK_HAPPY_PATH_MS);
+            refresh_certificates_task->scheduleAfter(REFRESH_TASK_IN_A_SECOND);
             return;
         }
 
@@ -334,7 +334,7 @@ void Client::refreshCertificatesTask(const Poco::Util::AbstractConfiguration & c
         {
             LOG_DEBUG(log, "Order {} is not ready yet (status: {}), retrying", order_url, order_data.status);
 
-            refresh_certificates_task->scheduleAfter(refresh_certificates_task_interval_ms);
+            refresh_certificates_task->scheduleAfter(REFRESH_TASK_IN_A_SECOND);
             return;
         }
 
