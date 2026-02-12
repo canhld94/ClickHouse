@@ -347,9 +347,14 @@ template <>
     static constexpr UInt8 shifts[]
         = {0, 1, 2, 2, 4, 2, 2, 4, 8, 5, 2, 10, 8, 6, 4, 2, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
+    /// The caller guarantees offset < 32 (only called when offset < copy_amount).
+    if (unlikely(offset >= 32))
+        __builtin_unreachable();
+
     if (offset >= 16)
     {
-        /// No overlap in the first 16 bytes; second 16 bytes read from already-written data.
+        /// The second 16 bytes may overlap with op (e.g. offset=16 means match+16 == op),
+        /// so the first store must complete before the second load.
         _mm_storeu_si128(reinterpret_cast<__m128i *>(op),
             _mm_loadu_si128(reinterpret_cast<const __m128i *>(match)));
 
