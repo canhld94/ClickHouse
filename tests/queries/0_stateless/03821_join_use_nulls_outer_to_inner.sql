@@ -86,3 +86,37 @@ SELECT trim(explain) FROM (
     LEFT JOIN t3 AS r2 ON l.id = r2.id
     WHERE val IS NULL OR val > 1
 ) WHERE trim(explain) IN ('Type: INNER', 'Type: LEFT', 'Type: RIGHT', 'Type: FULL') OR trim(explain) LIKE '%Prewhere filter column%';
+
+
+-- Combination of OUTER to INNER and equivalent sets optimization:
+
+SELECT count() FROM t1 as l
+LEFT JOIN t2 AS r ON l.id = r.id
+WHERE l.id = 5000 AND r.id > 0;
+
+SELECT l.name || '_' || toString(r.val + 1) || toTypeName(r.val)
+FROM t1 AS l
+LEFT JOIN t2 AS r ON l.id = r.id
+WHERE l.id = 5000 AND r.id > 0;
+
+SELECT l.name || '_' || toString(r.val + 1) || toTypeName(r.val)
+FROM t1 AS l
+LEFT JOIN t2 AS r ON l.id+1 = r.id+1
+WHERE l.id+1 = 5001 AND r.id+1 > 0;
+
+SELECT
+    if(countIf(explain LIKE '%Prewhere filter %equals(__table1.id, 5000_UInt16)%') >= 1
+        -- Condition to t2.id == 5000 pushed down to right side by equvalent sets optimization.
+        -- Column name there may have internal prefix because of implementation detail
+        -- that helps to distringuish original non nullale column from nullable column created by join_use_nulls.
+       AND countIf(explain LIKE '%Prewhere filter %equals(%__table2.id, 5000_UInt16)%') >= 1
+       -- t.id > 0 uses applied after JOIN, so it uses nullable column.
+       AND countIf(explain LIKE '%Prewhere filter %greater(__table2.id, 0_UInt8)%') >= 1,
+      'OK', 'Error: \n' || arrayStringConcat(groupArray(explain), '\n'))
+FROM (
+    EXPLAIN PLAN actions = 1
+    SELECT l.name || '_' || toString(r.val + 1) || toTypeName(r.val)
+    FROM t1 AS l
+    LEFT JOIN t2 AS r ON l.id = r.id
+    WHERE l.id = 5000 AND r.id > 0
+);

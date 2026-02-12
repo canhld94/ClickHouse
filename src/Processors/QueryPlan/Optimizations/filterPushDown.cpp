@@ -553,12 +553,53 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
 
     Names equivalent_columns_to_push_down;
 
-    for (const auto & [lhs, rhs] : equivalent_expressions)
+    for (auto & [lhs, rhs] : equivalent_expressions)
     {
+        const auto & lhs_original_name = lhs.getColumnName();
+        const auto & rhs_original_name = rhs.getColumnName();
+        /* If we originally had an OUTER join with join_use_nulls, which altered the types of the inner joined side,
+         * and then converted it to INNER because of WHERE conditions that filter out NULLs, we still should preserve nullability.
+         *
+         * However, the pushed down filter may use a nullable or original column depending on where it comes from.
+         *
+         * Consider this example:
+         *   SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id WHERE t1.id < 10 AND t2.id > 0
+         *
+         * Column `t2.id` has a nullable type in the WHERE section, so when we push it through JOIN to the right table,
+         * it should remain nullable.
+         * In that case filter inherits the toNullable conversion from JoinStepLogical.
+         *
+         * We can also push down the condition t2.id < 10 which is inferred from the equality condition t1.id = t2.id and t1.id < 10.
+         *
+         * The `t1.id` is not nullable, as well as in the JOIN ON expression `t1.id = t2.id` are not nullable.
+         * So we should replace `t1.id` with the original non-nullable version of `t2.id` column in the `t1.id < 10` expression.
+         * In this case we rename this column by adding a unique prefix to it,
+         * so we ensure the filter DAG with the replaced column uses the correct one
+         * and we can easily distinguish it when merging expressions into it later on.
+         */
+        auto alias_transform = [&](ActionsDAG & dag, auto && args)
+        {
+            const auto * arg = args.at(0);
+            String alias = fmt::format("__filterpushdown_src{}", arg->result_name);
+            for (int counter = 0; left_stream_input_header->has(alias) || right_stream_input_header->has(alias); ++counter)
+                alias = fmt::format("__filterpushdown_src_{}{}", counter, arg->result_name);
+
+            return &dag.addAlias(*arg, std::move(alias));
+        };
+
+        bool changes_left_type = logical_join && logical_join->typeChangingSides().contains(JoinTableSide::Left);
+        bool changes_right_type = logical_join && logical_join->typeChangingSides().contains(JoinTableSide::Right);
+        if (changes_left_type)
+            lhs = JoinActionRef::transform({lhs}, alias_transform);
+        if (changes_right_type)
+            rhs = JoinActionRef::transform({rhs}, alias_transform);
+
         auto lhs_column = lhs.getColumn();
         auto rhs_column = rhs.getColumn();
-        equivalent_left_stream_column_to_right_stream_column[lhs_column.name] = rhs_column;
-        equivalent_right_stream_column_to_left_stream_column[rhs_column.name] = lhs_column;
+        if (!changes_left_type)
+            equivalent_left_stream_column_to_right_stream_column[lhs_original_name] = rhs_column;
+        if (!changes_right_type)
+            equivalent_right_stream_column_to_left_stream_column[rhs_original_name] = lhs_column;
     }
 
     Names left_stream_available_columns_to_push_down = get_available_columns_for_filter(true /*push_to_left_stream*/, left_stream_filter_push_down_input_columns_available);
@@ -612,11 +653,10 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
     size_t updated_steps = 0;
 
     /// For the logical join step, we need to merge pre-join actions to filter dag.
-    /// TODO: this should be refactored and replaced with optimizations which
+    /// TODO: this could be refactored and replaced with "expression pushdown to JOIN" optimizations which
     /// 1. push filter/expression into JOIN (as post-filter)
     /// 2. move filter within JOIN step, potentially changing JoinKind
     /// 3. push filter/expression out of JOIN (from pre-filter)
-
     auto fix_predicate_for_join_logical_step = [&](ActionsDAG filter_dag, ActionsDAG pre_filter_dag)
     {
         projectDagInputs(pre_filter_dag);
@@ -629,21 +669,29 @@ static size_t tryPushDownOverJoinStep(QueryPlan::Node * parent_node, QueryPlan::
         return filter_dag;
     };
 
+    /// Filter DAG may use columns with types changed by JOIN due to join_use_nulls.
+    /// In that case, the actions DAG in JoinStepLogical will have toNullable conversions.
+    /// The filter applied after JOIN uses those columns with altered types, so when we push it down through JOIN,
+    /// we should also apply the required conversions.
+    /// Here we extract required expressions from JoinStepLogical actions DAG and apply them to the filter DAG that expects them to be calculated.
+    /// In general, it could be not only toNullable, but arbitrary expressions, which may be the case once expression pushdown to JOIN is implemented.
     auto get_required_pre_actions = [&](const auto & join_actions, const auto & filter_dag_inputs)
     {
+        /// In case of duplicate names resolve them in corresponding order
+        std::unordered_map<std::string_view, size_t> filter_dag_inputs_map;
+        for (const auto * node : filter_dag_inputs)
+            filter_dag_inputs_map[node->result_name]++;
+
         std::vector<JoinActionRef> required_actions;
-        auto join_actions_it = join_actions.begin();
-        for (const auto * filter_node : filter_dag_inputs)
+        for (const auto & join_action : join_actions)
         {
-            while (join_actions_it != join_actions.end())
+            auto it = filter_dag_inputs_map.find(join_action.getColumnName());
+            if (it != filter_dag_inputs_map.end() && it->second > 0)
             {
-                if (join_actions_it->getColumnName() == filter_node->result_name)
-                {
-                    required_actions.push_back(*join_actions_it);
-                    ++join_actions_it;
-                    break;
-                }
-                ++join_actions_it;
+                /// If for any reason we have column with same name multiple times,
+                /// return it as many times as it is needed in filter_dag_inputs.
+                it->second--;
+                required_actions.push_back(join_action);
             }
         }
         return required_actions;
