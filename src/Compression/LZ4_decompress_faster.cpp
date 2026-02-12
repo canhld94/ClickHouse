@@ -349,7 +349,7 @@ template <>
 
     /// The caller guarantees offset < 32 (only called when offset < copy_amount).
     if (unlikely(offset >= 32))
-        __builtin_unreachable();
+        UNREACHABLE();
 
     if (offset >= 16)
     {
