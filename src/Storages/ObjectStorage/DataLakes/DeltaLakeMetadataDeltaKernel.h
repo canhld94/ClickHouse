@@ -10,6 +10,7 @@
 #include <Storages/ObjectStorage/StorageObjectStorageSource.h>
 #include <Storages/ObjectStorage/DataLakes/IDataLakeMetadata.h>
 #include <Storages/ObjectStorage/DataLakes/DeltaLake/KernelHelper.h>
+#include <Storages/ObjectStorage/DataLakes/DeltaLake/DeltaLakeTableStateSnapshot.h>
 #include <Disks/DiskObjectStorage/ObjectStorages/IObjectStorage.h>
 
 namespace DeltaLake
@@ -42,6 +43,8 @@ public:
     void update(const ContextPtr & context) override;
 
     NamesAndTypesList getTableSchema(ContextPtr local_context) const override;
+
+    StorageInMemoryMetadata getStorageSnapshotMetadata(ContextPtr) const override;
 
     ReadFromFormatInfo prepareReadingFromFormat(
         const Strings & requested_columns,

@@ -3,6 +3,8 @@
 
 #if USE_PARQUET && USE_DELTA_KERNEL_RS
 #include <Storages/ObjectStorage/DataLakes/DeltaLakeMetadataDeltaKernel.h>
+#include <IO/ReadHelpers.h>
+#include <IO/WriteHelpers.h>
 #include <Storages/ObjectStorage/DataLakes/DeltaLake/TableSnapshot.h>
 #include <Storages/ObjectStorage/DataLakes/DeltaLake/TableChanges.h>
 #include <Storages/ObjectStorage/DataLakes/DeltaLake/KernelUtils.h>
@@ -121,6 +123,18 @@ DeltaLake::TableChangesPtr DeltaLakeMetadataDeltaKernel::getTableChanges(
     ContextPtr context) const
 {
     return std::make_shared<DeltaLake::TableChanges>(version_range, kernel_helper, header, format_settings, format_name, context);
+}
+
+StorageInMemoryMetadata DeltaLakeMetadataDeltaKernel::getStorageSnapshotMetadata(ContextPtr) const
+{
+    std::lock_guard lock(table_snapshot_mutex);
+    StorageInMemoryMetadata result;
+    result.setColumns(ColumnsDescription{table_snapshot->getTableSchema()});
+
+    DeltaLake::TableStateSnapshot state;
+    state.version = table_snapshot->getVersion();
+    result.setDataLakeTableState(state);
+    return result;
 }
 
 ObjectIterator DeltaLakeMetadataDeltaKernel::iterate(

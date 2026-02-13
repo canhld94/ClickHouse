@@ -331,6 +331,7 @@ void StorageObjectStorage::updateExternalDynamicMetadataIfExists(ContextPtr quer
         object_storage,
         query_context,
         /* if_not_updated_before */ true);
+
     if (configuration->needsUpdateForSchemaConsistency())
     {
         auto metadata_snapshot = configuration->getStorageSnapshotMetadata(query_context);

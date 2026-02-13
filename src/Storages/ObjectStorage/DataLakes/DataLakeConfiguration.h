@@ -230,7 +230,8 @@ public:
     bool needsUpdateForSchemaConsistency() const override
     {
 #if USE_AVRO
-        return std::is_same_v<IcebergMetadata, DataLakeMetadata>;
+        return std::is_same_v<IcebergMetadata, DataLakeMetadata>
+            || std::is_same_v<DeltaLakeMetadata, DataLakeMetadata>;
 #endif
         return false;
     }
