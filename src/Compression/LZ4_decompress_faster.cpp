@@ -373,10 +373,6 @@ template <>
     static constexpr UInt8 shifts[]
         = {0, 1, 2, 2, 4, 2, 2, 4, 8, 5, 2, 10, 8, 6, 4, 2, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
-    /// The caller guarantees offset < 32 (only called when offset < copy_amount).
-    if (unlikely(offset >= 32))
-        UNREACHABLE();
-
     if (offset >= 16)
     {
         /// The second 16 bytes may overlap with op (e.g. offset=16 means match+16 == op),
