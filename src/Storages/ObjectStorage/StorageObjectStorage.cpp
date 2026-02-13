@@ -342,7 +342,7 @@ void StorageObjectStorage::updateExternalDynamicMetadataIfExists(ContextPtr quer
 
 std::optional<UInt64> StorageObjectStorage::totalRows(ContextPtr query_context) const
 {
-    if (!configuration->supportsTotalRows())
+    if (!configuration->supportsTotalRows(query_context, object_storage->getType()))
         return std::nullopt;
 
     configuration->update(
@@ -354,7 +354,7 @@ std::optional<UInt64> StorageObjectStorage::totalRows(ContextPtr query_context) 
 
 std::optional<UInt64> StorageObjectStorage::totalBytes(ContextPtr query_context) const
 {
-    if (!configuration->supportsTotalBytes())
+    if (!configuration->supportsTotalBytes(query_context, object_storage->getType()))
         return std::nullopt;
 
     configuration->update(

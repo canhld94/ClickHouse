@@ -180,9 +180,9 @@ public:
         return std::nullopt;
     }
 
-    bool supportsTotalRows() const override
+    bool supportsTotalRows(ContextPtr context, ObjectStorageType storage_type) const override
     {
-        return DataLakeMetadata::supportsTotalRows();
+        return DataLakeMetadata::supportsTotalRows(context, storage_type);
     }
 
     std::optional<size_t> totalRows(ContextPtr local_context) override
@@ -191,9 +191,9 @@ public:
         return current_metadata->totalRows(local_context);
     }
 
-    bool supportsTotalBytes() const override
+    bool supportsTotalBytes(ContextPtr context, ObjectStorageType storage_type) const override
     {
-        return DataLakeMetadata::supportsTotalBytes();
+        return DataLakeMetadata::supportsTotalBytes(context, storage_type);
     }
 
     std::optional<size_t> totalBytes(ContextPtr local_context) override
