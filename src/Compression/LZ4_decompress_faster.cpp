@@ -301,7 +301,21 @@ template <>
 {
 #if defined(__SSSE3__)
 
+    /** In LZ4, when offset < copy_amount, the source and destination overlap during copying.
+      * This creates a repeating pattern effect. For example:
+      *   - If offset=1 and we copy 32 bytes, byte[0] repeats 32 times
+      *   - If offset=2 and we copy 32 bytes, bytes[0,1] repeat 16 times
+      *   - If offset=3 and we copy 32 bytes, bytes[0,1,2] repeat ~10.67 times
+      *
+      * The shuffle masks efficiently implement this pattern replication using SIMD instructions.
+      * Each row represents the shuffle pattern for a specific offset value (1-15).
+      */
+
     /// Shuffle masks for the first 16 output bytes: masks_lo[offset][i] = i % offset.
+    /// This table generates indices for selecting bytes from the source pattern to fill positions 0-15.
+    /// For offset=2: [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1] means alternate between byte[0] and byte[1].
+    /// For offset=3: [0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0] means cycle through bytes[0,1,2].
+    /// For offset=5: [0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0] means repeat the 5-byte pattern.
     static constexpr UInt8 __attribute__((__aligned__(16))) masks_lo[] =
     {
         0,  1,  2,  1,  4,  1,  4,  2,  8,  7,  6,  5,  4,  3,  2,  1, /* offset = 0, not used as mask */
@@ -323,6 +337,12 @@ template <>
     };
 
     /// Shuffle masks for the second 16 output bytes: masks_hi[offset][i] = (16 + i) % offset.
+    /// This table continues the pattern replication for positions 16-31.
+    /// The starting index is (16 % offset) to maintain pattern continuity from masks_lo.
+    /// For offset=2: Still [0,1,0,1,...] because 16%2=0, pattern restarts.
+    /// For offset=3: [1,2,0,1,2,0,...] because 16%3=1, pattern continues from index 1.
+    /// For offset=5: [1,2,3,4,0,1,2,3,4,0,...] because 16%5=1, pattern continues from index 1.
+    /// For offset=9: [7,8,0,1,2,3,4,5,6,7,8,0,...] because 16%9=7, pattern continues from index 7.
     static constexpr UInt8 __attribute__((__aligned__(16))) masks_hi[] =
     {
         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, /* offset = 0, not used as mask */
@@ -343,7 +363,13 @@ template <>
         1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,  0,  1,
     };
 
-    /// 32 % n (using n itself when 32 % n == 0)
+    /// How many bytes to advance the match pointer after copying 32 bytes.
+    /// This equals (32 % offset) when offset divides evenly, or the offset itself otherwise.
+    /// For offset=2: shifts[2]=2 because we copied the 2-byte pattern 16 times, advance by 2.
+    /// For offset=3: shifts[3]=2 because 32%3=2, the pattern repeated 10 full times plus 2 bytes.
+    /// For offset=5: shifts[5]=2 because 32%5=2, the pattern repeated 6 full times plus 2 bytes.
+    /// For offset=16: shifts[16]=16 because we copied exactly 16 bytes twice, advance by 16.
+    /// For offset=17-31: shifts[n] counts down from 15 to 1, representing 32%n for each offset.
     static constexpr UInt8 shifts[]
         = {0, 1, 2, 2, 4, 2, 2, 4, 8, 5, 2, 10, 8, 6, 4, 2, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
@@ -380,6 +406,16 @@ template <>
 
 #elif defined(__aarch64__) && defined(__ARM_NEON)
 
+    /** ARM NEON version using vtbl2_u8 table lookup instruction.
+      * The logic is identical to SSSE3 version above - see detailed explanation there.
+      * We use the same shuffle mask patterns to replicate short patterns across 32 bytes.
+      */
+
+    /// Shuffle masks for the first 16 output bytes: masks_lo[offset][i] = i % offset.
+    /// This table generates indices for selecting bytes from the source pattern to fill positions 0-15.
+    /// For offset=2: [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1] means alternate between byte[0] and byte[1].
+    /// For offset=3: [0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0] means cycle through bytes[0,1,2].
+    /// For offset=5: [0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0] means repeat the 5-byte pattern.
     static constexpr UInt8 __attribute__((__aligned__(16))) masks_lo[] =
     {
         0,  1,  2,  1,  4,  1,  4,  2,  8,  7,  6,  5,  4,  3,  2,  1, /* offset = 0, not used as mask */
@@ -400,6 +436,13 @@ template <>
         0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,  0,
     };
 
+    /// Shuffle masks for the second 16 output bytes: masks_hi[offset][i] = (16 + i) % offset.
+    /// This table continues the pattern replication for positions 16-31.
+    /// The starting index is (16 % offset) to maintain pattern continuity from masks_lo.
+    /// For offset=2: Still [0,1,0,1,...] because 16%2=0, pattern restarts.
+    /// For offset=3: [1,2,0,1,2,0,...] because 16%3=1, pattern continues from index 1.
+    /// For offset=5: [1,2,3,4,0,1,2,3,4,0,...] because 16%5=1, pattern continues from index 1.
+    /// For offset=9: [7,8,0,1,2,3,4,5,6,7,8,0,...] because 16%9=7, pattern continues from index 7.
     static constexpr UInt8 __attribute__((__aligned__(16))) masks_hi[] =
     {
         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, /* offset = 0, not used as mask */
@@ -420,6 +463,13 @@ template <>
         1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,  0,  1,
     };
 
+    /// How many bytes to advance the match pointer after copying 32 bytes.
+    /// This equals (32 % offset) when offset divides evenly, or the offset itself otherwise.
+    /// For offset=2: shifts[2]=2 because we copied the 2-byte pattern 16 times, advance by 2.
+    /// For offset=3: shifts[3]=2 because 32%3=2, the pattern repeated 10 full times plus 2 bytes.
+    /// For offset=5: shifts[5]=2 because 32%5=2, the pattern repeated 6 full times plus 2 bytes.
+    /// For offset=16: shifts[16]=16 because we copied exactly 16 bytes twice, advance by 16.
+    /// For offset=17-31: shifts[n] counts down from 15 to 1, representing 32%n for each offset.
     static constexpr UInt8 shifts[]
         = {0, 1, 2, 2, 4, 2, 2, 4, 8, 5, 2, 10, 8, 6, 4, 2, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
@@ -449,25 +499,45 @@ template <>
     match += shifts[offset];
 
 #else
-    /// 4 % n
+    /** Fallback implementation without SIMD instructions.
+      * Copies 32 bytes in four stages: 4 + 4 + 8 + 16 bytes.
+      * Each stage copies from an offset computed to maintain the repeating pattern.
+      */
+
+    /// Where to read from for the second 4 bytes (positions 4-7): equals (4 % offset) when that's non-zero, else 4.
+    /// For offset=2: shift1[2]=2, so we read from match+2, which wraps around to match[0,1] again.
+    /// For offset=3: shift1[3]=1, so we read from match+1, continuing the pattern [0,1,2,0,1,2,...].
+    /// For offset>=4: shift1[n]=4, so we read the next 4 fresh bytes.
     static constexpr UInt8 shift1[] = {0, 1, 2, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
 
-    /// 8 % n
+    /// Where to read from for the next 8 bytes (positions 8-15): equals (8 % offset) when that's non-zero, else 8.
+    /// For offset=2: shift2[2]=2, wrapping the 2-byte pattern.
+    /// For offset=3: shift2[3]=2, because 8%3=2, continuing from the 2nd byte of the pattern.
+    /// For offset=5: shift2[5]=3, because 8%5=3, continuing from the 3rd byte of the pattern.
+    /// For offset>=8: shift2[n]=8 or (8%n), reading fresh or wrapped bytes as appropriate.
     static constexpr UInt8 shift2[] = {0, 1, 2, 2, 4, 3, 2, 1, 0, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
 
-    /// 16 % n
+    /// Where to read from for the next 16 bytes (positions 16-31): equals (16 % offset) when that's non-zero, else 16.
+    /// For offset=3: shift3[3]=1, because 16%3=1.
+    /// For offset=5: shift3[5]=1, because 16%5=1.
+    /// For offset=9: shift3[9]=7, because 16%9=7.
+    /// For offset>=16: shift3[n]=16, reading the next fresh 16 bytes without wrapping.
     static constexpr UInt8 shift3[]
         = {0, 1, 2, 1, 4, 1, 4, 2, 8, 7, 6, 5, 4, 3, 2, 1, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16};
 
-    /// 32 % n
+    /// How far to advance match pointer after copying all 32 bytes: equals (32 % offset).
+    /// This determines the final position after all four copy stages complete.
+    /// Same values as the SSSE3/NEON shifts table.
     static constexpr UInt8 shift4[]
         = {0, 1, 2, 2, 4, 2, 2, 4, 8, 5, 2, 10, 8, 6, 4, 2, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
+    /// Copy the first 4 bytes directly.
     op[0] = match[0];
     op[1] = match[1];
     op[2] = match[2];
     op[3] = match[3];
 
+    /// Copy in stages, each reading from a position that maintains the repeating pattern.
     memcpy(op + 4, match + shift1[offset], 4);
     memcpy(op + 8, match + shift2[offset], 8);
     memcpy(op + 16, match + shift3[offset], 16);
