@@ -40,6 +40,7 @@ namespace DB::ErrorCodes
 {
     extern const int NOT_IMPLEMENTED;
     extern const int BAD_ARGUMENTS;
+    extern const int LOGICAL_ERROR;
 }
 
 namespace DB::Setting
@@ -85,6 +86,8 @@ namespace DeltaLake
 class TableSnapshot::Iterator final : public DB::IObjectIterator
 {
 public:
+    using UpdateStatsFunc = std::function<void(SnapshotStats &&)>;
+
     Iterator(
         std::shared_ptr<KernelSnapshotState> kernel_snapshot_state_,
         KernelHelperPtr helper_,
@@ -99,6 +102,7 @@ public:
         bool enable_expression_visitor_logging_,
         bool throw_on_engine_predicate_error_,
         bool enable_engine_predicate_,
+        UpdateStatsFunc update_stats_func_,
         LoggerPtr log_)
         : kernel_snapshot_state(kernel_snapshot_state_)
         , helper(helper_)
@@ -112,6 +116,7 @@ public:
         , enable_expression_visitor_logging(enable_expression_visitor_logging_)
         , throw_on_engine_predicate_error(throw_on_engine_predicate_error_)
         , enable_engine_predicate(enable_engine_predicate_)
+        , update_stats_func(update_stats_func_)
     {
         if (filter_)
         {
@@ -227,14 +232,32 @@ public:
                 }
                 else
                 {
-                    LOG_TEST(log, "All data files were listed");
                     {
                         std::lock_guard lock(next_mutex);
                         iterator_finished = true;
                         LOG_TEST(log, "Set finished");
                     }
                     data_files_cv.notify_all();
-                    LOG_TEST(log, "Notified");
+
+                    LOG_TRACE(
+                        log, "All data files at version {} were listed "
+                        "(scan exception: {}, total data files: {}, total rows: {}, total bytes: {})",
+                        kernel_snapshot_state->snapshot_version,
+                        bool(scan_exception),
+                        total_data_files,
+                        total_rows ? DB::toString(*total_rows) : "Unknown",
+                        total_bytes);
+
+                    if (update_stats_func
+                        && !scan_exception
+                        && (!filter.has_value() || !enable_engine_predicate))
+                    {
+                        update_stats_func(SnapshotStats{
+                            .version = kernel_snapshot_state->snapshot_version,
+                            .total_bytes = total_bytes,
+                            .total_rows = total_rows
+                        });
+                    }
                     return;
                 }
             }
@@ -418,6 +441,16 @@ public:
             std::lock_guard lock(context->next_mutex);
             context->data_files.push_back(std::move(object));
         }
+
+        context->total_data_files += 1;
+        context->total_bytes += size;
+        if (stats)
+        {
+            if (!context->total_rows.has_value())
+                context->total_rows.emplace();
+            *context->total_rows += stats->num_records;
+        }
+
         context->data_files_cv.notify_one();
     }
 
@@ -442,6 +475,7 @@ private:
     const bool enable_expression_visitor_logging;
     const bool throw_on_engine_predicate_error;
     const bool enable_engine_predicate;
+    const UpdateStatsFunc update_stats_func;
 
     std::exception_ptr scan_exception;
     std::exception_ptr engine_predicate_exception;
@@ -455,6 +489,10 @@ private:
     /// and data scanning thread is finished.
     bool iterator_finished = false;
 
+    std::optional<size_t> total_rows;
+    size_t total_bytes = 0;
+    size_t total_data_files = 0;
+
     /// A CV to notify data scanning thread to continue,
     /// as current data batch is fully read.
     std::condition_variable schedule_next_batch_cv;
@@ -467,39 +505,50 @@ private:
 };
 
 TableSnapshot::TableSnapshot(
+    std::optional<size_t> version_,
     KernelHelperPtr helper_,
     DB::ObjectStoragePtr object_storage_,
-    DB::ContextPtr context_,
     LoggerPtr log_)
     : helper(helper_)
     , object_storage(object_storage_)
     , log(log_)
+    , snapshot_version_to_read(version_)
 {
-    updateSettings(context_);
+    chassert(object_storage);
 }
 
 size_t TableSnapshot::getVersion() const
 {
-    initSnapshot();
-    return kernel_snapshot_state->snapshot_version;
+    std::lock_guard lock(mutex);
+    return getVersionUnlocked();
+}
+
+size_t TableSnapshot::getVersionUnlocked() const
+{
+    return getKernelSnapshotState()->snapshot_version;
 }
 
 TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStats() const
 {
-    if (!snapshot_stats.has_value() || snapshot_stats->version != getVersion())
+    if (!snapshot_stats.has_value() || snapshot_stats->version != getVersionUnlocked())
+    {
         snapshot_stats = getSnapshotStatsImpl();
+        LOG_TEST(
+            log, "Updated statistics for snapshot version {}",
+            snapshot_stats->version);
+    }
     return snapshot_stats.value();
 }
 
 TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
 {
-    initSnapshot();
+    auto state = getKernelSnapshotState();
 
     KernelScan fallback_scan;
     fallback_scan = KernelUtils::unwrapResult(
         ffi::scan(
-            kernel_snapshot_state->snapshot.get(),
-            kernel_snapshot_state->engine.get(),
+            state->snapshot.get(),
+            state->engine.get(),
             /* predicate */nullptr,
             /* schema */nullptr),
         "scan");
@@ -507,14 +556,15 @@ TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
     KernelScanMetadataIterator fallback_scan_data_iterator;
     fallback_scan_data_iterator = KernelUtils::unwrapResult(
         ffi::scan_metadata_iter_init(
-            kernel_snapshot_state->engine.get(), fallback_scan.get()),
+            state->engine.get(), fallback_scan.get()),
         "scan_metadata_iter_init");
 
     struct StatsVisitor
     {
-        size_t total_bytes = 0;
-        size_t total_rows = 0;
         size_t total_data_files = 0;
+        size_t total_bytes = 0;
+        /// Not all writers add rows count to metadata
+        std::optional<size_t> total_rows;
 
         static void visit(
             ffi::NullableCvoid engine_context,
@@ -530,7 +580,11 @@ TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
             visitor->total_data_files += 1;
             visitor->total_bytes += static_cast<size_t>(size);
             if (stats)
-                visitor->total_rows += stats->num_records;
+            {
+                if (!visitor->total_rows.has_value())
+                    visitor->total_rows.emplace(0);
+                visitor->total_rows.value() += stats->num_records;
+            }
         }
 
         static void visitData(void * engine_context, ffi::SharedScanMetadata * scan_metadata)
@@ -556,12 +610,14 @@ TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
     }
 
     LOG_TEST(
-        log, "Snapshot ({}) data files: {}, total rows: {}, total bytes: {}",
-        kernel_snapshot_state->snapshot_version,
-        visitor.total_data_files, visitor.total_rows, visitor.total_bytes);
+        log, "Snapshot at version {} data files: {}, total rows: {}, total bytes: {}",
+        state->snapshot_version,
+        visitor.total_data_files,
+        visitor.total_rows ? DB::toString(*visitor.total_rows) : "Unknown",
+        visitor.total_bytes);
 
     return SnapshotStats{
-        .version = kernel_snapshot_state->snapshot_version,
+        .version = state->snapshot_version,
         .total_bytes = visitor.total_bytes,
         .total_rows = visitor.total_rows
     };
@@ -569,49 +625,40 @@ TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
 
 std::optional<size_t> TableSnapshot::getTotalRows() const
 {
+    std::lock_guard lock(mutex);
     return getSnapshotStats().total_rows;
 }
 
 std::optional<size_t> TableSnapshot::getTotalBytes() const
 {
+    std::lock_guard lock(mutex);
     return getSnapshotStats().total_bytes;
 }
 
-void TableSnapshot::updateSettings(const DB::ContextPtr & context)
+void TableSnapshot::updateSnapshotVersion()
 {
-    const auto & settings = context->getSettingsRef();
-    enable_expression_visitor_logging = settings[DB::Setting::delta_lake_enable_expression_visitor_logging];
-    throw_on_engine_visitor_error = settings[DB::Setting::delta_lake_throw_on_engine_predicate_error];
-    enable_engine_predicate = settings[DB::Setting::delta_lake_enable_engine_predicate];
-
-    if (settings[DB::Setting::delta_lake_snapshot_version].value == LATEST_SNAPSHOT_VERSION)
+    if (snapshot_version_to_read.has_value())
     {
-        snapshot_version_to_read = std::nullopt;
+        /// If version is set, we cannot update it.
+        throw DB::Exception(
+            DB::ErrorCodes::LOGICAL_ERROR,
+            "Table snapshot has a set snapshot version {}",
+            snapshot_version_to_read.value());
     }
-    else
-    {
-        if (settings[DB::Setting::delta_lake_snapshot_version].value < 0)
-            throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Snapshot version cannot be a negative value");
 
-        snapshot_version_to_read = settings[DB::Setting::delta_lake_snapshot_version];
-    }
-}
-
-void TableSnapshot::updateToLatestVersion(const DB::ContextPtr & context)
-{
-    updateSettings(context);
+    std::lock_guard lock(mutex);
     if (!kernel_snapshot_state)
     {
         /// Snapshot is not yet created,
         /// so next attempt to create it would return the latest snapshot.
         return;
     }
-    initSnapshot(/* recreate */true);
+    initOrUpdateSnapshot(/* recreate */true);
 }
 
-void TableSnapshot::initSnapshot(bool recreate) const
+void TableSnapshot::initOrUpdateSnapshot(bool recreate) const
 {
-    if (kernel_snapshot_state && !recreate)
+    if (!recreate && kernel_snapshot_state)
         return;
 
     LOG_TEST(log, "Initializing snapshot");
@@ -621,6 +668,12 @@ void TableSnapshot::initSnapshot(bool recreate) const
     LOG_TRACE(
         log, "Initialized snapshot. Snapshot version: {}",
         kernel_snapshot_state->snapshot_version);
+}
+
+std::shared_ptr<TableSnapshot::KernelSnapshotState> TableSnapshot::getKernelSnapshotState() const
+{
+    initOrUpdateSnapshot();
+    return kernel_snapshot_state;
 }
 
 TableSnapshot::KernelSnapshotState::KernelSnapshotState(const IKernelHelper & helper_, std::optional<size_t> snapshot_version_)
@@ -653,38 +706,55 @@ TableSnapshot::KernelSnapshotState::KernelSnapshotState(const IKernelHelper & he
 DB::ObjectIterator TableSnapshot::iterate(
     const DB::ActionsDAG * filter_dag,
     DB::IDataLakeMetadata::FileProgressCallback callback,
-    size_t list_batch_size)
+    size_t list_batch_size,
+    DB::ContextPtr context)
 {
-    initSnapshot();
+    auto update_stats_func = [self = shared_from_this(), this](SnapshotStats && stats)
+    {
+        std::unique_lock lock(mutex, std::defer_lock);
+        if (lock.try_lock()
+            && (!snapshot_stats.has_value()
+                || snapshot_stats->version < stats.version))
+        {
+            snapshot_stats.emplace(std::move(stats));
+            LOG_TEST(
+                log, "Updated statistics from data files iterator for snapshot version {}",
+                snapshot_stats->version);
+        }
+    };
+    const auto & settings = context->getSettingsRef();
+    std::lock_guard lock(mutex);
+    initOrUpdateSchemaIfChanged();
     return std::make_shared<TableSnapshot::Iterator>(
-        kernel_snapshot_state,
+        getKernelSnapshotState(),
         helper,
-        getReadSchema(),
-        getTableSchema(),
-        getPhysicalNamesMap(),
-        getPartitionColumns(),
+        schema->read_schema,
+        schema->table_schema,
+        schema->physical_names_map,
+        schema->partition_columns,
         object_storage,
         filter_dag,
         callback,
         list_batch_size,
-        enable_expression_visitor_logging,
-        throw_on_engine_visitor_error,
-        enable_engine_predicate,
+        settings[DB::Setting::delta_lake_enable_expression_visitor_logging],
+        settings[DB::Setting::delta_lake_throw_on_engine_predicate_error],
+        settings[DB::Setting::delta_lake_enable_engine_predicate],
+        std::move(update_stats_func),
         log);
 }
 
-void TableSnapshot::initSchema() const
+void TableSnapshot::initOrUpdateSchemaIfChanged() const
 {
-    if (!schema.has_value() || schema->version != getVersion())
+    if (!schema.has_value() || schema->version != getVersionUnlocked())
     {
-        initSnapshot();
-        auto [table_schema, physical_names_map] = getTableSchemaFromSnapshot(kernel_snapshot_state->snapshot.get());
+        auto state = getKernelSnapshotState();
+        auto [table_schema, physical_names_map] = getTableSchemaFromSnapshot(state->snapshot.get());
 
         if (table_schema.empty())
             throw DB::Exception(DB::ErrorCodes::BAD_ARGUMENTS, "Table schema cannot be empty");
 
-        auto read_schema = getReadSchemaFromSnapshot(kernel_snapshot_state->scan.get());
-        auto partition_columns = getPartitionColumnsFromSnapshot(kernel_snapshot_state->snapshot.get());
+        auto read_schema = getReadSchemaFromSnapshot(state->scan.get());
+        auto partition_columns = getPartitionColumnsFromSnapshot(state->snapshot.get());
 
         LOG_TRACE(
             log, "Table logical schema: {}, read schema: {}, "
@@ -695,7 +765,7 @@ void TableSnapshot::initSchema() const
             physical_names_map.size());
 
         schema.emplace(SchemaInfo{
-            .version = kernel_snapshot_state->snapshot_version,
+            .version = state->snapshot_version,
             .table_schema = std::move(table_schema),
             .read_schema = std::move(read_schema),
             .physical_names_map = std::move(physical_names_map),
@@ -706,25 +776,29 @@ void TableSnapshot::initSchema() const
 
 const DB::NamesAndTypesList & TableSnapshot::getTableSchema() const
 {
-    initSchema();
+    std::lock_guard lock(mutex);
+    initOrUpdateSchemaIfChanged();
     return schema->table_schema;
 }
 
 const DB::NamesAndTypesList & TableSnapshot::getReadSchema() const
 {
-    initSchema();
+    std::lock_guard lock(mutex);
+    initOrUpdateSchemaIfChanged();
     return schema->read_schema;
 }
 
 const DB::Names & TableSnapshot::getPartitionColumns() const
 {
-    initSchema();
+    std::lock_guard lock(mutex);
+    initOrUpdateSchemaIfChanged();
     return schema->partition_columns;
 }
 
 const DB::NameToNameMap & TableSnapshot::getPhysicalNamesMap() const
 {
-    initSchema();
+    std::lock_guard lock(mutex);
+    initOrUpdateSchemaIfChanged();
     return schema->physical_names_map;
 }
 

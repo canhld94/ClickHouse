@@ -22,15 +22,15 @@ namespace DeltaLake
  * A class representing DeltaLake table snapshot -
  * a snapshot of table state, its schema, data files, etc.
  */
-class TableSnapshot
+class TableSnapshot : public std::enable_shared_from_this<TableSnapshot>
 {
 public:
     static constexpr auto LATEST_SNAPSHOT_VERSION = -1;
 
     explicit TableSnapshot(
+        std::optional<size_t> version_,
         KernelHelperPtr helper_,
         DB::ObjectStoragePtr object_storage_,
-        DB::ContextPtr context_,
         LoggerPtr log_);
 
     /// Get snapshot version.
@@ -39,14 +39,16 @@ public:
     std::optional<size_t> getTotalRows() const;
     std::optional<size_t> getTotalBytes() const;
 
-    /// Update snapshot to latest version.
-    void updateToLatestVersion(const DB::ContextPtr & context);
+    /// Update snapshot to latest version
+    /// or the one specified in delta_lake_snapshot_version setting.
+    void updateSnapshotVersion();
 
     /// Iterate over DeltaLake data files.
     DB::ObjectIterator iterate(
         const DB::ActionsDAG * filter_dag,
         DB::IDataLakeMetadata::FileProgressCallback callback,
-        size_t list_batch_size);
+        size_t list_batch_size,
+        DB::ContextPtr context);
 
     /// Get schema from DeltaLake table metadata.
     const DB::NamesAndTypesList & getTableSchema() const;
@@ -75,11 +77,8 @@ private:
     const KernelHelperPtr helper;
     const DB::ObjectStoragePtr object_storage;
     const LoggerPtr log;
-
-    bool enable_expression_visitor_logging;
-    bool throw_on_engine_visitor_error;
-    bool enable_engine_predicate;
-    std::optional<size_t> snapshot_version_to_read;
+    /// std::nullopt means latest version must be used
+    const std::optional<size_t> snapshot_version_to_read;
 
     struct KernelSnapshotState : private boost::noncopyable
     {
@@ -118,14 +117,20 @@ private:
     };
     mutable std::optional<SnapshotStats> snapshot_stats;
 
-    void initSnapshot(bool recreate = false) const;
-    void initSchema() const;
+    mutable std::mutex mutex;
 
-    SnapshotStats getSnapshotStats() const;
-    SnapshotStats getSnapshotStatsImpl() const;
+    size_t getVersionUnlocked() const TSA_REQUIRES(mutex);
 
-    void updateSettings(const DB::ContextPtr & context);
+    void initOrUpdateSnapshot(bool recreate = false) const TSA_REQUIRES(mutex);
+    void initOrUpdateSchemaIfChanged() const TSA_REQUIRES(mutex);
+
+    SnapshotStats getSnapshotStats() const TSA_REQUIRES(mutex);
+    SnapshotStats getSnapshotStatsImpl() const TSA_REQUIRES(mutex);
+
+    std::shared_ptr<KernelSnapshotState> getKernelSnapshotState() const TSA_REQUIRES(mutex);
 };
+
+using TableSnapshotPtr = std::shared_ptr<TableSnapshot>;
 
 }
 

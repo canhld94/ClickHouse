@@ -498,12 +498,10 @@ struct DeltaLakeMetadataImpl
 
         std::atomic<int> is_stopped{0};
 
-        std::unique_ptr<parquet::arrow::FileReader> reader;
-        THROW_ARROW_NOT_OK(
-            parquet::arrow::OpenFile(
-                asArrowFile(*buf, format_settings, is_stopped, "Parquet", PARQUET_MAGIC_BYTES),
-                arrow::default_memory_pool(),
-                &reader));
+        auto open_file_res = parquet::arrow::OpenFile(
+            asArrowFile(*buf, format_settings, is_stopped, "Parquet", PARQUET_MAGIC_BYTES), arrow::default_memory_pool());
+        THROW_ARROW_NOT_OK(open_file_res.status());
+        auto reader = *std::move(open_file_res);
 
         ArrowColumnToCHColumn column_reader(
             header, "Parquet",
@@ -644,7 +642,7 @@ DataLakeMetadataPtr DeltaLakeMetadata::create(
 #if USE_DELTA_KERNEL_RS
     if (isDeltaKernelEnabled(local_context, configuration.lock()->getType()))
     {
-        return std::make_unique<DeltaLakeMetadataDeltaKernel>(object_storage, configuration, local_context);
+        return DeltaLakeMetadataDeltaKernel::create(object_storage, configuration);
     }
 #endif
     return std::make_unique<DeltaLakeMetadata>(object_storage, configuration, local_context);
