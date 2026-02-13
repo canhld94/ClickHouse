@@ -106,14 +106,11 @@ public:
                                 "The first argument of function {} should be a string containing JSON or JSON object, illegal type: "
                                 "{}", String(Name::name), first_column.type->getName());
 
-            // DIRECT PARSING: Use ColumnObjectParser for Object inputs without serialization
+            /// DIRECT PARSING: Use ColumnObjectParser for Object inputs 
             if (is_object_input)
-            {
-                return runForObjectColumn<Name, Impl>(
-                    arguments, result_type, input_rows_count, format_settings, first_column);
-            }
+                return runForObjectColumn<Name, Impl>(arguments, result_type, input_rows_count, format_settings, first_column);
 
-            // String input: use existing parser pipeline
+            /// String input: use existing parser pipeline
             const ColumnPtr & arg_json = first_column.column;
             const auto * col_json_const = typeid_cast<const ColumnConst *>(arg_json.get());
             const auto * col_json_string
@@ -182,8 +179,8 @@ public:
         }
 
     private:
-        /// Helper to process ColumnObject directly with ColumnObjectParser
-        template <typename NameT, template <typename> typename ImplT>
+        /// Helper to process ColumnObject directly with ColumnObjectParser.
+        template <typename TName, template <typename> typename TImpl>
         static ColumnPtr runForObjectColumn(
             const ColumnsWithTypeAndName & arguments,
             const DataTypePtr & result_type,
@@ -194,8 +191,8 @@ public:
             MutableColumnPtr to{result_type->createColumn()};
             to->reserve(input_rows_count);
 
-            const auto * col_obj = typeid_cast<const ColumnObject *>(first_column.column.get());
-            const auto * col_obj_const = typeid_cast<const ColumnConst *>(first_column.column.get());
+            auto col_obj = typeid_cast<const ColumnObject *>(first_column.column.get());
+            auto col_obj_const = typeid_cast<const ColumnConst *>(first_column.column.get());
 
             if (col_obj_const)
                 col_obj = typeid_cast<const ColumnObject *>(col_obj_const->getDataColumnPtr().get());
@@ -203,16 +200,15 @@ public:
             if (!col_obj)
                 throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Invalid column type for Object parsing");
 
-            size_t num_index_arguments = ImplT<ColumnObjectParser>::getNumberOfIndexArguments(arguments);
-            std::vector<Move> moves = prepareMoves(NameT::name, arguments, 1, num_index_arguments);
+            size_t num_index_arguments = TImpl<ColumnObjectParser>::getNumberOfIndexArguments(arguments);
+            std::vector<Move> moves = prepareMoves(TName::name, arguments, 1, num_index_arguments);
 
-            ImplT<ColumnObjectParser> impl;
-            if constexpr (Preparable<ImplT<ColumnObjectParser>>)
-                impl.prepare(NameT::name, arguments, result_type);
+            TImpl<ColumnObjectParser> impl;
+            if constexpr (Preparable<TImpl<ColumnObjectParser>>)
+                impl.prepare(TName::name, arguments, result_type);
 
             using Element = typename ColumnObjectParser::Element;
             
-            // For const columns, parse once
             Element document;
             if (col_obj_const)
             {
@@ -222,7 +218,7 @@ public:
             String error;
             for (size_t i = 0; i < input_rows_count; ++i)
             {
-                // For non-const columns, create element for each row
+                /// For non-const columns: create element pointing to current row.
                 if (!col_obj_const)
                     document = Element(*col_obj, i);
 
@@ -230,7 +226,7 @@ public:
                 Element element;
                 std::string_view last_key;
 
-                // Perform moves directly on ColumnObject structure
+                /// Navigate using moves: perform moves directly on ColumnObject structure.
                 if (performMoves<ColumnObjectParser, case_insensitive>(arguments, i, document, moves, element, last_key))
                     added_to_column = impl.insertResultToColumn(*to, element, last_key, format_settings, error);
 
