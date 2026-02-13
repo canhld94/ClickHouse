@@ -4324,10 +4324,15 @@ def test_table_statistics(started_cluster):
     assert int(log_result_latest) == 1
 
 
-def test_schema_change_race_condition(started_cluster):
+def test_snapshot_consistency(started_cluster):
+    """Test that snapshot version is correctly captured and used from metadata snapshot.
+
+    This test uses failpoints to pause a query, update the table concurrently, and verify
+    that the paused query uses the correct (original) snapshot version via log messages.
+    """
     instance = started_cluster.instances["node1"]
     spark = started_cluster.spark_session
-    TABLE_NAME = randomize_table_name("test_schema_race")
+    TABLE_NAME = randomize_table_name("test_snapshot_consistency")
 
     delta_path = f"/{TABLE_NAME}"
 
@@ -4344,26 +4349,33 @@ def test_schema_change_race_condition(started_cluster):
     initial_count = int(instance.query(f"SELECT count() FROM {TABLE_NAME}").strip())
     assert initial_count == 100, f"Expected 100 rows, got {initial_count}"
 
+    # Enable failpoint to pause at iterate()
     instance.query("SYSTEM ENABLE FAILPOINT delta_lake_metadata_iterate_pause")
 
-    result_holder = {"result": None, "error": None}
+    result_holder = {"result": None, "error": None, "query_id": None}
 
     from concurrent.futures import ThreadPoolExecutor
     import concurrent.futures
 
     executor = ThreadPoolExecutor(max_workers=2)
 
+    # Wait for failpoint to be hit
     wait_future = executor.submit(
         lambda: instance.query("SYSTEM WAIT FAILPOINT delta_lake_metadata_iterate_pause PAUSE", timeout=30)
     )
 
     time.sleep(1)
 
+    # Start query that will be paused at iterate()
     def run_query():
         try:
+            # Use sum() instead of count() to force actual data reading and trigger iterate()
+            query_id = f"test_consistency_concurrent_{TABLE_NAME}"
+            result_holder["query_id"] = query_id
             result = instance.query(
-                f"SELECT count() FROM {TABLE_NAME} WHERE sleepEachRow(0.01) = 0",
+                f"SELECT sum(a) FROM {TABLE_NAME} WHERE sleepEachRow(0.01) = 0",
                 settings={"max_threads": 1, "allow_experimental_delta_kernel_rs": 1},
+                query_id=query_id,
                 timeout=60
             )
             result_holder["result"] = int(result.strip())
@@ -4372,22 +4384,34 @@ def test_schema_change_race_condition(started_cluster):
 
     query_future = executor.submit(run_query)
 
+    # Wait for the query to hit the failpoint
     concurrent.futures.wait([wait_future], timeout=15)
 
     if wait_future.exception() is not None:
         instance.query("SYSTEM DISABLE FAILPOINT delta_lake_metadata_iterate_pause")
         raise Exception("Test setup failed - failpoint not hit")
 
+    # While query is paused, update the table (creates version 1 with 50 rows)
     df = spark.read.format("delta").load(delta_path)
     df_filtered = df.filter("a < 50")
     df_filtered.write.format("delta").mode("overwrite").save(delta_path)
-
     default_upload_directory(started_cluster, "s3", delta_path, "")
 
-    second_query_count = int(instance.query(f"SELECT count() FROM {TABLE_NAME}").strip())
+    # Verify that a new query sees the updated data (version 1)
+    # Use sum() to trigger iterate() so we can check logs
+    query_id_v1 = f"test_consistency_version_1_{TABLE_NAME}"
+    second_query_result = instance.query(
+        f"SELECT sum(a) FROM {TABLE_NAME}",
+        query_id=query_id_v1,
+        settings={"allow_experimental_delta_kernel_rs": 1},
+    ).strip()
+    # sum(0..49) = 1225
+    assert int(second_query_result) == 1225, f"Expected sum=1225 in updated table, got {second_query_result}"
 
+    # Resume the paused query
     instance.query("SYSTEM NOTIFY FAILPOINT delta_lake_metadata_iterate_pause")
 
+    # Wait for query to complete
     concurrent.futures.wait([query_future], timeout=60)
 
     instance.query("SYSTEM DISABLE FAILPOINT delta_lake_metadata_iterate_pause")
@@ -4395,10 +4419,46 @@ def test_schema_change_race_condition(started_cluster):
     if result_holder["error"]:
         raise result_holder["error"]
 
-    first_query_count = result_holder["result"]
+    first_query_result = result_holder["result"]
 
-    if first_query_count == 50:
-        raise Exception(f"Bug detected: First query saw updated snapshot (50 rows) instead of its original snapshot (100 rows)! "
-                       f"Second query (which ran while first was paused) returned {second_query_count} rows.")
+    # The paused query should see the ORIGINAL snapshot (version 0, 100 rows)
+    # sum(0..99) = 4950
+    if first_query_result == 1225:  # sum(0..49) - would indicate bug
+        raise Exception(f"Bug detected: First query saw updated snapshot (sum={first_query_result}, version 1) "
+                       f"instead of its original snapshot (expected sum=4950, version 0)!")
 
-    assert first_query_count == 100, f"Expected first query to see 100 rows, got {first_query_count}"
+    assert first_query_result == 4950, f"Expected first query to see original data (sum=4950), got {first_query_result}"
+
+    # Now verify via logs that the correct snapshot version was used
+    instance.query("SYSTEM FLUSH LOGS")
+
+    query_id = result_holder["query_id"]
+
+    # Check that we used snapshot version 0 from metadata snapshot for iterate
+    log_check_iterate = instance.query(
+        f"SELECT count() FROM system.text_log WHERE query_id = '{query_id}' "
+        f"AND message LIKE '%Using snapshot version 0 from storage metadata snapshot%'"
+    )
+    assert int(log_check_iterate) > 0, "Expected to find log message about using snapshot version 0 from metadata snapshot for iterate"
+
+    # Check that we used snapshot version 0 from metadata snapshot for prepareReadingFromFormat
+    log_check_prepare = instance.query(
+        f"SELECT count() FROM system.text_log WHERE query_id = '{query_id}' "
+        f"AND message LIKE '%Using snapshot version 0 from storage metadata snapshot for prepareReadingFromFormat%'"
+    )
+    assert int(log_check_prepare) > 0, "Expected to find log message about using snapshot version 0 from metadata snapshot for prepareReadingFromFormat"
+
+    # Verify that the second query (after update) used snapshot version 1 from metadata snapshot
+    # Check that we used snapshot version 1 from metadata snapshot for iterate
+    log_check_iterate_v1 = instance.query(
+        f"SELECT count() FROM system.text_log WHERE query_id = '{query_id_v1}' "
+        f"AND message LIKE '%Using snapshot version 1 from storage metadata snapshot%'"
+    )
+    assert int(log_check_iterate_v1) > 0, "Expected to find log message about using snapshot version 1 from metadata snapshot for iterate"
+
+    # Check that we used snapshot version 1 from metadata snapshot for prepareReadingFromFormat
+    log_check_prepare_v1 = instance.query(
+        f"SELECT count() FROM system.text_log WHERE query_id = '{query_id_v1}' "
+        f"AND message LIKE '%Using snapshot version 1 from storage metadata snapshot for prepareReadingFromFormat%'"
+    )
+    assert int(log_check_prepare_v1) > 0, "Expected to find log message about using snapshot version 1 from metadata snapshot for prepareReadingFromFormat"
