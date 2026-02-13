@@ -32,6 +32,7 @@
 #include <Common/JSONParsers/DummyJSONParser.h>
 #include <Common/JSONParsers/SimdJSONParser.h>
 #include <Common/JSONParsers/RapidJSONParser.h>
+#include <Common/JSONParsers/ColumnObjectParser.h>
 #include <Functions/FunctionHelpers.h>
 #include <Common/FunctionDocumentation.h>
 
@@ -84,32 +85,6 @@ concept Preparable = requires (T t)
 
 class FunctionJSONHelpers
 {
-private:
-    /// converts JSON object column to string column in batch by serializing each JSON object into string.
-    static ColumnPtr convertObjectToStringColumn(
-        const ColumnPtr & arg_json,
-        const DataTypePtr & json_type,
-        size_t input_rows_count,
-        const FormatSettings & format_settings)
-    {
-        auto string_col = ColumnString::create();
-        auto & chars = string_col->getChars();
-        auto & offsets = string_col->getOffsets();
-        offsets.reserve(input_rows_count);
-
-        auto serializer = json_type->getDefaultSerialization();
-        WriteBufferFromVector<ColumnString::Chars> wb(chars);
-
-        for (size_t i = 0; i < input_rows_count; ++i)
-        {
-            serializer->serializeTextJSON(*arg_json, i, wb, format_settings);
-            offsets.push_back(wb.count());
-        }
-        wb.finalize();
-
-        return string_col;
-    }
-
 public:
     template <typename Name, template <typename> typename Impl, typename JSONParser, bool case_insensitive = false>
     class Executor
@@ -124,38 +99,21 @@ public:
                 throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} requires at least one argument", String(Name::name));
 
             auto first_column = arguments[0];
-            if (!isString(first_column.type) && !isObject(first_column.type))
+            bool is_object_input = isObject(first_column.type);
+            
+            if (!isString(first_column.type) && !is_object_input)
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
                                 "The first argument of function {} should be a string containing JSON or JSON object, illegal type: "
                                 "{}", String(Name::name), first_column.type->getName());
 
-            if (isObject(first_column.type))
+            // DIRECT PARSING: Use ColumnObjectParser for Object inputs without serialization
+            if (is_object_input)
             {
-                const IColumn * data_col = first_column.column.get();
-                const auto * col_json_const = typeid_cast<const ColumnConst *>(data_col);
-
-                if (col_json_const)
-                {
-                    data_col = col_json_const->getDataColumnPtr().get();
-                    /// optimization step: serialize the single underlying value ONCE and wrap it as 'ColumnConst'.
-                    auto converted_single = FunctionJSONHelpers::convertObjectToStringColumn(
-                        col_json_const->getDataColumnPtr(),
-                        first_column.type,
-                        1,
-                        format_settings);
-                    first_column.column = ColumnConst::create(converted_single, col_json_const->size());
-                }
-                else
-                {
-                    first_column.column = FunctionJSONHelpers::convertObjectToStringColumn(
-                        first_column.column,
-                        first_column.type,
-                        input_rows_count,
-                        format_settings);
-                }
-                first_column.type = std::make_shared<DataTypeString>();
+                return runForObjectColumn<Name, Impl>(
+                    arguments, result_type, input_rows_count, format_settings, first_column);
             }
 
+            // String input: use existing parser pipeline
             const ColumnPtr & arg_json = first_column.column;
             const auto * col_json_const = typeid_cast<const ColumnConst *>(arg_json.get());
             const auto * col_json_string
@@ -220,6 +178,66 @@ public:
                 if (!added_to_column)
                     to->insertDefault();
             }
+            return to;
+        }
+
+    private:
+        /// Helper to process ColumnObject directly with ColumnObjectParser
+        template <typename NameT, template <typename> typename ImplT>
+        static ColumnPtr runForObjectColumn(
+            const ColumnsWithTypeAndName & arguments,
+            const DataTypePtr & result_type,
+            size_t input_rows_count,
+            const FormatSettings & format_settings,
+            const ColumnWithTypeAndName & first_column)
+        {
+            MutableColumnPtr to{result_type->createColumn()};
+            to->reserve(input_rows_count);
+
+            const auto * col_obj = typeid_cast<const ColumnObject *>(first_column.column.get());
+            const auto * col_obj_const = typeid_cast<const ColumnConst *>(first_column.column.get());
+
+            if (col_obj_const)
+                col_obj = typeid_cast<const ColumnObject *>(col_obj_const->getDataColumnPtr().get());
+
+            if (!col_obj)
+                throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Invalid column type for Object parsing");
+
+            size_t num_index_arguments = ImplT<ColumnObjectParser>::getNumberOfIndexArguments(arguments);
+            std::vector<Move> moves = prepareMoves(NameT::name, arguments, 1, num_index_arguments);
+
+            ImplT<ColumnObjectParser> impl;
+            if constexpr (Preparable<ImplT<ColumnObjectParser>>)
+                impl.prepare(NameT::name, arguments, result_type);
+
+            using Element = typename ColumnObjectParser::Element;
+            
+            // For const columns, parse once
+            Element document;
+            if (col_obj_const)
+            {
+                document = Element(*col_obj, 0);
+            }
+
+            String error;
+            for (size_t i = 0; i < input_rows_count; ++i)
+            {
+                // For non-const columns, create element for each row
+                if (!col_obj_const)
+                    document = Element(*col_obj, i);
+
+                bool added_to_column = false;
+                Element element;
+                std::string_view last_key;
+
+                // Perform moves directly on ColumnObject structure
+                if (performMoves<ColumnObjectParser, case_insensitive>(arguments, i, document, moves, element, last_key))
+                    added_to_column = impl.insertResultToColumn(*to, element, last_key, format_settings, error);
+
+                if (!added_to_column)
+                    to->insertDefault();
+            }
+
             return to;
         }
     };
