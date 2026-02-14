@@ -897,7 +897,9 @@ DictionaryBlock TextIndexSerialization::deserializeDictionaryBlock(ReadBuffer & 
     for (size_t i = 0; i < num_tokens; ++i)
         token_infos.emplace_back(TextIndexSerialization::deserializeTokenInfo(istr, posting_list_codec));
 
-    return DictionaryBlock{std::move(tokens_column), std::move(token_infos)};
+    DictionaryBlock result{std::move(tokens_column), std::move(token_infos)};
+    result.tokens_format = tokens_format;
+    return result;
 }
 
 template <typename Stream>

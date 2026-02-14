@@ -203,6 +203,8 @@ struct DictionaryBlock : public DictionaryBlockBase
     DictionaryBlock(ColumnPtr tokens_, std::vector<TokenPostingsInfo> token_infos_);
 
     std::vector<TokenPostingsInfo> token_infos;
+    /// Stores the TokensFormat used to encode this block (0 = RawStrings, 1 = FrontCodedStrings).
+    UInt64 tokens_format = 0;
 };
 
 struct DictionarySparseIndex : public DictionaryBlockBase
