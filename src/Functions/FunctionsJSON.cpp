@@ -1,6 +1,7 @@
 #include <type_traits>
 
 #include <base/range.h>
+#include <Common/logger_useful.h>
 
 #include <Formats/JSONExtractTree.h>
 #include <Formats/FormatFactory.h>
@@ -26,6 +27,7 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <DataTypes/NestedUtils.h>
 
 #include <Functions/IFunction.h>
 #include <Functions/FunctionFactory.h>
@@ -106,11 +108,11 @@ public:
                                 "The first argument of function {} should be a string containing JSON or JSON object, illegal type: "
                                 "{}", String(Name::name), first_column.type->getName());
 
-            /// DIRECT PARSING: Use ColumnObjectParser for Object inputs 
+            /// DIRECT PARSING: Use ColumnObjectParser for ColumnObject inputs.
             if (is_object_input)
                 return runForObjectColumn<Name, Impl>(arguments, result_type, input_rows_count, format_settings, first_column);
 
-            /// String input: use existing parser pipeline
+            /// String input: use existing parser pipeline.
             const ColumnPtr & arg_json = first_column.column;
             const auto * col_json_const = typeid_cast<const ColumnConst *>(arg_json.get());
             const auto * col_json_string
@@ -203,32 +205,62 @@ public:
             size_t num_index_arguments = TImpl<ColumnObjectParser>::getNumberOfIndexArguments(arguments);
             std::vector<Move> moves = prepareMoves(TName::name, arguments, 1, num_index_arguments);
 
+            /// OPTIMIZATION: Extract required paths to build complete dotted paths for ColumnObject's flattened structure.
+            /// ColumnObject stores nested JSON as flattened dotted keys (e.g., "a.b.c" for {a: {b: {c: value}}}).
+            /// Direct path lookup is faster than incremental navigation for nested structures.
+            std::vector<String> required_paths = extractRequiredPaths(moves);
+
             TImpl<ColumnObjectParser> impl;
             if constexpr (Preparable<TImpl<ColumnObjectParser>>)
                 impl.prepare(TName::name, arguments, result_type);
 
             using Element = typename ColumnObjectParser::Element;
-            
-            Element document;
-            if (col_obj_const)
+
+            /// Determine if we can use direct dotted path lookup (all moves are const keys).
+            /// This is independent of row iteration, so compute once.
+            bool all_const_keys = true;
+            String full_path;
+            for (const auto & move : moves)
             {
-                document = Element(*col_obj, 0);
+                if (move.type != MoveType::ConstKey)
+                {
+                    all_const_keys = false;
+                    break;
+                }
+                full_path = Nested::concatenateName(full_path, move.key);
             }
 
+            /// For const columns, create document once outside the loop.
+            Element const_document;
+            if (col_obj_const)
+            {
+                const_document = Element(*col_obj, 0);
+            }
+            
             String error;
             for (size_t i = 0; i < input_rows_count; ++i)
             {
-                /// For non-const columns: create element pointing to current row.
-                if (!col_obj_const)
-                    document = Element(*col_obj, i);
+                Element document = col_obj_const ? const_document : Element(*col_obj, i);
 
                 bool added_to_column = false;
                 Element element;
                 std::string_view last_key;
 
-                /// Navigate using moves: perform moves directly on ColumnObject structure.
-                if (performMoves<ColumnObjectParser, case_insensitive>(arguments, i, document, moves, element, last_key))
-                    added_to_column = impl.insertResultToColumn(*to, element, last_key, format_settings, error);
+                if (all_const_keys && !full_path.empty())
+                {
+                    /// Direct lookup using complete dotted path
+                    auto obj = document.getObject();
+                    if (obj.find(full_path, element))
+                    {
+                        added_to_column = impl.insertResultToColumn(*to, element, full_path, format_settings, error);
+                    }
+                }
+                else
+                {
+                    /// Fallback: navigate incrementally for non-const keys
+                    if (performMoves<ColumnObjectParser, case_insensitive>(arguments, i, document, moves, element, last_key))
+                        added_to_column = impl.insertResultToColumn(*to, element, last_key, format_settings, error);
+                }
 
                 if (!added_to_column)
                     to->insertDefault();
@@ -259,6 +291,29 @@ private:
         size_t index = 0;
         String key;
     };
+
+    /// Extract required subcolumn paths from moves for optimization.
+    /// For moves like {ConstKey, "a"}, {ConstKey, "b"}, {ConstKey, "c"},
+    /// returns {"a", "a.b", "a.b.c"} - all prefix paths along the navigation.
+    static std::vector<String> extractRequiredPaths(const std::vector<Move> & moves)
+    {
+        std::vector<String> required_paths;
+        String current_path;
+        
+        for (const auto & move : moves)
+        {
+            /// Only include constant key moves in optimization (variable keys can't be pre-filtered)
+            if (move.type != MoveType::ConstKey)
+                break;  
+            
+            if (!current_path.empty())
+                current_path += ".";
+            current_path += move.key;
+            required_paths.push_back(current_path);
+        }
+        
+        return required_paths;
+    }
 
     static std::vector<FunctionJSONHelpers::Move> prepareMoves(
         const char * function_name,
