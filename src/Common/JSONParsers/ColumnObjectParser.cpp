@@ -1,13 +1,7 @@
 #include <Common/JSONParsers/ColumnObjectParser.h>
-#include <Columns/ColumnObject.h>
-#include <Columns/ColumnDynamic.h>
-#include <Columns/ColumnArray.h>
-#include <Columns/ColumnString.h>
-#include <DataTypes/DataTypeObject.h>
-#include <DataTypes/DataTypeDynamic.h>
-#include <DataTypes/DataTypeArray.h>
-#include <Core/Field.h>
-#include <Formats/JSONExtractTree.h>
+
+#include <algorithm>
+#include <cctype>
 
 namespace DB
 {
@@ -18,7 +12,7 @@ bool ColumnObjectParser::Object::find(std::string_view key, Element & result) co
         return false;
     
     const auto & obj = object_field.safeGet<DB::Object>();
-    auto it = obj.find(String(key));
+    auto it = obj.find(key);
     if (it != obj.end())
     {
         result = Element(col_object, row, it->second, false);

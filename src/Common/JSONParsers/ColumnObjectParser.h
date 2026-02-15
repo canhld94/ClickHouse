@@ -4,16 +4,7 @@
 #include <base/defines.h>
 #include <Common/JSONParsers/ElementTypes.h>
 #include <Columns/ColumnObject.h>
-#include <Columns/ColumnDynamic.h>
-#include <Columns/ColumnArray.h>
-#include <Columns/ColumnTuple.h>
-#include <Columns/ColumnString.h>
-#include <Columns/ColumnVector.h>
-#include <DataTypes/DataTypeDynamic.h>
-#include <DataTypes/DataTypeObject.h>
 #include <Core/Field.h>
-#include <algorithm>
-#include <memory>
 #include <string_view>
 
 namespace DB
@@ -36,19 +27,19 @@ public:
         Element() = default;
 
         /// Create element from root of ColumnObject at given row.
-        ALWAYS_INLINE Element(const ColumnObject & col_obj_, size_t row_)
-            : col_object(&col_obj_), row(row_), is_root(true) {} /// NOLINT
+        ALWAYS_INLINE Element(const ColumnObject & col_obj_, size_t row_) : col_object(&col_obj_), row(row_), is_root(true) {} /// NOLINT
 
         /// Create element from nested value (internal use).
         ALWAYS_INLINE Element(const ColumnObject * col_obj_, size_t row_, const Field & field_val, bool is_root_ = false)
-            : col_object(col_obj_), row(row_), field_value(field_val), is_root(is_root_) {} /// NOLINT
+            : col_object(col_obj_), row(row_), field_value(field_val), field_cached(true), is_root(is_root_) {} /// NOLINT
 
         ALWAYS_INLINE const Field & getField() const
         {
-            if (is_root && col_object)
+            if (!field_cached)
             {
-                /// Cache the root field value to avoid returning reference to temporary.
-                field_value = (*col_object)[row];
+                if (is_root && col_object)
+                    field_value = (*col_object)[row];
+                field_cached = true;
             }
             return field_value;
         }
@@ -93,6 +84,7 @@ public:
         const ColumnObject * col_object = nullptr;
         size_t row = 0;
         mutable Field field_value;
+        mutable bool field_cached = false;
         bool is_root = false;
 
         friend class Array;
@@ -186,61 +178,30 @@ public:
         public:
             ALWAYS_INLINE KeyValuePair operator*() const
             {
-                if (!object)
-                    return {{}, Element()};
-                
-                const auto & obj_field = object->object_field;
-                if (obj_field.getType() != Field::Types::Object)
-                    return {{}, Element()};
-                
-                const auto & obj_map = obj_field.safeGet<DB::Object>();
-                if (current_idx >= obj_map.size())
-                    return {{}, Element()};
-                
-                /// Cache current iterator to avoid O(n) recalculation.
-                if (cached_idx != current_idx || !cached_key_ptr)
-                {
-                    auto it = obj_map.begin();
-                    for (size_t i = 0; i < current_idx && it != obj_map.end(); ++i, ++it);
-                    
-                    if (it != obj_map.end())
-                    {
-                        cached_idx = current_idx;
-                        cached_key_ptr = &it->first;
-                        cached_value = it->second;
-                    }
-                    else
-                    {
-                        cached_idx = obj_map.size();
-                        cached_key_ptr = nullptr;
-                    }
-                }
-                
-                if (!cached_key_ptr)
-                    return {{}, Element()};
-                
-                Element elem(object->col_object, object->row, cached_value, false);
-                return {std::string_view(*cached_key_ptr), elem};
+                return {std::string_view(map_it->first),
+                        Element(object->col_object, object->row, map_it->second, false)};
             }
-            
+
             ALWAYS_INLINE Iterator & operator++()
             {
-                ++current_idx;
-                cached_key_ptr = nullptr;  // Invalidate cache
+                ++map_it;
                 return *this;
             }
-            
+
             ALWAYS_INLINE Iterator operator++(int)
             {
                 auto res = *this;
-                ++current_idx;
-                cached_key_ptr = nullptr;  // Invalidate cache
+                ++map_it;
                 return res;
             }
 
             friend bool operator==(const Iterator & a, const Iterator & b)
             {
-                return a.current_idx == b.current_idx;
+                if (!a.object && !b.object)
+                    return true;
+                if (a.object != b.object)
+                    return false;
+                return a.map_it == b.map_it;
             }
             friend bool operator!=(const Iterator & a, const Iterator & b)
             {
@@ -249,24 +210,38 @@ public:
 
         private:
             friend class Object;
-            Iterator(const Object & obj_, size_t idx_) 
-                : object(&obj_), current_idx(idx_) {}
+            Iterator() = default;
+            Iterator(const Object * obj_, FieldMap::const_iterator it_)
+                : object(obj_), map_it(it_) {}
 
             const Object * object = nullptr;
-            size_t current_idx = 0;
-            
-            mutable size_t cached_idx = static_cast<size_t>(-1);
-            mutable const String * cached_key_ptr = nullptr;
-            mutable Field cached_value;
+            FieldMap::const_iterator map_it{};
         };
 
         Object() = default;
         ALWAYS_INLINE Object(const Field & obj_field_, const ColumnObject * col_obj_, size_t row_)
             : object_field(obj_field_), col_object(col_obj_), row(row_) {} /// NOLINT
 
-        ALWAYS_INLINE Iterator begin() const { return Iterator(*this, 0); }
-        ALWAYS_INLINE Iterator end() const { return Iterator(*this, size()); }
-        
+        ALWAYS_INLINE Iterator begin() const
+        {
+            if (object_field.getType() == Field::Types::Object)
+            {
+                const auto & obj = object_field.safeGet<DB::Object>();
+                return Iterator(this, obj.begin());
+            }
+            return Iterator();
+        }
+
+        ALWAYS_INLINE Iterator end() const
+        {
+            if (object_field.getType() == Field::Types::Object)
+            {
+                const auto & obj = object_field.safeGet<DB::Object>();
+                return Iterator(this, obj.end());
+            }
+            return Iterator();
+        }
+
         ALWAYS_INLINE size_t size() const
         {
             if (object_field.getType() == Field::Types::Object)
@@ -281,7 +256,6 @@ public:
         Field object_field;
         const ColumnObject * col_object = nullptr;
         size_t row = 0;
-        mutable std::vector<std::string_view> all_keys;
 
         friend class Iterator;
     };

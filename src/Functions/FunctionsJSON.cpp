@@ -110,7 +110,7 @@ public:
 
             /// DIRECT PARSING: Use ColumnObjectParser for ColumnObject inputs.
             if (is_object_input)
-                return runForObjectColumn<Name, Impl>(arguments, result_type, input_rows_count, format_settings, first_column);
+                return runForObjectColumn<Name, Impl>(arguments, result_type, input_rows_count, format_settings);
 
             /// String input: use existing parser pipeline.
             const ColumnPtr & arg_json = first_column.column;
@@ -187,19 +187,17 @@ public:
             const ColumnsWithTypeAndName & arguments,
             const DataTypePtr & result_type,
             size_t input_rows_count,
-            const FormatSettings & format_settings,
-            const ColumnWithTypeAndName & first_column)
+            const FormatSettings & format_settings)
         {
             MutableColumnPtr to{result_type->createColumn()};
             to->reserve(input_rows_count);
 
-            auto col_obj = typeid_cast<const ColumnObject *>(first_column.column.get());
-            auto col_obj_const = typeid_cast<const ColumnConst *>(first_column.column.get());
+            const auto & first_column = arguments[0];
+            const auto * col_const = typeid_cast<const ColumnConst *>(first_column.column.get());
+            const auto * col_object = typeid_cast<const ColumnObject *>(
+                col_const ? col_const->getDataColumnPtr().get() : first_column.column.get());
 
-            if (col_obj_const)
-                col_obj = typeid_cast<const ColumnObject *>(col_obj_const->getDataColumnPtr().get());
-
-            if (!col_obj)
+            if (!col_object)
                 throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Invalid column type for Object parsing");
 
             size_t num_index_arguments = TImpl<ColumnObjectParser>::getNumberOfIndexArguments(arguments);
@@ -211,21 +209,49 @@ public:
 
             using Element = typename ColumnObjectParser::Element;
 
-            Element const_document;
-            if (col_obj_const)
-                const_document = Element(*col_obj, 0);
+            /// Build a dotted path from consecutive ConstKey moves for direct flat-key lookup.
+            /// ColumnObject stores nested keys in flat form (e.g. "x.y.z") so step-by-step
+            /// navigation via performMoves would fail. Instead, join all keys into one path.
+            bool all_const_keys = true;
+            String flat_path;
+            for (const auto & move : moves)
+            {
+                if (move.type != MoveType::ConstKey)
+                {
+                    all_const_keys = false;
+                    break;
+                }
+                if (!flat_path.empty())
+                    flat_path += '.';
+                flat_path += move.key;
+            }
+
+            /// Extract last key segment for functions like JSONKey that need it.
+            std::string_view last_key;
+            if (all_const_keys && !moves.empty())
+                last_key = moves.back().key;
 
             String error;
             for (size_t i = 0; i < input_rows_count; ++i)
             {
-                Element document = col_obj_const ? const_document : Element(*col_obj, i);
+                Element document = col_const ? Element(*col_object, 0) : Element(*col_object, i);
 
                 bool added_to_column = false;
                 Element element;
-                std::string_view last_key;
 
-                if (performMoves<ColumnObjectParser, case_insensitive>(arguments, i, document, moves, element, last_key))
-                    added_to_column = impl.insertResultToColumn(*to, element, last_key, format_settings, error);
+                if (all_const_keys)
+                {
+                    if (flat_path.empty())
+                        added_to_column = impl.insertResultToColumn(*to, document, last_key, format_settings, error);
+                    else if (document.getObject().find(flat_path, element))
+                        added_to_column = impl.insertResultToColumn(*to, element, last_key, format_settings, error);
+                }
+                else
+                {
+                    std::string_view row_last_key;
+                    if (performMoves<ColumnObjectParser, case_insensitive>(arguments, i, document, moves, element, row_last_key))
+                        added_to_column = impl.insertResultToColumn(*to, element, row_last_key, format_settings, error);
+                }
 
                 if (!added_to_column)
                     to->insertDefault();
