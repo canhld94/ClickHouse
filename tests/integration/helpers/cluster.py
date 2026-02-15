@@ -4475,7 +4475,7 @@ class ClickHouseInstance:
             "SELECT value FROM system.build_options WHERE name = 'CXX_FLAGS'"
         )
         return "NDEBUG" not in build_opts
-    
+
     def is_built_with_llvm_coverage(self):
         with_coverage = self.query(
             "SELECT value FROM system.build_options WHERE name = 'WITH_COVERAGE'"
@@ -5292,7 +5292,7 @@ class ClickHouseInstance:
             [
                 "bash",
                 "-c",
-                "echo 'restart_with_latest_version: From version' && /usr/share/clickhouse_original server --version && echo 'To version' /usr/share/clickhouse_fresh server --version",
+                "echo 'restart_with_latest_version: From version' && /usr/share/clickhouse_original server --version && echo 'To version' && /usr/share/clickhouse_fresh server --version",
             ]
         )
         if fix_metadata:
@@ -5309,7 +5309,7 @@ class ClickHouseInstance:
                 [
                     "bash",
                     "-c",
-                    "if [ ! -f /var/lib/clickhouse/metadata/default.sql ]; then echo 'ATTACH DATABASE system ENGINE=Ordinary' > /var/lib/clickhouse/metadata/default.sql; fi",
+                    "if [ ! -f /var/lib/clickhouse/metadata/default.sql ]; then echo 'ATTACH DATABASE default ENGINE=Ordinary' > /var/lib/clickhouse/metadata/default.sql; fi",
                 ]
             )
         self.exec_in_container(
@@ -5788,9 +5788,9 @@ class ClickHouseInstance:
         if self.with_dolor:
             binary_volume = ""
         elif not self.with_installed_binary:
-            binary_volume = "- " + self.server_bin_path + ":/usr/bin/clickhouse"
+            binary_volume = "- " + self.server_bin_path + ":/usr/bin/clickhouse:ro"
         else:
-            binary_volume = "- " + self.server_bin_path + ":/usr/share/clickhouse_fresh"
+            binary_volume = "- " + self.server_bin_path + ":/usr/share/clickhouse_fresh:ro"
 
         external_dirs_volumes = ""
         if self.external_dirs:
