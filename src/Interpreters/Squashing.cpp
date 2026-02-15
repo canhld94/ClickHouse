@@ -3,6 +3,7 @@
 #include <Interpreters/Squashing.h>
 #include <Interpreters/InsertDeduplication.h>
 #include <Core/Block.h>
+#include <Columns/ColumnConst.h>
 #include <Columns/ColumnSparse.h>
 #include <Common/CurrentThread.h>
 #include <Common/Logger.h>
@@ -181,6 +182,16 @@ Chunk Squashing::squash(std::vector<Chunk> && input_chunks)
             /// Need to check if there are any sparse columns in subcolumns,
             /// since `IColumn::isSparse` is not recursive but sparse column can be inside a tuple, for example.
             have_same_serialization[j] &= columns[j]->structureEquals(*mutable_columns[j]);
+
+            /// ColumnConst can have different values, only squash if different value
+            if (have_same_serialization[j]
+                && isColumnConst(*columns[j])
+                && assert_cast<const ColumnConst &>(*columns[j]).getDataColumn().compareAt(
+                       0, 0, assert_cast<const ColumnConst &>(*mutable_columns[j]).getDataColumn(), 1) != 0)
+            {
+                have_same_serialization[j] = false;
+            }
+
             source_columns_list[j].emplace_back(std::move(columns[j]));
         }
     }
