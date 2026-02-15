@@ -1,3 +1,5 @@
+SET optimize_functions_to_subcolumns = 1;
+
 CREATE TABLE json_test (
     id Int32,
     json_string String,
@@ -97,7 +99,74 @@ SELECT
 FROM json_test
 ORDER BY id;
 
+-- Subcolumn optimization tests 
+-- These test the direct path column access optimization
+-- (typed/dynamic/shared data paths) vs full row materialization.
+
+SELECT 'Test 11: Nested path (dotted path optimization)';
+DROP TABLE IF EXISTS json_nested;
+CREATE TABLE json_nested (data JSON) ENGINE = Memory;
+INSERT INTO json_nested VALUES ('{"x": {"y": {"z": 42}}}');
+INSERT INTO json_nested VALUES ('{"x": {"y": {"z": 99}}}');
+SELECT JSONExtractInt(data, 'x', 'y', 'z') as val FROM json_nested ORDER BY val;
+DROP TABLE json_nested;
+
+SELECT 'Test 12: Missing path returns default';
+SELECT
+    JSONExtractInt(json_object, 'nonexistent') as missing_int,
+    JSONExtractString(json_object, 'nonexistent') as missing_str
+FROM json_test
+ORDER BY id;
+
+SELECT 'Test 13: Shared data path (max_dynamic_paths overflow)';
+DROP TABLE IF EXISTS json_shared;
+CREATE TABLE json_shared (data JSON(max_dynamic_paths=2)) ENGINE = Memory;
+INSERT INTO json_shared VALUES ('{"k1": 1, "k2": 2, "k3": 3, "k4": 4, "k5": 5}');
+INSERT INTO json_shared VALUES ('{"k1": 10, "k2": 20, "k3": 30, "k4": 40, "k5": 50}');
+SELECT JSONExtractInt(data, 'k3') as k3, JSONExtractInt(data, 'k5') as k5 FROM json_shared ORDER BY k3;
+DROP TABLE json_shared;
+
+SELECT 'Test 14: ColumnConst JSON object';
+SELECT JSONExtractInt(CAST('{"val": 777}' AS JSON), 'val') as const_val;
+
+SELECT 'Test 15: JSONExtractFloat on Object';
+DROP TABLE IF EXISTS json_float;
+CREATE TABLE json_float (data JSON) ENGINE = Memory;
+INSERT INTO json_float VALUES ('{"pi": 3.14159}');
+SELECT JSONExtractFloat(data, 'pi') as pi FROM json_float;
+DROP TABLE json_float;
+
+SELECT 'Test 16: Fallback path (non-const key)';
+SELECT
+    JSONExtractInt(json_object, materialize('age')) as age_fallback
+FROM json_test
+ORDER BY id;
+
 -- Cleanup
 DROP TABLE json_test;
+
+-- FunctionToSubcolumnsPass tests 
+-- Test that JSONExtract* functions are rewritten to subcolumn reads at the query plan level
+-- This is the storage-level I/O optimization: only the specific subcolumn is read from disk
+
+SELECT 'Test 17: FunctionToSubcolumnsPass basic';
+DROP TABLE IF EXISTS json_fts_pass;
+CREATE TABLE json_fts_pass (data JSON) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO json_fts_pass VALUES ('{"a": 42, "b": "hello", "c": 3.14, "d": true}');
+SELECT JSONExtractInt(data, 'a') FROM json_fts_pass SETTINGS optimize_functions_to_subcolumns=1;
+SELECT JSONExtractString(data, 'b') FROM json_fts_pass SETTINGS optimize_functions_to_subcolumns=1;
+SELECT JSONExtractFloat(data, 'c') FROM json_fts_pass SETTINGS optimize_functions_to_subcolumns=1;
+SELECT JSONExtractBool(data, 'd') FROM json_fts_pass SETTINGS optimize_functions_to_subcolumns=1;
+SELECT JSONExtractRaw(data, 'a') FROM json_fts_pass SETTINGS optimize_functions_to_subcolumns=1;
+SELECT JSONExtract(data, 'a', 'Int64') FROM json_fts_pass SETTINGS optimize_functions_to_subcolumns=1;
+
+SELECT 'Test 18: FunctionToSubcolumnsPass nested path';
+DROP TABLE IF EXISTS json_fts_nested;
+CREATE TABLE json_fts_nested (data JSON) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO json_fts_nested VALUES ('{"nested": {"x": 100}}');
+SELECT JSONExtractInt(data, 'nested', 'x') FROM json_fts_nested SETTINGS optimize_functions_to_subcolumns=1;
+DROP TABLE json_fts_nested;
+
+DROP TABLE json_fts_pass;
 
 SELECT 'All tests completed';
