@@ -1,5 +1,3 @@
--- Tags: no-random-settings, no-random-merge-tree-settings
-
 -- Regression test for https://github.com/ClickHouse/ClickHouse/issues/95537
 -- INSERT SELECT with UNION ALL + CTE + JOIN corrupts constant values
 DROP TABLE IF EXISTS t_const_squash;
