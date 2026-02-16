@@ -31,6 +31,8 @@ namespace ErrorCodes
     extern const int TYPE_MISMATCH;
     extern const int EMPTY_LIST_OF_COLUMNS_PASSED;
     extern const int LOGICAL_ERROR;
+    extern const int BAD_ARGUMENTS;
+    extern const int INCORRECT_QUERY;
 }
 
 StorageInMemoryMetadata::StorageInMemoryMetadata(const StorageInMemoryMetadata & other)
@@ -866,11 +868,14 @@ void StorageInMemoryMetadata::addImplicitIndicesForColumn(const ColumnDescriptio
             bool valid_index = true;
             try
             {
-                MergeTreeIndexFactory::implicitValidation(index);
+                MergeTreeIndexFactory::instance().validate(index, false);
             }
-            catch (...)
+            catch (const Exception & e)
             {
-                valid_index = false;
+                if (e.code() == ErrorCodes::BAD_ARGUMENTS || e.code() == ErrorCodes::INCORRECT_QUERY)
+                    valid_index = false;
+                else
+                    throw;
             }
             if (valid_index)
                 secondary_indices.push_back(std::move(index));
