@@ -15,6 +15,7 @@
 #include <IO/Operators.h>
 #include <Parsers/ASTSQLSecurity.h>
 #include <Parsers/ASTSetQuery.h>
+#include <Storages/IndicesDescription.h>
 #include <Storages/MergeTree/MergeTreeIndices.h>
 #include <Storages/MergeTree/MergeTreeVirtualColumns.h>
 
@@ -888,7 +889,11 @@ void StorageInMemoryMetadata::dropImplicitIndicesForColumn(const String & column
 {
     for (auto index_it = secondary_indices.begin(); index_it != secondary_indices.end();)
     {
-        if (index_it->isImplicitlyCreated() && index_it->column_names.front() == column_name)
+        /// We check the index name rather than column_names because for ALIAS columns,
+        /// the column_names contains the resolved underlying expression columns, not the alias name.
+        /// For example, for `alias UInt64 ALIAS value>0`, the implicit index is named
+        /// `auto_minmax_index_alias` but its column_names contains `["value"]`, not `["alias"]`.
+        if (index_it->isImplicitlyCreated() && index_it->name == IMPLICITLY_ADDED_MINMAX_INDEX_PREFIX + column_name)
             index_it = secondary_indices.erase(index_it);
         else
             ++index_it;
