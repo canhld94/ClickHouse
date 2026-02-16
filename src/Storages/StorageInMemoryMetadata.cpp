@@ -13,6 +13,7 @@
 #include <Interpreters/Context.h>
 #include <Interpreters/ExpressionActions.h>
 #include <IO/Operators.h>
+#include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTSQLSecurity.h>
 #include <Parsers/ASTSetQuery.h>
 #include <Storages/IndicesDescription.h>
@@ -848,6 +849,17 @@ void StorageInMemoryMetadata::addImplicitIndicesForColumn(const ColumnDescriptio
     // that do not exist in storage and cannot be indexed.
     if (column.default_desc.kind == ColumnDefaultKind::Ephemeral)
         return;
+
+    // Skip ALIAS columns that are just aliases to other columns (not expressions).
+    // Only create implicit indices for ALIAS columns with actual expressions.
+    // For example: `a ALIAS b` should be skipped, but `a ALIAS b > 0` should get an index.
+    if (column.default_desc.kind == ColumnDefaultKind::Alias && column.default_desc.expression)
+    {
+        // If the expression is just a simple identifier (column reference), skip creating implicit index
+        // because the underlying column will already have its own implicit index if needed.
+        if (column.default_desc.expression->as<ASTIdentifier>())
+            return;
+    }
 
     if ((isNumber(column.type) && add_minmax_index_for_numeric_columns) || (isString(column.type) && add_minmax_index_for_string_columns)
         || (isDateOrDate32OrTimeOrTime64OrDateTimeOrDateTime64(column.type) && add_minmax_index_for_temporal_columns))
