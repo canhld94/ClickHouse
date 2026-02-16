@@ -50,6 +50,7 @@ class IMergeTreeReader;
 class MarkCache;
 class UncompressedCache;
 class MergeTreeTransaction;
+class PackedFilesReader;
 
 struct MergeTreeReadTaskInfo;
 using MergeTreeReadTaskInfoPtr = std::shared_ptr<const MergeTreeReadTaskInfo>;
@@ -171,7 +172,9 @@ public:
     void remove();
 
     ColumnsStatistics loadStatistics() const;
+    ColumnsStatistics loadStatistics(const Names & required_columns) const;
     Estimates getEstimates() const;
+    void setEstimates(const Estimates & new_estimates);
 
     /// Initialize columns (from columns.txt if exists, or create from column files if not).
     /// Load various metadata into memory: checksums from checksums.txt, index if required, etc.
@@ -668,6 +671,7 @@ private:
 
     mutable IndexSizeByName secondary_index_sizes;
 
+<<<<<<< HEAD
     /// Sometimes we need to calculate the size of all files required to read a specific subcolumn.
     /// We do it on the first request and save it in the subcolumns_sizes_cache.
     /// But as number of different subcolumns can be infinite (because of dynamic subcolumns),
@@ -675,6 +679,11 @@ private:
     mutable std::mutex subcolumns_sizes_cache_mutex;
     static constexpr size_t MAX_SUBCOLUMNS_SIZES_CACHE_SIZE = 1000;
     mutable ColumnSizeByName subcolumns_sizes_cache;
+    /// PackedFilesReader for statistics archive.
+    /// Lazily loaded on first access to loadStatistics when packed format is used.
+    mutable std::mutex statistics_reader_mutex;
+    mutable std::unique_ptr<PackedFilesReader> statistics_reader TSA_GUARDED_BY(statistics_reader_mutex);
+>>>>>>> 6cb988d7d1c19d2217d1d3f70200411c8ee85dd5
 
 protected:
     /// Total size on disk, not only columns. May not contain size of
@@ -748,7 +757,7 @@ private:
     /// Small state of finalized statistics for suitable statistics types.
     /// Lazily initialized on a first access.
     mutable std::mutex estimates_mutex;
-    mutable std::optional<Estimates> estimates;
+    mutable std::optional<Estimates> estimates TSA_GUARDED_BY(estimates_mutex);
 
     /// Reads part unique identifier (if exists) from uuid.txt
     void loadUUID();
@@ -791,6 +800,10 @@ private:
     /// any specifial compression.
     void loadDefaultCompressionCodec();
     void loadSourcePartsSet();
+
+    ColumnsStatistics loadStatisticsPacked(const PackedFilesReader & reader, const NameSet & required_columns) const;
+    ColumnsStatistics loadStatisticsWide(const NameSet & required_columns) const;
+    PackedFilesReader * getStatisticsPackedReader() const;
 
     void writeColumns(const NamesAndTypesList & columns_, const WriteSettings & settings);
     void writeVersionMetadata(const VersionMetadata & version_, bool fsync_part_dir) const;
