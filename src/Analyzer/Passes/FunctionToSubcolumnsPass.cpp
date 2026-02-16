@@ -243,7 +243,7 @@ void optimizeTupleOrVariantElement(QueryTreeNodePtr & node, FunctionNode & funct
 
 /// Builds a dotted path from consecutive constant string arguments in the range [first, last).
 /// Returns empty string if any argument is not a constant string.
-static String buildJSONPathFromArgs(const QueryTreeNodes & args, size_t first, size_t last)
+String buildJSONPathFromArgs(const QueryTreeNodes & args, size_t first, size_t last)
 {
     String path;
     for (size_t i = first; i < last; ++i)
