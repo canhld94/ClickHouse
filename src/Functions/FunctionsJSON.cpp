@@ -100,7 +100,7 @@ public:
             if (arguments.empty())
                 throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} requires at least one argument", String(Name::name));
 
-            auto first_column = arguments[0];
+            const auto & first_column = arguments[0];
             bool is_object_input = isObject(first_column.type);
 
             if (!isString(first_column.type) && !is_object_input)

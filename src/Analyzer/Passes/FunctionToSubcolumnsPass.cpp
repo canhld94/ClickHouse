@@ -241,25 +241,6 @@ void optimizeTupleOrVariantElement(QueryTreeNodePtr & node, FunctionNode & funct
     node = std::make_shared<ColumnNode>(column, ctx.column_source);
 }
 
-/// Builds a dotted path from consecutive constant string arguments in the range [first, last).
-/// Returns empty string if any argument is not a constant string.
-String buildJSONPathFromArgs(const QueryTreeNodes & args, size_t first, size_t last)
-{
-    String path;
-    for (size_t i = first; i < last; ++i)
-    {
-        const auto * const_node = args[i]->as<ConstantNode>();
-        if (!const_node || const_node->getValue().getType() != Field::Types::String)
-            return {};
-        const auto & key = const_node->getValue().safeGet<String>();
-        if (path.empty())
-            path = key;
-        else
-            path += "." + key;
-    }
-    return path;
-}
-
 /// Rewrites JSONExtract*(json_col, 'a', 'b', ...) to json_col.a.b so the storage reads only
 /// the needed subcolumn (and not everything!). The pass framework adds a CAST to the original
 /// function's return type if the subcolumn type differs
@@ -280,9 +261,27 @@ void optimizeJSONExtractToSubcolumn(QueryTreeNodePtr & node, FunctionNode & func
     if (args.size() < min_args)
         return;
 
+    /// Builds a dotted path from consecutive constant string arguments in the range [first, last).
+    auto buildPath = [&args](size_t first, size_t last)
+    {
+        String path;
+        for (size_t i = first; i < last; ++i)
+        {
+            const auto * const_node = args[i]->as<ConstantNode>();
+            if (!const_node || const_node->getValue().getType() != Field::Types::String)
+                return String();
+            const auto & key = const_node->getValue().safeGet<String>();
+            if (path.empty())
+                path = key;
+            else
+                path += "." + key;
+        }
+        return path;
+    };
+
     /// Path keys span from args[1] up to (but not including!) the trailing type arg if present.
     const size_t path_end = has_trailing_type_arg ? args.size() - 1 : args.size();
-    String path = buildJSONPathFromArgs(args, 1, path_end);
+    String path = buildPath(1, path_end);
     if (path.empty())
         return;
 
