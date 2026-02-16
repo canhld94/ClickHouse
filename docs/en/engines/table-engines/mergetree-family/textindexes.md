@@ -75,13 +75,7 @@ If query
 SELECT value FROM system.settings WHERE name = 'compatibility';
 ```
 
-returns
-
-```text
-25.4
-```
-
-or any other value smaller than 26.2, you will need to set three additional settings to use the text index:
+returns a value smaller than `26.2` (e.g. `25.4`), you will need to set three additional settings to use the text index:
 
 ```sql
 SET enable_full_text_index = true;
