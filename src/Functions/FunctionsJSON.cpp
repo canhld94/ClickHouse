@@ -102,7 +102,7 @@ public:
 
             auto first_column = arguments[0];
             bool is_object_input = isObject(first_column.type);
-            
+
             if (!isString(first_column.type) && !is_object_input)
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
                                 "The first argument of function {} should be a string containing JSON or JSON object, illegal type: "

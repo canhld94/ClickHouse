@@ -10,11 +10,9 @@
 namespace DB
 {
 
-/**
- * Parser that reads directly from ColumnObject.
- * Implements the same Element/Array/Object API 
- * operating on ColumnObject's internal structured data.
- */ 
+/// Parser that reads directly from ColumnObject.
+/// Implements the same Element/Array/Object API
+/// operating on ColumnObject's internal structured data.
 class ColumnObjectParser
 {
 public:
@@ -22,7 +20,8 @@ public:
     class Object;
 
     /// Represents a JSON value from ColumnObject.
-    class Element {
+    class Element
+    {
     public:
         Element() = default;
 
@@ -104,13 +103,13 @@ public:
                     return (*array)[index];
                 return Element();
             }
-            
+
             ALWAYS_INLINE Iterator & operator++()
             {
                 ++index;
                 return *this;
             }
-            
+
             ALWAYS_INLINE Iterator operator++(int)
             {
                 auto tmp = *this;
@@ -140,14 +139,14 @@ public:
 
         ALWAYS_INLINE Iterator begin() const { return Iterator(*this, 0); }
         ALWAYS_INLINE Iterator end() const { return Iterator(*this, size()); }
-        
+
         ALWAYS_INLINE size_t size() const
         {
             if (array_field.getType() == Field::Types::Array)
                 return array_field.safeGet<DB::Array>().size();
             return 0;
         }
-        
+
         ALWAYS_INLINE Element operator[](size_t index) const
         {
             if (array_field.getType() == Field::Types::Array)
