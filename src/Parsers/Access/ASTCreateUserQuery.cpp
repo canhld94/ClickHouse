@@ -138,6 +138,12 @@ namespace
     }
 
 
+    void formatRoles(const ASTRolesOrUsersSet & roles, WriteBuffer & ostr, const IAST::FormatSettings & settings)
+    {
+        ostr << " ROLE ";
+        roles.format(ostr, settings);
+    }
+
     void formatDefaultRoles(const ASTRolesOrUsersSet & default_roles, WriteBuffer & ostr, const IAST::FormatSettings & settings)
     {
         ostr << " DEFAULT ROLE ";
@@ -263,6 +269,9 @@ void ASTCreateUserQuery::formatImpl(WriteBuffer & ostr, const FormatSettings & f
 
     if (default_database)
         formatDefaultDatabase(*default_database, ostr, format);
+
+    if (roles)
+        formatRoles(*roles, ostr, format);
 
     if (default_roles)
         formatDefaultRoles(*default_roles, ostr, format);
