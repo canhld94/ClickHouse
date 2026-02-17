@@ -6,22 +6,23 @@
  *   node fetch_ci_report.js <url> [options]
  *
  * URL formats supported:
- *   - GitHub PR URLs: https://github.com/ClickHouse/ClickHouse/pull/12345
+ *   - GitHub PR URLs: https://github.com/ClickHouse/ClickHouse/pull/12345 (fetches ALL CI reports)
  *   - HTML URLs: https://s3.amazonaws.com/.../json.html?PR=...&sha=...&name_0=...
  *   - Direct JSON URLs: https://s3.amazonaws.com/.../result_*.json
  *
  * Options:
  *   --test <name>    Filter to show only tests matching this name
- *   --failed         Show only failed tests
+ *   --failed         Show failed test names in PR summary
  *   --all            Show all test results (not just summary)
  *   --links          Show artifact links
  *   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
- *   --report <number> For PR URLs: select which CI report to fetch (default: 1)
+ *   --report <number> For PR URLs: fetch only one specific report (default: fetch all)
  *   --credentials <user,password>  HTTP Basic Auth credentials (comma-separated). Only for ClickHouse_private repository
  *
  * Examples:
  *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171"
- *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2 --failed
+ *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --failed
+ *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2
  *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..."
  *   node fetch_ci_report.js "https://s3.amazonaws.com/.../result_integration_tests.json"
  *   node fetch_ci_report.js "<url>" --test peak_memory --links
@@ -298,7 +299,9 @@ async function getCIReportsFromPR(prUrl) {
  */
 async function fetchReport(inputUrl, options = {}) {
   try {
-    console.log(`Parsing URL: ${inputUrl}\n`);
+    if (!options.isSingleReport) {
+      console.log(`Parsing URL: ${inputUrl}\n`);
+    }
 
     let jsonData, targetData;
 
@@ -309,25 +312,93 @@ async function fetchReport(inputUrl, options = {}) {
       // GitHub PR URL - extract CI report URLs
       const ciUrls = await getCIReportsFromPR(inputUrl);
 
-      console.log(`Found ${ciUrls.length} CI report(s):\n`);
-      ciUrls.forEach((url, idx) => {
-        // Extract job name from URL
-        const nameMatch = url.match(/name_0=([^&]+)/);
-        const jobName = nameMatch ? decodeURIComponent(nameMatch[1]) : 'Unknown';
-        console.log(`${idx + 1}. ${jobName}`);
-        console.log(`   ${url}\n`);
-      });
+      console.log(`Found ${ciUrls.length} CI report(s)\n`);
 
-      // If no specific report requested, use the first one
-      if (!options.reportIndex) {
-        console.log(`Fetching first report (use --report <number> to select a different one)...\n`);
-        inputUrl = ciUrls[0];
-      } else {
+      // If a specific report is requested, fetch only that one
+      if (options.reportIndex) {
         const idx = parseInt(options.reportIndex) - 1;
         if (idx < 0 || idx >= ciUrls.length) {
           throw new Error(`Invalid report index. Choose 1-${ciUrls.length}`);
         }
+        console.log(`Fetching report #${options.reportIndex}...\n`);
         inputUrl = ciUrls[idx];
+      } else {
+        // Fetch all reports
+        console.log(`Fetching all reports...\n`);
+        const allResults = [];
+
+        for (let i = 0; i < ciUrls.length; i++) {
+          const url = ciUrls[i];
+          const nameMatch = url.match(/name_0=([^&]+)/);
+          const name1Match = url.match(/name_1=([^&]+)/);
+          const jobName = nameMatch ? decodeURIComponent(nameMatch[1]) : 'Unknown';
+          const subJobName = name1Match ? decodeURIComponent(name1Match[1]) : null;
+          const fullJobName = subJobName ? `${jobName} -> ${subJobName}` : jobName;
+
+          try {
+            console.log(`[${i + 1}/${ciUrls.length}] ${fullJobName}...`);
+            const result = await fetchReport(url, { ...options, isSingleReport: true });
+            allResults.push({
+              index: i + 1,
+              jobName: fullJobName,
+              url,
+              ...result
+            });
+          } catch (error) {
+            console.log(`  Error: ${error.message}\n`);
+            allResults.push({
+              index: i + 1,
+              jobName: fullJobName,
+              url,
+              error: error.message
+            });
+          }
+        }
+
+        // Print summary
+        console.log('\n' + '='.repeat(80));
+        console.log('CI REPORTS SUMMARY');
+        console.log('='.repeat(80) + '\n');
+
+        let totalTests = 0;
+        let totalPassed = 0;
+        let totalFailed = 0;
+        let totalSkipped = 0;
+
+        for (const result of allResults) {
+          if (result.error) {
+            console.log(`[${result.index}] ${result.jobName}`);
+            console.log(`    ❌ Error: ${result.error}\n`);
+            continue;
+          }
+
+          const { testResults = [] } = result;
+          const failed = testResults.filter(t => t.status === 'failed' || t.status === 'FAIL');
+          const passed = testResults.filter(t => t.status === 'success' || t.status === 'OK');
+          const skipped = testResults.filter(t => t.status === 'skipped' || t.status === 'SKIPPED');
+
+          totalTests += testResults.length;
+          totalPassed += passed.length;
+          totalFailed += failed.length;
+          totalSkipped += skipped.length;
+
+          const status = failed.length > 0 ? '❌' : '✅';
+          console.log(`[${result.index}] ${status} ${result.jobName}`);
+          console.log(`    Total: ${testResults.length} | Passed: ${passed.length} | Failed: ${failed.length} | Skipped: ${skipped.length}`);
+
+          if (failed.length > 0 && options.failedOnly) {
+            for (const test of failed) {
+              console.log(`      FAIL: ${test.name}`);
+            }
+          }
+          console.log();
+        }
+
+        console.log('='.repeat(80));
+        console.log(`TOTAL: ${totalTests} tests | ✅ ${totalPassed} passed | ❌ ${totalFailed} failed | ⏭️  ${totalSkipped} skipped`);
+        console.log('='.repeat(80) + '\n');
+
+        return { allResults, summary: { totalTests, totalPassed, totalFailed, totalSkipped } };
       }
     }
 
@@ -336,7 +407,9 @@ async function fetchReport(inputUrl, options = {}) {
 
     if (isDirectJsonUrl) {
       // Direct JSON URL - fetch it directly
-      console.log(`Fetching JSON directly: ${inputUrl}\n`);
+      if (!options.isSingleReport) {
+        console.log(`Fetching JSON directly: ${inputUrl}\n`);
+      }
       const jsonText = await fetchUrl(inputUrl, options.credentials);
       jsonData = JSON.parse(jsonText);
       targetData = jsonData;
@@ -344,18 +417,24 @@ async function fetchReport(inputUrl, options = {}) {
       // HTML URL with parameters - parse and construct JSON URLs
       const { baseUrl, suffix, sha, nameParams } = await parseReportUrl(inputUrl, options.credentials);
 
-      console.log(`Task: ${nameParams.join(' -> ')}`);
-      console.log(`SHA: ${sha}\n`);
+      if (!options.isSingleReport) {
+        console.log(`Task: ${nameParams.join(' -> ')}`);
+        console.log(`SHA: ${sha}\n`);
+      }
 
       // Construct JSON URL for the primary task (name_0)
       const jsonUrl = constructJsonUrl(baseUrl, suffix, sha, nameParams[0]);
-      console.log(`Fetching JSON: ${jsonUrl}\n`);
+      if (!options.isSingleReport) {
+        console.log(`Fetching JSON: ${jsonUrl}\n`);
+      }
 
       // Fetch name_0 JSON data, and name_1 separately if present (matching json.html behavior)
       const fetchTasks = [fetchUrl(jsonUrl, options.credentials)];
       if (nameParams.length > 1) {
         const json1Url = constructJsonUrl(baseUrl, suffix, sha, nameParams[1]);
-        console.log(`Fetching JSON (name_1): ${json1Url}\n`);
+        if (!options.isSingleReport) {
+          console.log(`Fetching JSON (name_1): ${json1Url}\n`);
+        }
         fetchTasks.push(fetchUrl(json1Url, options.credentials).catch(() => null));
       }
 
@@ -396,7 +475,7 @@ async function fetchReport(inputUrl, options = {}) {
     // Extract artifact links
     const artifactLinks = extractArtifactLinks(jsonData);
 
-    // Apply filters
+    // Apply filters (but keep original results for summary)
     let filteredResults = testResults;
 
     if (options.testFilter) {
@@ -405,13 +484,19 @@ async function fetchReport(inputUrl, options = {}) {
       );
     }
 
-    if (options.failedOnly) {
+    // For multi-report mode, don't filter by failed here - we'll show all in summary
+    if (options.failedOnly && !options.isSingleReport) {
       filteredResults = filteredResults.filter(t =>
         t.status === 'failed' || t.status === 'FAIL'
       );
     }
 
-    // Print results
+    // If this is a single report being fetched (part of multi-report fetch), just return data
+    if (options.isSingleReport) {
+      return { testResults, artifactLinks, jsonData };
+    }
+
+    // Print results for standalone report
     console.log('=== Test Results ===\n');
 
     const failed = filteredResults.filter(t => t.status === 'failed' || t.status === 'FAIL');
@@ -485,22 +570,23 @@ async function main() {
 Usage: node fetch_ci_report.js <url> [options]
 
 URL formats:
-  - GitHub PR: https://github.com/ClickHouse/ClickHouse/pull/12345
+  - GitHub PR: https://github.com/ClickHouse/ClickHouse/pull/12345 (fetches ALL CI reports)
   - CI HTML:   https://s3.amazonaws.com/.../json.html?PR=...&sha=...&name_0=...
   - Direct JSON: https://s3.amazonaws.com/.../result_*.json
 
 Options:
   --test <name>    Filter to show only tests matching this name
-  --failed         Show only failed tests
+  --failed         Show failed test names in PR summary
   --all            Show all test results (not just summary)
   --links          Show artifact links
   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
-  --report <number> For PR URLs: select which CI report to fetch (default: 1)
+  --report <number> For PR URLs: fetch only one specific report (default: fetch all)
   --credentials <user,password>  HTTP Basic Auth credentials
 
 Examples:
   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171"
-  node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2 --failed
+  node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --failed
+  node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2
   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&sha=abc123&name_0=Integration%20tests"
   node fetch_ci_report.js "<url>" --test peak_memory --links
   node fetch_ci_report.js "<url>" --failed --download-logs
