@@ -2619,22 +2619,13 @@ const IMergeTreeDataPart::ColumnSizeByName & IMergeTreeDataPart::getColumnSizes(
 
 ColumnSize IMergeTreeDataPart::getSubcolumnSize(const String & subcolumn_name) const
 {
-    {
-        std::unique_lock lock(subcolumns_sizes_cache_mutex);
-        auto it = subcolumns_sizes_cache.find(subcolumn_name);
-        if (it != subcolumns_sizes_cache.end())
-            return it->second;
-    }
+    /// First, check if we already calculated the size of this subcolumn and have it in cache.
+    if (auto size = subcolumns_sizes_cache.get(subcolumn_name))
+        return *size;
 
+    /// If not, calculate the size of the subcolumn on disk and put it to cache.
     auto size = calculateSubcolumnSize(subcolumn_name);
-
-    {
-        std::unique_lock lock(subcolumns_sizes_cache_mutex);
-        if (subcolumns_sizes_cache.size() == MAX_SUBCOLUMNS_SIZES_CACHE_SIZE)
-            subcolumns_sizes_cache.clear();
-        subcolumns_sizes_cache[subcolumn_name] = size;
-    }
-
+    subcolumns_sizes_cache.add(subcolumn_name, size);
     return size;
 }
 

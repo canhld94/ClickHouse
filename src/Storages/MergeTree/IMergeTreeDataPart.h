@@ -27,6 +27,7 @@
 #include <Storages/ColumnsDescription.h>
 #include <Interpreters/TransactionVersionMetadata.h>
 #include <DataTypes/Serializations/SerializationInfo.h>
+#include <Poco/LRUCache.h>
 
 
 namespace zkutil
@@ -673,11 +674,8 @@ private:
 
     /// Sometimes we need to calculate the size of all files required to read a specific subcolumn.
     /// We do it on the first request and save it in the subcolumns_sizes_cache.
-    /// But as number of different subcolumns can be infinite (because of dynamic subcolumns),
-    /// we restrict the cache size and invalidate it when it reaches the maximum allowed size.
-    mutable std::mutex subcolumns_sizes_cache_mutex;
-    static constexpr size_t MAX_SUBCOLUMNS_SIZES_CACHE_SIZE = 1000;
-    mutable ColumnSizeByName subcolumns_sizes_cache;
+    /// The number of subcolumns can be infinite due to dynamic subcolumns in JSON, so we use LRU cache here.
+    mutable Poco::LRUCache<String, ColumnSize> subcolumns_sizes_cache = Poco::LRUCache<String, ColumnSize>(1024);
 
     /// PackedFilesReader for statistics archive.
     /// Lazily loaded on first access to loadStatistics when packed format is used.
