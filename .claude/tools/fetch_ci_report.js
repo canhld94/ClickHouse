@@ -5,6 +5,10 @@
  * Usage:
  *   node fetch_ci_report.js <url> [options]
  *
+ * URL formats supported:
+ *   - HTML URLs: https://s3.amazonaws.com/.../json.html?PR=...&sha=...&name_0=...
+ *   - Direct JSON URLs: https://s3.amazonaws.com/.../result_*.json
+ *
  * Options:
  *   --test <name>    Filter to show only tests matching this name
  *   --failed         Show only failed tests
@@ -15,6 +19,7 @@
  *
  * Examples:
  *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..."
+ *   node fetch_ci_report.js "https://s3.amazonaws.com/.../result_integration_tests.json"
  *   node fetch_ci_report.js "<url>" --test peak_memory --links
  *   node fetch_ci_report.js "<url>" --failed --download-logs
  */
@@ -24,6 +29,7 @@ const http = require('http');
 const { URL } = require('url');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const zlib = require('zlib');
 
 /**
  * Normalize task name as done in the HTML page
@@ -69,12 +75,22 @@ function fetchUrl(urlString, credentials = null) {
         return;
       }
 
+      // Handle gzip compression
+      let stream = res;
+      const encoding = res.headers['content-encoding'];
+      if (encoding === 'gzip') {
+        stream = res.pipe(zlib.createGunzip());
+      } else if (encoding === 'deflate') {
+        stream = res.pipe(zlib.createInflate());
+      }
+
       const chunks = [];
-      res.on('data', chunk => chunks.push(chunk));
-      res.on('end', () => {
+      stream.on('data', chunk => chunks.push(chunk));
+      stream.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
         resolve(body);
       });
+      stream.on('error', reject);
     });
 
     req.on('error', reject);
@@ -234,55 +250,68 @@ function extractArtifactLinks(jsonData) {
 /**
  * Fetch and parse the CI report
  */
-async function fetchReport(htmlUrl, options = {}) {
+async function fetchReport(inputUrl, options = {}) {
   try {
-    console.log(`Parsing URL: ${htmlUrl}\n`);
+    console.log(`Parsing URL: ${inputUrl}\n`);
 
-    // Parse the URL to get parameters
-    const { baseUrl, suffix, sha, nameParams } = await parseReportUrl(htmlUrl, options.credentials);
+    let jsonData, targetData;
 
-    console.log(`Task: ${nameParams.join(' -> ')}`);
-    console.log(`SHA: ${sha}\n`);
+    // Check if this is a direct JSON URL or an HTML URL with parameters
+    const isDirectJsonUrl = inputUrl.includes('.json') || !inputUrl.includes('?');
 
-    // Construct JSON URL for the primary task (name_0)
-    const jsonUrl = constructJsonUrl(baseUrl, suffix, sha, nameParams[0]);
-    console.log(`Fetching JSON: ${jsonUrl}\n`);
+    if (isDirectJsonUrl) {
+      // Direct JSON URL - fetch it directly
+      console.log(`Fetching JSON directly: ${inputUrl}\n`);
+      const jsonText = await fetchUrl(inputUrl, options.credentials);
+      jsonData = JSON.parse(jsonText);
+      targetData = jsonData;
+    } else {
+      // HTML URL with parameters - parse and construct JSON URLs
+      const { baseUrl, suffix, sha, nameParams } = await parseReportUrl(inputUrl, options.credentials);
 
-    // Fetch name_0 JSON data, and name_1 separately if present (matching json.html behavior)
-    const fetchTasks = [fetchUrl(jsonUrl, options.credentials)];
-    if (nameParams.length > 1) {
-      const json1Url = constructJsonUrl(baseUrl, suffix, sha, nameParams[1]);
-      console.log(`Fetching JSON (name_1): ${json1Url}\n`);
-      fetchTasks.push(fetchUrl(json1Url, options.credentials).catch(() => null));
-    }
+      console.log(`Task: ${nameParams.join(' -> ')}`);
+      console.log(`SHA: ${sha}\n`);
 
-    const fetchResults = await Promise.all(fetchTasks);
-    const jsonData = JSON.parse(fetchResults[0]);
+      // Construct JSON URL for the primary task (name_0)
+      const jsonUrl = constructJsonUrl(baseUrl, suffix, sha, nameParams[0]);
+      console.log(`Fetching JSON: ${jsonUrl}\n`);
 
-    // Resolve target data: use dedicated name_1 JSON if available, fall back to navigating name_0.results
-    let targetData = jsonData;
-    if (nameParams.length > 1) {
-      const json1Text = fetchResults[1];
-      if (json1Text) {
-        targetData = JSON.parse(json1Text);
-      } else if (jsonData.results) {
-        // Fallback: navigate name_0.results
-        const found = jsonData.results.find(r => r.name === nameParams[1]);
-        if (!found) {
-          throw new Error(`Task not found: ${nameParams[1]}`);
-        }
-        targetData = found;
+      // Fetch name_0 JSON data, and name_1 separately if present (matching json.html behavior)
+      const fetchTasks = [fetchUrl(jsonUrl, options.credentials)];
+      if (nameParams.length > 1) {
+        const json1Url = constructJsonUrl(baseUrl, suffix, sha, nameParams[1]);
+        console.log(`Fetching JSON (name_1): ${json1Url}\n`);
+        fetchTasks.push(fetchUrl(json1Url, options.credentials).catch(() => null));
       }
-      // Resolve deeper names (name_2+) by walking results
-      for (let i = 2; i < nameParams.length; i++) {
-        if (!targetData.results) {
-          throw new Error(`Task not found: ${nameParams[i]}`);
+
+      const fetchResults = await Promise.all(fetchTasks);
+      jsonData = JSON.parse(fetchResults[0]);
+
+      // Resolve target data: use dedicated name_1 JSON if available, fall back to navigating name_0.results
+      targetData = jsonData;
+      if (nameParams.length > 1) {
+        const json1Text = fetchResults[1];
+        if (json1Text) {
+          targetData = JSON.parse(json1Text);
+        } else if (jsonData.results) {
+          // Fallback: navigate name_0.results
+          const found = jsonData.results.find(r => r.name === nameParams[1]);
+          if (!found) {
+            throw new Error(`Task not found: ${nameParams[1]}`);
+          }
+          targetData = found;
         }
-        const found = targetData.results.find(r => r.name === nameParams[i]);
-        if (!found) {
-          throw new Error(`Task not found: ${nameParams[i]}`);
+        // Resolve deeper names (name_2+) by walking results
+        for (let i = 2; i < nameParams.length; i++) {
+          if (!targetData.results) {
+            throw new Error(`Task not found: ${nameParams[i]}`);
+          }
+          const found = targetData.results.find(r => r.name === nameParams[i]);
+          if (!found) {
+            throw new Error(`Task not found: ${nameParams[i]}`);
+          }
+          targetData = found;
         }
-        targetData = found;
       }
     }
 
