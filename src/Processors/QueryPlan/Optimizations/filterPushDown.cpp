@@ -232,7 +232,7 @@ static size_t simplePushDownOverStep(QueryPlan::Node * parent_node, bool step_ch
 class EquivalentJoinKeySet
 {
 public:
-    JoinActionRef find(JoinActionRef ref)
+    JoinActionRef findOrAdd(JoinActionRef ref)
     {
         auto it = parent.find(ref);
         if (it == parent.end())
@@ -244,15 +244,15 @@ public:
         if (it->second == ref)
             return ref;
 
-        JoinActionRef root = find(it->second);
+        JoinActionRef root = findOrAdd(it->second);
         parent.insert_or_assign(ref, root);
         return root;
     }
 
     JoinActionRef unite(JoinActionRef a, JoinActionRef b)
     {
-        JoinActionRef root_a = find(a);
-        JoinActionRef root_b = find(b);
+        JoinActionRef root_a = findOrAdd(a);
+        JoinActionRef root_b = findOrAdd(b);
 
         if (root_a == root_b)
             return root_a;
@@ -273,24 +273,24 @@ public:
 
     bool connected(JoinActionRef a, JoinActionRef b)
     {
-        return find(a) == find(b);
+        return findOrAdd(a) == findOrAdd(b);
     }
 
     std::unordered_map<JoinActionRef, std::vector<JoinActionRef>> getClasses()
     {
         std::unordered_map<JoinActionRef, std::vector<JoinActionRef>> classes;
         for (auto & [ref, _] : parent)
-            classes[find(ref)].push_back(ref);
+            classes[findOrAdd(ref)].push_back(ref);
         return classes;
     }
 
     std::vector<JoinActionRef> getClass(JoinActionRef ref)
     {
         std::vector<JoinActionRef> res;
-        JoinActionRef root = find(ref);
+        JoinActionRef root = findOrAdd(ref);
         for (auto & [other_ref, _] : parent)
         {
-            if (find(other_ref) == root)
+            if (findOrAdd(other_ref) == root)
                 res.push_back(other_ref);
         }
         return res;
