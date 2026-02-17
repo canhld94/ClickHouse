@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fetch ClickHouse CI test reports using Playwright
+ * Fetch ClickHouse CI test reports without Playwright
  *
  * Usage:
  *   node fetch_ci_report.js <url> [options]
@@ -8,91 +8,255 @@
  * Options:
  *   --test <name>    Filter to show only tests matching this name
  *   --failed         Show only failed tests
+ *   --all            Show all test results (not just summary)
  *   --links          Show artifact links
- *   --download-logs  Download and extract logs.tar.gz
- *   --credentials <user,password>  Only for ClickHouse_private repository: HTTP Basic Auth credentials (comma-separated)
+ *   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
+ *   --credentials <user,password>  HTTP Basic Auth credentials (comma-separated)
  *
  * Examples:
  *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..."
- *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..." --test peak_memory
- *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..." --failed
- *
- * Setup (one-time):
- *   cd /tmp && npm install playwright && npx playwright install chromium
+ *   node fetch_ci_report.js "<url>" --test peak_memory --links
+ *   node fetch_ci_report.js "<url>" --failed --download-logs
  */
 
-let chromium;
-try {
-  // Try loading from /tmp where it's typically installed
-  chromium = require('/tmp/node_modules/playwright').chromium;
-} catch (e) {
-  try {
-    // Fall back to local node_modules
-    chromium = require('playwright').chromium;
-  } catch (e2) {
-    console.error('Error: Playwright not found. Install it first:');
-    console.error('  cd /tmp && npm install playwright && npx playwright install chromium');
-    process.exit(1);
-  }
-}
 const https = require('https');
+const http = require('http');
+const { URL } = require('url');
 const fs = require('fs');
 const { execSync } = require('child_process');
-const path = require('path');
 
-async function fetchReport(url, options = {}) {
-  const browser = await chromium.launch();
-  const contextOptions = {};
-  if (options.credentials) {
-    contextOptions.httpCredentials = options.credentials;
-  }
-  const context = await browser.newContext(contextOptions);
-  const page = await context.newPage();
+/**
+ * Normalize task name as done in the HTML page
+ */
+function normalizeTaskName(name) {
+  return name.toLowerCase()
+    .replace(/[^a-z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/_+$/, '');
+}
 
-  console.log(`Fetching: ${url}\n`);
+/**
+ * Fetch a URL and return the response body
+ */
+function fetchUrl(urlString, credentials = null) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(urlString);
+    const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
-  try {
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
-    await page.waitForTimeout(3000);
+    const options = {
+      method: 'GET',
+      headers: {}
+    };
 
-    // Get page content
-    const content = await page.evaluate(() => document.body.innerText);
+    if (credentials) {
+      const auth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+      options.headers['Authorization'] = `Basic ${auth}`;
+    }
 
-    // Extract artifact links
-    const links = await page.evaluate(() => {
-      const anchors = document.querySelectorAll('a');
-      return Array.from(anchors).map(a => ({ href: a.href, text: a.innerText }));
+    const req = protocol.get(urlString, options, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        // Follow redirect
+        return fetchUrl(res.headers.location, credentials).then(resolve).catch(reject);
+      }
+
+      if (res.statusCode === 403) {
+        reject(new Error('403 Forbidden - Report does not exist or expired'));
+        return;
+      }
+
+      if (res.statusCode !== 200) {
+        reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+        return;
+      }
+
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        resolve(body);
+      });
     });
 
-    // Filter artifact links
-    const artifactLinks = links.filter(link =>
-      link.href.includes('.tar.gz') ||
-      link.href.includes('.log') ||
-      link.href.includes('configs')
-    );
+    req.on('error', reject);
+    req.setTimeout(60000, () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+  });
+}
 
-    // Parse test results
-    const lines = content.split('\n');
-    const testResults = [];
-    let inResults = false;
+/**
+ * Parse the HTML URL to extract parameters and construct JSON URLs
+ */
+function parseReportUrl(htmlUrl) {
+  const url = new URL(htmlUrl);
+  const params = url.searchParams;
 
-    for (const line of lines) {
-      if (line.includes('status\tname\tduration')) {
-        inResults = true;
-        continue;
+  const PR = params.get('PR');
+  const REF = params.get('REF');
+  const sha = params.get('sha');
+  const base_url = params.get('base_url');
+
+  // Extract name parameters (name_0, name_1, etc.)
+  const nameParams = [];
+  params.forEach((value, key) => {
+    if (key.startsWith('name_')) {
+      const index = parseInt(key.split('_')[1], 10);
+      nameParams[index] = value;
+    }
+  });
+
+  // Construct base URL
+  let baseUrl = base_url;
+  if (!baseUrl) {
+    // Default to the S3 bucket path
+    baseUrl = url.origin + url.pathname.split('/').slice(0, -1).join('/');
+  }
+
+  // Construct suffix
+  let suffix = '';
+  if (PR) {
+    suffix = `PRs/${encodeURIComponent(PR)}`;
+  } else if (REF) {
+    suffix = `REFs/${encodeURIComponent(REF)}`;
+  } else {
+    throw new Error('Either PR or REF parameter is required');
+  }
+
+  if (!sha) {
+    throw new Error('sha parameter is required');
+  }
+
+  if (nameParams.length === 0) {
+    throw new Error('At least name_0 parameter is required');
+  }
+
+  return { baseUrl, suffix, sha, nameParams };
+}
+
+/**
+ * Construct JSON URL for a given task name
+ */
+function constructJsonUrl(baseUrl, suffix, sha, taskName) {
+  const normalizedTask = normalizeTaskName(taskName);
+  return `${baseUrl}/${suffix}/${encodeURIComponent(sha)}/result_${normalizedTask}.json`;
+}
+
+/**
+ * Parse test results from the JSON data
+ */
+function parseTestResults(jsonData) {
+  const tests = [];
+
+  if (!jsonData || !jsonData.results) {
+    return tests;
+  }
+
+  function extractTests(results, prefix = '') {
+    for (const result of results) {
+      if (result.results && result.results.length > 0) {
+        // Nested results
+        extractTests(result.results, prefix ? `${prefix}/${result.name}` : result.name);
+      } else {
+        // Leaf result - this is a test
+        tests.push({
+          name: prefix ? `${prefix}/${result.name}` : result.name,
+          status: result.status || 'UNKNOWN',
+          duration: result.duration || 0
+        });
       }
-      if (inResults && line.trim()) {
-        const parts = line.split('\t');
-        if (parts.length >= 3) {
-          const status = parts[0].trim();
-          const name = parts[1].trim();
-          const duration = parts[2].trim();
-          if (['OK', 'FAIL', 'SKIPPED'].some(s => status.includes(s))) {
-            testResults.push({ status, name, duration });
+    }
+  }
+
+  extractTests(jsonData.results);
+  return tests;
+}
+
+/**
+ * Extract artifact links from JSON data
+ */
+function extractArtifactLinks(jsonData) {
+  const links = [];
+
+  if (!jsonData) {
+    return links;
+  }
+
+  // Extract links from the top-level links array
+  if (jsonData.links) {
+    for (const link of jsonData.links) {
+      if (typeof link === 'string') {
+        links.push({ text: link.split('/').pop(), href: link });
+      }
+    }
+  }
+
+  // Extract links from results
+  function extractFromResults(results) {
+    if (!results) return;
+
+    for (const result of results) {
+      if (result.links) {
+        for (const link of result.links) {
+          if (typeof link === 'string') {
+            links.push({ text: link.split('/').pop(), href: link });
           }
         }
       }
+      if (result.results) {
+        extractFromResults(result.results);
+      }
     }
+  }
+
+  extractFromResults(jsonData.results);
+
+  // Filter to only artifact links
+  return links.filter(link =>
+    link.href.includes('.tar.gz') ||
+    link.href.includes('.log') ||
+    link.href.includes('configs')
+  );
+}
+
+/**
+ * Fetch and parse the CI report
+ */
+async function fetchReport(htmlUrl, options = {}) {
+  try {
+    console.log(`Parsing URL: ${htmlUrl}\n`);
+
+    // Parse the URL to get parameters
+    const { baseUrl, suffix, sha, nameParams } = parseReportUrl(htmlUrl);
+
+    console.log(`Task: ${nameParams.join(' -> ')}`);
+    console.log(`SHA: ${sha}\n`);
+
+    // Construct JSON URL for the primary task (name_0)
+    const jsonUrl = constructJsonUrl(baseUrl, suffix, sha, nameParams[0]);
+    console.log(`Fetching JSON: ${jsonUrl}\n`);
+
+    // Fetch the JSON data
+    const jsonText = await fetchUrl(jsonUrl, options.credentials);
+    const jsonData = JSON.parse(jsonText);
+
+    // If there are nested tasks (name_1), navigate to them
+    let targetData = jsonData;
+    if (nameParams.length > 1 && jsonData.results) {
+      for (let i = 1; i < nameParams.length; i++) {
+        const taskName = nameParams[i];
+        targetData = jsonData.results.find(r => r.name === taskName);
+        if (!targetData) {
+          throw new Error(`Task not found: ${taskName}`);
+        }
+      }
+    }
+
+    // Parse test results
+    const testResults = parseTestResults(targetData);
+
+    // Extract artifact links
+    const artifactLinks = extractArtifactLinks(jsonData);
 
     // Apply filters
     let filteredResults = testResults;
@@ -104,15 +268,17 @@ async function fetchReport(url, options = {}) {
     }
 
     if (options.failedOnly) {
-      filteredResults = filteredResults.filter(t => t.status.includes('FAIL'));
+      filteredResults = filteredResults.filter(t =>
+        t.status === 'failed' || t.status === 'FAIL'
+      );
     }
 
     // Print results
     console.log('=== Test Results ===\n');
 
-    const failed = filteredResults.filter(t => t.status.includes('FAIL'));
-    const passed = filteredResults.filter(t => t.status.includes('OK'));
-    const skipped = filteredResults.filter(t => t.status.includes('SKIPPED'));
+    const failed = filteredResults.filter(t => t.status === 'failed' || t.status === 'FAIL');
+    const passed = filteredResults.filter(t => t.status === 'success' || t.status === 'OK');
+    const skipped = filteredResults.filter(t => t.status === 'skipped' || t.status === 'SKIPPED');
 
     console.log(`Total: ${filteredResults.length} | Passed: ${passed.length} | Failed: ${failed.length} | Skipped: ${skipped.length}\n`);
 
@@ -124,17 +290,22 @@ async function fetchReport(url, options = {}) {
       console.log('');
     }
 
-    if (options.showAll) {
+    if (options.showAll && !options.failedOnly) {
       console.log('--- All Tests ---');
       for (const test of filteredResults) {
-        console.log(`${test.status.padEnd(8)} ${test.name}  (${test.duration}s)`);
+        const statusLabel = test.status.toUpperCase().padEnd(8);
+        console.log(`${statusLabel} ${test.name}  (${test.duration}s)`);
       }
     }
 
     if (options.showLinks) {
       console.log('\n=== Artifact Links ===');
-      for (const link of artifactLinks) {
-        console.log(`${link.text}: ${link.href}`);
+      if (artifactLinks.length > 0) {
+        for (const link of artifactLinks) {
+          console.log(`${link.text}: ${link.href}`);
+        }
+      } else {
+        console.log('No artifact links found');
       }
     }
 
@@ -148,16 +319,23 @@ async function fetchReport(url, options = {}) {
         console.log(`Logs saved to: ${logsPath}`);
 
         // List contents
-        console.log('\nLogs archive contents (pytest logs):');
-        const contents = execSync(`tar -tzf ${logsPath} | grep -E "pytest.*\\.log$" | head -20`).toString();
-        console.log(contents);
+        try {
+          console.log('\nLogs archive contents (pytest logs):');
+          const contents = execSync(`tar -tzf ${logsPath} | grep -E "pytest.*\\.log$|pytest.*\\.jsonl$" | head -20`).toString();
+          console.log(contents || '(no pytest logs found)');
+        } catch (e) {
+          // Ignore errors from grep/head
+        }
+      } else {
+        console.log('\nNo logs.tar.gz found in artifacts');
       }
     }
 
-    return { testResults: filteredResults, artifactLinks, content };
+    return { testResults: filteredResults, artifactLinks, jsonData };
 
-  } finally {
-    await browser.close();
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+    process.exit(1);
   }
 }
 
@@ -173,11 +351,11 @@ Options:
   --failed         Show only failed tests
   --all            Show all test results (not just summary)
   --links          Show artifact links
-  --download-logs  Download and extract logs.tar.gz
+  --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
   --credentials <user,password>  HTTP Basic Auth credentials
 
 Examples:
-  node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&sha=abc123&name_0=PR&name_1=Integration%20tests"
+  node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&sha=abc123&name_0=Integration%20tests"
   node fetch_ci_report.js "<url>" --test peak_memory --links
   node fetch_ci_report.js "<url>" --failed --download-logs
   node fetch_ci_report.js "<url>" --credentials "user,password" --failed
