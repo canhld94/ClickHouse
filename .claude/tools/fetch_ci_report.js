@@ -6,6 +6,7 @@
  *   node fetch_ci_report.js <url> [options]
  *
  * URL formats supported:
+ *   - GitHub PR URLs: https://github.com/ClickHouse/ClickHouse/pull/12345
  *   - HTML URLs: https://s3.amazonaws.com/.../json.html?PR=...&sha=...&name_0=...
  *   - Direct JSON URLs: https://s3.amazonaws.com/.../result_*.json
  *
@@ -15,9 +16,12 @@
  *   --all            Show all test results (not just summary)
  *   --links          Show artifact links
  *   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
+ *   --report <number> For PR URLs: select which CI report to fetch (default: 1)
  *   --credentials <user,password>  HTTP Basic Auth credentials (comma-separated). Only for ClickHouse_private repository
  *
  * Examples:
+ *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171"
+ *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2 --failed
  *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..."
  *   node fetch_ci_report.js "https://s3.amazonaws.com/.../result_integration_tests.json"
  *   node fetch_ci_report.js "<url>" --test peak_memory --links
@@ -248,6 +252,48 @@ function extractArtifactLinks(jsonData) {
 }
 
 /**
+ * Extract CI report URLs from a GitHub PR
+ */
+async function getCIReportsFromPR(prUrl) {
+  // Parse PR number from URL
+  const match = prUrl.match(/github\.com\/ClickHouse\/ClickHouse\/pull\/(\d+)/);
+  if (!match) {
+    throw new Error('Invalid GitHub PR URL format');
+  }
+  const prNumber = match[1];
+
+  console.log(`Fetching CI reports for PR #${prNumber}...\n`);
+
+  // Fetch PR comments to find CI bot comment
+  try {
+    const commentsJson = execSync(`gh api repos/ClickHouse/ClickHouse/issues/${prNumber}/comments --jq '[.[] | select(.user.login == "clickhouse-gh[bot]") | {body, created_at}] | sort_by(.created_at) | reverse | .[0]'`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    const comment = JSON.parse(commentsJson);
+    if (!comment || !comment.body) {
+      throw new Error('No CI bot comment found');
+    }
+
+    // Extract CI report URLs from comment
+    const reportUrlPattern = /https:\/\/s3\.amazonaws\.com\/clickhouse-test-reports\/json\.html\?[^\s)]+/g;
+    const urls = comment.body.match(reportUrlPattern);
+
+    if (!urls || urls.length === 0) {
+      throw new Error('No CI report URLs found in bot comment');
+    }
+
+    return urls;
+  } catch (error) {
+    if (error.message.includes('No CI bot comment found') || error.message.includes('No CI report URLs found')) {
+      throw error;
+    }
+    throw new Error(`Failed to fetch PR comments: ${error.message}`);
+  }
+}
+
+/**
  * Fetch and parse the CI report
  */
 async function fetchReport(inputUrl, options = {}) {
@@ -255,6 +301,35 @@ async function fetchReport(inputUrl, options = {}) {
     console.log(`Parsing URL: ${inputUrl}\n`);
 
     let jsonData, targetData;
+
+    // Check if this is a GitHub PR URL
+    const isGitHubPR = inputUrl.includes('github.com') && inputUrl.includes('/pull/');
+
+    if (isGitHubPR) {
+      // GitHub PR URL - extract CI report URLs
+      const ciUrls = await getCIReportsFromPR(inputUrl);
+
+      console.log(`Found ${ciUrls.length} CI report(s):\n`);
+      ciUrls.forEach((url, idx) => {
+        // Extract job name from URL
+        const nameMatch = url.match(/name_0=([^&]+)/);
+        const jobName = nameMatch ? decodeURIComponent(nameMatch[1]) : 'Unknown';
+        console.log(`${idx + 1}. ${jobName}`);
+        console.log(`   ${url}\n`);
+      });
+
+      // If no specific report requested, use the first one
+      if (!options.reportIndex) {
+        console.log(`Fetching first report (use --report <number> to select a different one)...\n`);
+        inputUrl = ciUrls[0];
+      } else {
+        const idx = parseInt(options.reportIndex) - 1;
+        if (idx < 0 || idx >= ciUrls.length) {
+          throw new Error(`Invalid report index. Choose 1-${ciUrls.length}`);
+        }
+        inputUrl = ciUrls[idx];
+      }
+    }
 
     // Check if this is a direct JSON URL or an HTML URL with parameters
     const isDirectJsonUrl = inputUrl.includes('.json') || !inputUrl.includes('?');
@@ -409,19 +484,26 @@ async function main() {
     console.log(`
 Usage: node fetch_ci_report.js <url> [options]
 
+URL formats:
+  - GitHub PR: https://github.com/ClickHouse/ClickHouse/pull/12345
+  - CI HTML:   https://s3.amazonaws.com/.../json.html?PR=...&sha=...&name_0=...
+  - Direct JSON: https://s3.amazonaws.com/.../result_*.json
+
 Options:
   --test <name>    Filter to show only tests matching this name
   --failed         Show only failed tests
   --all            Show all test results (not just summary)
   --links          Show artifact links
   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
+  --report <number> For PR URLs: select which CI report to fetch (default: 1)
   --credentials <user,password>  HTTP Basic Auth credentials
 
 Examples:
+  node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171"
+  node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2 --failed
   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&sha=abc123&name_0=Integration%20tests"
   node fetch_ci_report.js "<url>" --test peak_memory --links
   node fetch_ci_report.js "<url>" --failed --download-logs
-  node fetch_ci_report.js "<url>" --credentials "user,password" --failed
 `);
     process.exit(0);
   }
@@ -433,6 +515,7 @@ Examples:
     showAll: false,
     showLinks: false,
     downloadLogs: false,
+    reportIndex: null,
     credentials: null,
   };
 
@@ -452,6 +535,9 @@ Examples:
         break;
       case '--download-logs':
         options.downloadLogs = true;
+        break;
+      case '--report':
+        options.reportIndex = args[++i];
         break;
       case '--credentials': {
         const cred = args[++i];
