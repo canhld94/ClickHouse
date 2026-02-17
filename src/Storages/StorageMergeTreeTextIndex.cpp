@@ -427,7 +427,8 @@ void StorageMergeTreeTextIndex::read(
     size_t max_block_size,
     size_t num_streams)
 {
-    context->checkAccess(AccessType::SELECT, source_table->getStorageID());
+    auto required_columns = text_index->getColumnsRequiredForIndexCalc();
+    context->checkAccess(AccessType::SELECT, source_table->getStorageID(), required_columns);
 
     auto sample_block = std::make_shared<const Block>(storage_snapshot->getSampleBlockForColumns(column_names));
     auto this_ptr = std::static_pointer_cast<StorageMergeTreeTextIndex>(shared_from_this());
