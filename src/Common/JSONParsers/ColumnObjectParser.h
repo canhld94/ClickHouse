@@ -34,6 +34,10 @@ public:
 
         ALWAYS_INLINE const Field & getField() const
         {
+            /// Why do we "lazily" cache the field_value? Because not every code path needs the materialized Field.
+            /// Calling (*col_object)[row] is expensive: it walks all (typed, dynamic, shared) paths to
+            /// reconstruct the full row as a nested Field, so we defer it until first access.
+            /// E.g. if the fast path resolves the value via find() the root's full Field was never needed.
             if (!field_cached)
             {
                 if (is_root && col_object)
