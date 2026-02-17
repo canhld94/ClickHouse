@@ -100,11 +100,14 @@ static size_t getSizeOfColumns(const IMergeTreeDataPart & part, const Names & co
     size_t data_compressed_size = 0;
     for (const auto & col_name : columns_to_read)
     {
-        auto column = part.getColumn(col_name);
-        if (column.isSubcolumn() && settings[Setting::allow_calculating_subcolumns_sizes_for_merge_tree_reading])
-            data_compressed_size += part.getSubcolumnSize(col_name).data_compressed;
-        else
-            data_compressed_size += part.getColumnSize(column.getNameInStorage()).data_compressed;
+        auto column = part.tryGetColumn(col_name);
+        if (column)
+        {
+            if (column->isSubcolumn() && settings[Setting::allow_calculating_subcolumns_sizes_for_merge_tree_reading])
+                data_compressed_size += part.getSubcolumnSize(col_name).data_compressed;
+            else
+                data_compressed_size += part.getColumnSize(column->getNameInStorage()).data_compressed;
+        }
     }
 
     if (!data_compressed_size)

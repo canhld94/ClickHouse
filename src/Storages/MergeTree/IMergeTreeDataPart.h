@@ -671,7 +671,6 @@ private:
 
     mutable IndexSizeByName secondary_index_sizes;
 
-<<<<<<< HEAD
     /// Sometimes we need to calculate the size of all files required to read a specific subcolumn.
     /// We do it on the first request and save it in the subcolumns_sizes_cache.
     /// But as number of different subcolumns can be infinite (because of dynamic subcolumns),
@@ -679,11 +678,11 @@ private:
     mutable std::mutex subcolumns_sizes_cache_mutex;
     static constexpr size_t MAX_SUBCOLUMNS_SIZES_CACHE_SIZE = 1000;
     mutable ColumnSizeByName subcolumns_sizes_cache;
+
     /// PackedFilesReader for statistics archive.
     /// Lazily loaded on first access to loadStatistics when packed format is used.
     mutable std::mutex statistics_reader_mutex;
     mutable std::unique_ptr<PackedFilesReader> statistics_reader TSA_GUARDED_BY(statistics_reader_mutex);
->>>>>>> 6cb988d7d1c19d2217d1d3f70200411c8ee85dd5
 
 protected:
     /// Total size on disk, not only columns. May not contain size of
