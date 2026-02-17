@@ -13,8 +13,8 @@ insert into test select toJSONString(map('s', repeat('a', 1000))), tuple(repeat(
 """
 
 query_id_base=$($CLICKHOUSE_CLIENT -q "select rand64()");
-$CLICKHOUSE_CLIENT --query_id=${query_id_base}_1 -q "select json.s from test format Null"
-$CLICKHOUSE_CLIENT --query_id=${query_id_base}_2 -q "select tuple.s from test format Null"
+$CLICKHOUSE_CLIENT --query_id=${query_id_base}_1 -q "select json.s from test format Null settings max_result_bytes=0"
+$CLICKHOUSE_CLIENT --query_id=${query_id_base}_2 -q "select tuple.s from test format Null settings max_result_bytes=0"
 
 $CLICKHOUSE_CLIENT -q """
 system flush logs query_log;
