@@ -103,6 +103,7 @@
 #include <Storages/System/StorageSystemDroppedTablesParts.h>
 #include <Storages/System/StorageSystemZooKeeperConnection.h>
 #include <Storages/System/StorageSystemJemalloc.h>
+#include <Storages/System/StorageSystemJemallocProfile.h>
 #include <Storages/System/StorageSystemScheduler.h>
 #include <Storages/System/StorageSystemObjectStorageQueueMetadataCache.h>
 #include <Storages/System/StorageSystemObjectStorageQueueSettings.h>
@@ -249,7 +250,7 @@ void attachSystemTablesServer(ContextPtr context, IDatabase & system_database, b
     attach<StorageSystemBackgroundSchedulePool>(context, system_database, "background_schedule_pool", "Contains information about tasks in all BackgroundSchedulePool instances. Each row represents a task.");
     attach<StorageSystemUserProcesses>(context, system_database, "user_processes", "This system table can be used to get overview of memory usage and ProfileEvents of users.");
     attachNoDescription<StorageSystemJemallocBins>(context, system_database, "jemalloc_bins", "Contains information about memory allocations done via jemalloc allocator in different size classes (bins) aggregated from all arenas. These statistics might not be absolutely accurate because of thread local caching in jemalloc.");
-    attachNoDescription<StorageSystemObjectStorageQueueMetadataCache<ObjectStorageType::S3>>(context, system_database, "s3queue_metadata_cache", "Contains in-memory state of S3Queue metadata and currently processed rows per file.");
+    attachNoDescription<StorageSystemJemallocProfile>(context, system_database, "jemalloc_profile", "Displays the symbolized jemalloc heap profile. Run 'SYSTEM JEMALLOC FLUSH PROFILE' to generate a profile first.");
     attachNoDescription<StorageSystemObjectStorageQueueMetadataCache<ObjectStorageType::Azure>>(context, system_database, "azure_queue_metadata_cache", "Contains in-memory state of AzureQueue metadata and currently processed rows per file.");
     attach<StorageSystemObjectStorageQueueSettings<ObjectStorageType::S3>>(context, system_database, "s3_queue_settings", "Contains a list of settings of S3Queue tables.");
     attach<StorageSystemObjectStorageQueueSettings<ObjectStorageType::Azure>>(context, system_database, "azure_queue_settings", "Contains a list of settings of AzureQueue tables.");
