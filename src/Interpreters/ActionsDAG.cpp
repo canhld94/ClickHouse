@@ -2487,8 +2487,7 @@ bool ActionsDAG::isFilterAlwaysFalseForDefaultValueInputs(const std::string & fi
         return false;
 
     const auto & constant_type = filter_with_default_value_inputs_filter_node->result_type;
-    auto which_constant_type = WhichDataType(constant_type);
-    if (!which_constant_type.isUInt8() && !which_constant_type.isNothing() && !which_constant_type.isNullable())
+    if (!constant_type->canBeUsedInBooleanContext())
         return false;
 
     Field value;
