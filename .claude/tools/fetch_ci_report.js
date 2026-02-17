@@ -88,7 +88,7 @@ function fetchUrl(urlString, credentials = null) {
 /**
  * Parse the HTML URL to extract parameters and construct JSON URLs
  */
-function parseReportUrl(htmlUrl) {
+async function parseReportUrl(htmlUrl, credentials = null) {
   const url = new URL(htmlUrl);
   const params = url.searchParams;
 
@@ -131,7 +131,19 @@ function parseReportUrl(htmlUrl) {
     throw new Error('At least name_0 parameter is required');
   }
 
-  return { baseUrl, suffix, sha, nameParams };
+  // Resolve sha=latest by fetching commits.json
+  let resolvedSha = sha;
+  if (sha === 'latest') {
+    const commitsUrl = `${baseUrl}/${suffix}/commits.json`;
+    const commitsText = await fetchUrl(commitsUrl, credentials);
+    const commits = JSON.parse(commitsText);
+    if (!commits || commits.length === 0) {
+      throw new Error('No commits found in commits.json');
+    }
+    resolvedSha = commits[commits.length - 1].sha;
+  }
+
+  return { baseUrl, suffix, sha: resolvedSha, nameParams };
 }
 
 /**
@@ -227,7 +239,7 @@ async function fetchReport(htmlUrl, options = {}) {
     console.log(`Parsing URL: ${htmlUrl}\n`);
 
     // Parse the URL to get parameters
-    const { baseUrl, suffix, sha, nameParams } = parseReportUrl(htmlUrl);
+    const { baseUrl, suffix, sha, nameParams } = await parseReportUrl(htmlUrl, options.credentials);
 
     console.log(`Task: ${nameParams.join(' -> ')}`);
     console.log(`SHA: ${sha}\n`);
@@ -236,19 +248,41 @@ async function fetchReport(htmlUrl, options = {}) {
     const jsonUrl = constructJsonUrl(baseUrl, suffix, sha, nameParams[0]);
     console.log(`Fetching JSON: ${jsonUrl}\n`);
 
-    // Fetch the JSON data
-    const jsonText = await fetchUrl(jsonUrl, options.credentials);
-    const jsonData = JSON.parse(jsonText);
+    // Fetch name_0 JSON data, and name_1 separately if present (matching json.html behavior)
+    const fetchTasks = [fetchUrl(jsonUrl, options.credentials)];
+    if (nameParams.length > 1) {
+      const json1Url = constructJsonUrl(baseUrl, suffix, sha, nameParams[1]);
+      console.log(`Fetching JSON (name_1): ${json1Url}\n`);
+      fetchTasks.push(fetchUrl(json1Url, options.credentials).catch(() => null));
+    }
 
-    // If there are nested tasks (name_1), navigate to them
+    const fetchResults = await Promise.all(fetchTasks);
+    const jsonData = JSON.parse(fetchResults[0]);
+
+    // Resolve target data: use dedicated name_1 JSON if available, fall back to navigating name_0.results
     let targetData = jsonData;
-    if (nameParams.length > 1 && jsonData.results) {
-      for (let i = 1; i < nameParams.length; i++) {
-        const taskName = nameParams[i];
-        targetData = jsonData.results.find(r => r.name === taskName);
-        if (!targetData) {
-          throw new Error(`Task not found: ${taskName}`);
+    if (nameParams.length > 1) {
+      const json1Text = fetchResults[1];
+      if (json1Text) {
+        targetData = JSON.parse(json1Text);
+      } else if (jsonData.results) {
+        // Fallback: navigate name_0.results
+        const found = jsonData.results.find(r => r.name === nameParams[1]);
+        if (!found) {
+          throw new Error(`Task not found: ${nameParams[1]}`);
         }
+        targetData = found;
+      }
+      // Resolve deeper names (name_2+) by walking results
+      for (let i = 2; i < nameParams.length; i++) {
+        if (!targetData.results) {
+          throw new Error(`Task not found: ${nameParams[i]}`);
+        }
+        const found = targetData.results.find(r => r.name === nameParams[i]);
+        if (!found) {
+          throw new Error(`Task not found: ${nameParams[i]}`);
+        }
+        targetData = found;
       }
     }
 
