@@ -2200,8 +2200,16 @@ private:
             auto index_substreams = index->getSubstreams();
             for (const auto & index_substream : index_substreams)
             {
-                ctx->new_data_part->checksums.remove(index->getFileName() + index_substream.suffix + index_substream.extension);
-                ctx->new_data_part->checksums.remove(index->getFileName() + index_substream.suffix + ctx->mrk_extension);
+                String stream_name = index->getFileName() + index_substream.suffix;
+
+                /// Check for both original and hashed filenames
+                auto actual_data_stream_name = IMergeTreeDataPart::getStreamNameOrHash(stream_name, index_substream.extension, ctx->source_part->checksums);
+                if (actual_data_stream_name)
+                    ctx->new_data_part->checksums.remove(*actual_data_stream_name + index_substream.extension);
+
+                auto actual_mark_stream_name = IMergeTreeDataPart::getStreamNameOrHash(stream_name, ctx->mrk_extension, ctx->source_part->checksums);
+                if (actual_mark_stream_name)
+                    ctx->new_data_part->checksums.remove(*actual_mark_stream_name + ctx->mrk_extension);
             }
         }
 
