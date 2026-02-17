@@ -200,10 +200,9 @@ struct DictionaryBlockBase
 struct DictionaryBlock : public DictionaryBlockBase
 {
     DictionaryBlock() = default;
-    DictionaryBlock(ColumnPtr tokens_, std::vector<TokenPostingsInfo> token_infos_);
+    DictionaryBlock(ColumnPtr tokens_, std::vector<TokenPostingsInfo> token_infos_, UInt64 tokens_format_);
 
     std::vector<TokenPostingsInfo> token_infos;
-    /// Stores the TokensFormat used to encode this block (0 = RawStrings, 1 = FrontCodedStrings).
     UInt64 tokens_format = 0;
 };
 

@@ -80,6 +80,9 @@ protected:
         size_t num_columns = header->columns();
         MutableColumns result_columns = header->cloneEmptyColumns();
 
+        /// Total rows may overflow the max_block_size.
+        /// It is considered ok because dictionary block size
+        /// is usually much smaller than the max_block_size.
         while (total_rows < max_block_size)
         {
             auto dict_block = readNextDictionaryBlock();
@@ -88,8 +91,7 @@ protected:
 
             size_t block_size = dict_block->size();
 
-            /// Dispatch each output column and fill it from the entire dictionary
-            /// block in a tight loop — no column-name checks in the hot path.
+            /// Dispatch each output column and fill it from the entire dictionary block.
             for (size_t pos = 0; pos < num_columns; ++pos)
             {
                 const auto & col_with_type = header->getByPosition(pos);
@@ -115,7 +117,6 @@ protected:
                     auto column = col_with_type.type->createColumnConst(block_size, static_cast<Int8>(dict_block->tokens_format));
                     result_columns[pos]->insertManyFrom(assert_cast<const ColumnConst &>(*column).getDataColumn(), 0, block_size);
                 }
-
                 else if (column_name == "num_posting_blocks")
                 {
                     auto & data = assert_cast<ColumnUInt64 &>(*result_columns[pos]).getData();
@@ -164,9 +165,9 @@ private:
                     return std::nullopt;
             }
 
+            /// Use sparse index to seek directly to matching blocks.
             if (token_key_condition)
             {
-                /// Use sparse index to seek directly to matching blocks.
                 if (next_matching_block >= matching_blocks.size())
                 {
                     dictionary_buf.reset();
@@ -177,9 +178,8 @@ private:
                 dictionary_buf->seek(sparse_index.getOffsetInFile(block_idx), 0);
                 return TextIndexSerialization::deserializeDictionaryBlock(*dictionary_buf, posting_list_codec);
             }
-            else
+            else /// Sequential reading without filtering.
             {
-                /// Sequential reading without filtering.
                 if (dictionary_buf->eof())
                 {
                     dictionary_buf.reset();
@@ -191,9 +191,9 @@ private:
         }
     }
 
-    /// Claim and open the next part that has this text index.
+    /// Claim and open index files for the next part that has this text index.
     /// Uses atomic counter for lock-free work distribution across sources.
-    /// Returns true if a part was opened, false if no more parts.
+    /// Returns true if index files were opened, false if no more parts.
     bool advanceToNextPart()
     {
         dictionary_buf.reset();
@@ -211,7 +211,7 @@ private:
 
             if (token_key_condition)
             {
-                /// Read the sparse index to determine which dictionary blocks to read.
+                /// Skip part if index is not materialized in the part.
                 if (!part->checksums.files.contains(sparse_index_file_name))
                     continue;
 
@@ -227,16 +227,14 @@ private:
                     continue;
 
                 computeMatchingBlocks();
-
                 if (matching_blocks.empty())
                     continue;
             }
 
-            /// Check if text index dictionary file exists in this part
+            /// Skip part if index is not materialized in the part.
             if (!part->checksums.files.contains(dict_file_name))
                 continue;
 
-            /// Open dictionary file
             auto dict_file = part->getDataPartStorage().readFile(
                 dict_file_name,
                 read_settings,
