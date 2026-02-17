@@ -11,7 +11,7 @@
  *   --all            Show all test results (not just summary)
  *   --links          Show artifact links
  *   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
- *   --credentials <user,password>  HTTP Basic Auth credentials (comma-separated)
+ *   --credentials <user,password>  HTTP Basic Auth credentials (comma-separated). Only for ClickHouse_private repository
  *
  * Examples:
  *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..."
