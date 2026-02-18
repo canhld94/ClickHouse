@@ -90,7 +90,7 @@
             color: var(--color);
         }
         .container {
-            max-width: 1400px;
+            max-width: 90vw;
             margin: 0 auto;
             padding: 2rem;
         }
@@ -226,6 +226,16 @@
         }
         .tab-content.active {
             display: block;
+        }
+        #profile-result {
+            /* CSS containment to isolate rendering and prevent affecting other tabs */
+            contain: layout style paint;
+            /* Allow browser to skip rendering when not in viewport */
+            content-visibility: auto;
+        }
+        #profile-result pre {
+            /* Additional containment for large text content */
+            contain: layout style paint;
         }
         pre {
             background: var(--table-header-bg);
@@ -388,12 +398,12 @@
         <div id="content" style="display: none;">
             <div class="metrics-grid" id="overview-metrics"></div>
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('summary')">Summary</button>
-                <button class="tab" onclick="switchTab('bins')">Allocations</button>
-                <button class="tab" onclick="switchTab('arenas')">Arenas</button>
-                <button class="tab" onclick="switchTab('operations')">Operations</button>
-                <button class="tab" onclick="switchTab('profile')">Heap Profile</button>
-                <button class="tab" onclick="switchTab('raw')">Raw Output</button>
+                <button class="tab active" onclick="switchTab('summary', event)">Summary</button>
+                <button class="tab" onclick="switchTab('bins', event)">Allocations</button>
+                <button class="tab" onclick="switchTab('arenas', event)">Arenas</button>
+                <button class="tab" onclick="switchTab('operations', event)">Operations</button>
+                <button class="tab" onclick="switchTab('profile', event)">Heap Profile</button>
+                <button class="tab" onclick="switchTab('raw', event)">Raw Output</button>
             </div>
             <div id="tab-summary" class="tab-content active">
                 <div class="section">
@@ -429,7 +439,10 @@
                 <div class="section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                         <div class="section-title" style="margin-bottom: 0;">Raw Statistics</div>
-                        <button class="btn btn-secondary" onclick="copyRawStats()">Copy All</button>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary" onclick="copyRawStats()">Copy All</button>
+                            <button class="btn btn-secondary" onclick="saveRawStats()">💾 Save</button>
+                        </div>
                     </div>
                     <pre id="raw-stats"></pre>
                 </div>
@@ -716,10 +729,14 @@
             document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
             localStorage.setItem('theme', newTheme);
         }
-        function switchTab(tabName) {
+        function switchTab(tabName, evt) {
+            // Use passed event or fall back to global event
+            const target = evt ? evt.target : event.target;
+
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            event.target.classList.add('active');
+
+            target.classList.add('active');
             document.getElementById(`tab-${tabName}`).classList.add('active');
         }
         function copyRawStats() {
@@ -758,6 +775,92 @@
             } finally {
                 document.body.removeChild(textarea);
             }
+        }
+        function saveRawStats() {
+            const rawStatsEl = document.getElementById('raw-stats');
+            const text = rawStatsEl.textContent;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `jemalloc-raw-stats-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        function copyProfileOutput() {
+            const resultDiv = document.getElementById('profile-result');
+            const pre = resultDiv.querySelector('pre');
+            if (!pre) {
+                alert('No profile output to copy');
+                return;
+            }
+            const text = pre.textContent;
+            const button = event.target;
+            const originalText = button.textContent;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-999999px';
+            textarea.style.top = '-999999px';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    button.textContent = 'Copied!';
+                    button.style.background = 'var(--success-color)';
+                    button.style.color = 'white';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.background = '';
+                        button.style.color = '';
+                    }, 2000);
+                } else {
+                    throw new Error('Copy command failed');
+                }
+            } catch (error) {
+                console.error('Failed to copy:', error);
+                alert('Failed to copy to clipboard. Please try selecting the text manually.');
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+        function saveProfileOutput() {
+            const resultDiv = document.getElementById('profile-result');
+            const pre = resultDiv.querySelector('pre');
+            if (!pre) {
+                alert('No profile output to save');
+                return;
+            }
+            const text = pre.textContent;
+            const format = pre.dataset.format || 'Raw';
+
+            // Determine file extension based on format
+            let extension;
+            if (format === 'Raw') {
+                extension = '.heap';
+            } else if (format === 'Symbolized') {
+                extension = '.heap.symbolized';
+            } else if (format === 'Collapsed') {
+                extension = '.collapsed';
+            } else {
+                extension = '.txt';
+            }
+
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `jemalloc-profile-${new Date().toISOString().replace(/[:.]/g, '-')}${extension}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
         function parseJemallocStats(statsText) {
             const stats = {
@@ -1898,20 +2001,30 @@
                 const result = await response.text();
                 const timestamp = new Date().toLocaleString();
                 const visualizeButton = outputFormat === 'Collapsed'
-                    ? '<button class="btn btn-primary" onclick="visualizeFlameGraph()" style="padding: 0.4rem 1rem; font-size: 0.85rem; margin-top: 0.5rem;">🔥 Visualize Flame Graph</button>'
+                    ? '<button class="btn btn-primary" onclick="generateFlameGraph()" style="padding: 0.4rem 1rem; font-size: 0.85rem;">🔥 Generate Flame Graph</button>'
                     : '';
+
+                // Build DOM structure first without the large text content
                 resultDiv.innerHTML = `
                     <div class="metric-card" style="margin-top: 1rem;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                             <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? ' - ' + symbolizationMode : ''})</div>
-                            ${visualizeButton}
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                ${visualizeButton}
+                                <button class="btn btn-secondary" onclick="copyProfileOutput()" style="padding: 0.4rem 1rem; font-size: 0.85rem;">Copy All</button>
+                                <button class="btn btn-secondary" onclick="saveProfileOutput()" style="padding: 0.4rem 1rem; font-size: 0.85rem;">💾 Save</button>
+                            </div>
                         </div>
                         <div style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.7;">
                             Generated at: ${timestamp}
                         </div>
-                        <pre style="margin-top: 0.5rem; background: var(--table-header-bg); padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 600px; font-size: 0.85rem; line-height: 1.5; white-space: pre;">${result || 'No profile data'}</pre>
+                        <pre data-format="${outputFormat}" style="margin-top: 0.5rem; background: var(--table-header-bg); padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 600px; font-size: 0.85rem; line-height: 1.5; white-space: pre;"></pre>
                     </div>
                 `;
+
+                // Set text content separately for better performance with large text
+                const preElement = resultDiv.querySelector('pre');
+                preElement.textContent = result || 'No profile data';
             } catch (error) {
                 console.error('Error getting profile:', error);
                 resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
@@ -2056,6 +2169,632 @@
                 updateRefreshInterval();
             }, 500);
         }
+        // Flame Graph Generation - generates and downloads SVG file directly
+        function generateFlameGraph() {
+            const resultDiv = document.getElementById('profile-result');
+            const pre = resultDiv.querySelector('pre');
+            if (!pre) {
+                alert('No profile data found. Please get a collapsed profile first.');
+                return;
+            }
+            const collapsedData = pre.textContent;
+            if (!collapsedData || collapsedData === 'No profile data') {
+                alert('No profile data available. Please get a collapsed profile first.');
+                return;
+            }
+
+            // Generate the flame graph SVG with full viewport width
+            const svg = generateFlameGraphSVG(collapsedData, window.innerWidth);
+
+            // Download the SVG file
+            const blob = new Blob([svg], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `flamegraph-${new Date().toISOString().replace(/[:.]/g, '-')}.svg`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function generateFlameGraphSVG(collapsedData, imagewidth = 1200) {
+            // Configuration
+            const fonttype = "Verdana";
+            const frameheight = 16;
+            const fontsize = 12;
+            const fontwidth = 0.59;
+            const minwidth = 0.1;
+            const countname = "bytes";
+            const nametype = "Function:";
+            const xpad = 10;
+            const framepad = 1;
+            const ypad1 = fontsize * 3;
+            const ypad2 = fontsize * 2 + 10;
+            const titletext = "Heap Profile Flame Graph";
+            const searchcolor = "rgb(230,0,230)";
+
+            // Parse input data
+            const lines = collapsedData.trim().split('\n').filter(line => line.trim());
+            const Node = {};
+            const Tmp = {};
+            let time = 0;
+            let depthmax = 0;
+
+            // Sort the data
+            lines.sort();
+
+            // Process and merge frames
+            let last = [];
+            for (const line of lines) {
+                const match = line.match(/^(.*)\s+(\d+(?:\.\d*)?)$/);
+                if (!match) continue;
+
+                const [, stack, samplesStr] = match;
+                const samples = parseFloat(samplesStr);
+
+                const current = ['', ...stack.split(';')];
+
+                // Merge frames
+                flow(last, current, time, Node, Tmp);
+
+                time += samples;
+                last = current;
+            }
+            flow(last, [], time, Node, Tmp);
+
+            if (time === 0) {
+                return '<p>No valid stack data found</p>';
+            }
+
+            const timemax = time;
+            const widthpertime = (imagewidth - 2 * xpad) / timemax;
+            const minwidth_time = minwidth / widthpertime;
+
+            // Prune narrow blocks and find max depth
+            for (const id in Node) {
+                const [func, depth, etime] = id.split(';');
+                const node = Node[id];
+                const stime = node.stime;
+
+                if ((etime - stime) < minwidth_time) {
+                    delete Node[id];
+                    continue;
+                }
+                depthmax = Math.max(depthmax, parseInt(depth));
+            }
+
+            // Generate SVG
+            const imageheight = ((depthmax + 1) * frameheight) + ypad1 + ypad2;
+            const titlesize = fontsize + 5;
+
+            let svg = '';
+            svg += `<?xml version="1.0" standalone="no"?>\n`;
+            svg += `<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n`;
+            svg += `<svg version="1.1" width="${imagewidth}" height="${imageheight}" onload="init(evt)" viewBox="0 0 ${imagewidth} ${imageheight}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">\n`;
+            svg += `<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->\n`;
+            svg += `<!-- NOTES:  -->\n`;
+
+            // Background gradient (before styles)
+            svg += `<defs>\n`;
+            svg += `\t<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >\n`;
+            svg += `\t\t<stop stop-color="#eef2ee" offset="5%" />\n`;
+            svg += `\t\t<stop stop-color="#e0ffe0" offset="95%" />\n`;
+            svg += `\t</linearGradient>\n`;
+            svg += `</defs>\n`;
+
+            // Add styles and JavaScript
+            svg += generateFlameGraphStyles(fonttype, fontsize, titlesize, searchcolor);
+            svg += generateFlameGraphScript(nametype, fontsize, fontwidth, xpad, searchcolor);
+
+            svg += `<rect x="0" y="0" width="${imagewidth}" height="${imageheight}" fill="url(#background)" />\n`;
+            svg += `<text id="title" x="${imagewidth / 2}" y="${fontsize * 2}" text-anchor="middle" font-size="${titlesize}px">${titletext}</text>\n`;
+            svg += `<text id="details" x="${xpad}" y="${imageheight - (ypad2 / 2)}"> </text>\n`;
+            svg += `<text id="unzoom" class="hide" x="${xpad}" y="${fontsize * 2}">Reset Zoom</text>\n`;
+            svg += `<text id="search" x="${imagewidth - xpad - 100}" y="${fontsize * 2}">Search</text>\n`;
+            svg += `<text id="ignorecase" x="${imagewidth - xpad - 16}" y="${fontsize * 2}">ic</text>\n`;
+            svg += `<text id="matched" class="hide" x="${imagewidth - xpad - 100}" y="${imageheight - (ypad2 / 2)}"> </text>\n`;
+
+            // Draw frames
+            svg += `<g id="frames">\n`;
+            for (const id in Node) {
+                const [func, depth, etime] = id.split(';');
+                const node = Node[id];
+                const stime = node.stime;
+
+                const etimeVal = func === '' && depth === '0' ? timemax : parseFloat(etime);
+                const depthVal = parseInt(depth);
+
+                const x1 = xpad + stime * widthpertime;
+                const x2 = xpad + etimeVal * widthpertime;
+                const y1 = imageheight - ypad2 - (depthVal + 1) * frameheight + framepad;
+                const y2 = imageheight - ypad2 - depthVal * frameheight;
+
+                const samples = Math.round((etimeVal - stime));
+                const samplesText = samples.toLocaleString();
+
+                let info;
+                if (func === '' && depthVal === 0) {
+                    info = `all (${samplesText} ${countname}, 100%)`;
+                } else {
+                    const pct = ((100 * samples) / timemax).toFixed(2);
+                    const escapedFunc = escapeHtml(func);
+                    info = `${escapedFunc} (${samplesText} ${countname}, ${pct}%)`;
+                }
+
+                const color = getMemColor(func);
+                const width = x2 - x1;
+                const chars = Math.floor(width / (fontsize * fontwidth));
+                let text = '';
+                if (chars >= 3) {
+                    text = func.substring(0, chars);
+                    if (chars < func.length) {
+                        text = text.substring(0, chars - 2) + '..';
+                    }
+                    text = escapeHtml(text);
+                }
+
+                svg += `<g >\n`;
+                svg += `<title>${info}</title><rect x="${x1.toFixed(1)}" y="${y1.toFixed(1)}" width="${width.toFixed(1)}" height="${(y2 - y1).toFixed(1)}" fill="${color}" rx="2" ry="2" />\n`;
+                svg += `<text  x="${(x1 + 3).toFixed(2)}" y="${(3 + (y1 + y2) / 2).toFixed(1)}" >${text}</text>\n`;
+                svg += `</g>\n`;
+            }
+            svg += `</g>\n`;
+            svg += `</svg>`;
+
+            return svg;
+        }
+
+        function flow(last, current, time, Node, Tmp) {
+            const len_a = last.length - 1;
+            const len_b = current.length - 1;
+
+            let i = 0;
+            for (; i <= len_a; i++) {
+                if (i > len_b) break;
+                if (last[i] !== current[i]) break;
+            }
+            const len_same = i;
+
+            // Close frames from previous stack
+            for (i = len_a; i >= len_same; i--) {
+                const k = `${last[i]};${i}`;
+                const key = `${k};${time}`;
+                if (Tmp[k]) {
+                    Node[key] = { stime: Tmp[k].stime };
+                    delete Tmp[k];
+                }
+            }
+
+            // Open frames for current stack
+            for (i = len_same; i <= len_b; i++) {
+                const k = `${current[i]};${i}`;
+                Tmp[k] = { stime: time };
+            }
+        }
+
+        function getMemColor(name) {
+            if (name === '--') return 'rgb(160,160,160)';
+            if (name === '-') return 'rgb(200,200,200)';
+
+            const v1 = namehash(name);
+            const v2 = namehash(name.split('').reverse().join(''));
+
+            const r = 0;
+            const g = 190 + Math.floor(50 * v2);
+            const b = 0 + Math.floor(210 * v1);
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function namehash(name) {
+            let vector = 0;
+            let weight = 1;
+            let max = 1;
+            let mod = 10;
+
+            // If module name present, truncate to first char
+            name = name.replace(/^.+?`/, '');
+
+            for (let j = 0; j < name.length && mod <= 12; j++) {
+                const i = name.charCodeAt(j) % mod;
+                vector += (i / (mod - 1)) * weight;
+                max += 1 * weight;
+                weight *= 0.70;
+                mod++;
+            }
+            return 1 - vector / max;
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function generateFlameGraphStyles(fonttype, fontsize, titlesize, searchcolor) {
+            return `<style type="text/css">
+\ttext { font-family:${fonttype}; font-size:${fontsize}px; fill:rgb(0,0,0); }
+\t#search, #ignorecase { opacity:0.1; cursor:pointer; }
+\t#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+\t#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+\t#title { text-anchor:middle; font-size:${titlesize}px}
+\t#unzoom { cursor:pointer; }
+\t#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+\t.hide { display:none; }
+\t.parent { opacity:0.5; }
+</style>\n`;
+        }
+
+        function generateFlameGraphScript(nametype, fontsize, fontwidth, xpad, searchcolor) {
+            return `<script type="text/ecmascript"><![CDATA[
+\t"use strict";
+\tvar details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+\tfunction init(evt) {
+\t\tdetails = document.getElementById("details").firstChild;
+\t\tsearchbtn = document.getElementById("search");
+\t\tignorecaseBtn = document.getElementById("ignorecase");
+\t\tunzoombtn = document.getElementById("unzoom");
+\t\tmatchedtxt = document.getElementById("matched");
+\t\tsvg = document.getElementsByTagName("svg")[0];
+\t\tsearching = 0;
+\t\tcurrentSearchTerm = null;
+
+\t\t// use GET parameters to restore a flamegraphs state.
+\t\tvar params = get_params();
+\t\tif (params.x && params.y)
+\t\t\tzoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+                if (params.s) search(params.s);
+\t}
+
+\t// event listeners
+\twindow.addEventListener("click", function(e) {
+\t\tvar target = find_group(e.target);
+\t\tif (target) {
+\t\t\tif (target.nodeName == "a") {
+\t\t\t\tif (e.ctrlKey === false) return;
+\t\t\t\te.preventDefault();
+\t\t\t}
+\t\t\tif (target.classList.contains("parent")) unzoom(true);
+\t\t\tzoom(target);
+\t\t\tif (!document.querySelector('.parent')) {
+\t\t\t\t// we have basically done a clearzoom so clear the url
+\t\t\t\tvar params = get_params();
+\t\t\t\tif (params.x) delete params.x;
+\t\t\t\tif (params.y) delete params.y;
+\t\t\t\thistory.replaceState(null, null, parse_params(params));
+\t\t\t\tunzoombtn.classList.add("hide");
+\t\t\t\treturn;
+\t\t\t}
+
+\t\t\t// set parameters for zoom state
+\t\t\tvar el = target.querySelector("rect");
+\t\t\tif (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+\t\t\t\tvar params = get_params()
+\t\t\t\tparams.x = el.attributes._orig_x.value;
+\t\t\t\tparams.y = el.attributes.y.value;
+\t\t\t\thistory.replaceState(null, null, parse_params(params));
+\t\t\t}
+\t\t}
+\t\telse if (e.target.id == "unzoom") clearzoom();
+\t\telse if (e.target.id == "search") search_prompt();
+\t\telse if (e.target.id == "ignorecase") toggle_ignorecase();
+\t}, false)
+
+
+\t// mouse-over for info
+\t// show
+\twindow.addEventListener("mouseover", function(e) {
+\t\tvar target = find_group(e.target);
+\t\tif (target) details.nodeValue = "${nametype} " + g_to_text(target);
+\t}, false)
+
+\t// clear
+\twindow.addEventListener("mouseout", function(e) {
+\t\tvar target = find_group(e.target);
+\t\tif (target) details.nodeValue = ' ';
+\t}, false)
+
+\t// ctrl-F for search
+\t// ctrl-I to toggle case-sensitive search
+\twindow.addEventListener("keydown",function (e) {
+\t\tif (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+\t\t\te.preventDefault();
+\t\t\tsearch_prompt();
+\t\t}
+\t\telse if (e.ctrlKey && e.keyCode === 73) {
+\t\t\te.preventDefault();
+\t\t\ttoggle_ignorecase();
+\t\t}
+\t}, false)
+
+\t// functions
+\tfunction get_params() {
+\t\tvar params = {};
+\t\tvar paramsarr = window.location.search.substr(1).split('&');
+\t\tfor (var i = 0; i < paramsarr.length; ++i) {
+\t\t\tvar tmp = paramsarr[i].split("=");
+\t\t\tif (!tmp[0] || !tmp[1]) continue;
+\t\t\tparams[tmp[0]]  = decodeURIComponent(tmp[1]);
+\t\t}
+\t\treturn params;
+\t}
+\tfunction parse_params(params) {
+\t\tvar uri = "?";
+\t\tfor (var key in params) {
+\t\t\turi += key + '=' + encodeURIComponent(params[key]) + '&';
+\t\t}
+\t\tif (uri.slice(-1) == "&")
+\t\t\turi = uri.substring(0, uri.length - 1);
+\t\tif (uri == '?')
+\t\t\turi = window.location.href.split('?')[0];
+\t\treturn uri;
+\t}
+\tfunction find_child(node, selector) {
+\t\tvar children = node.querySelectorAll(selector);
+\t\tif (children.length) return children[0];
+\t}
+\tfunction find_group(node) {
+\t\tvar parent = node.parentElement;
+\t\tif (!parent) return;
+\t\tif (parent.id == "frames") return node;
+\t\treturn find_group(parent);
+\t}
+\tfunction orig_save(e, attr, val) {
+\t\tif (e.attributes["_orig_" + attr] != undefined) return;
+\t\tif (e.attributes[attr] == undefined) return;
+\t\tif (val == undefined) val = e.attributes[attr].value;
+\t\te.setAttribute("_orig_" + attr, val);
+\t}
+\tfunction orig_load(e, attr) {
+\t\tif (e.attributes["_orig_"+attr] == undefined) return;
+\t\te.attributes[attr].value = e.attributes["_orig_" + attr].value;
+\t\te.removeAttribute("_orig_"+attr);
+\t}
+\tfunction g_to_text(e) {
+\t\tvar text = find_child(e, "title").firstChild.nodeValue;
+\t\treturn (text)
+\t}
+\tfunction g_to_func(e) {
+\t\tvar func = g_to_text(e);
+\t\treturn (func);
+\t}
+    function update_text(e) {
+        var r = find_child(e, "rect");
+        var t = find_child(e, "text");
+        var w = parseFloat(r.attributes.width.value) -3;
+        var txt = find_child(e, "title").textContent.replace(/\\([^(]*\\)\$/,"");
+        t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+        if (w < 2 * ${fontsize} * ${fontwidth}) {
+            t.textContent = "";
+            return;
+        }
+
+        t.textContent = txt;
+        var sl = t.getSubStringLength(0, txt.length);
+        if (/^ *\$/.test(txt) || sl < w)
+            return;
+
+        var start = Math.floor((w/sl) * txt.length);
+        for (var x = start; x > 0; x = x-2) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+        t.textContent = "";
+    }
+
+    function zoom_reset(e) {
+        if (e.attributes != undefined) {
+            orig_load(e, "x");
+            orig_load(e, "width");
+        }
+        if (e.childNodes == undefined) return;
+        for (var i = 0, c = e.childNodes; i < c.length; i++) {
+            zoom_reset(c[i]);
+        }
+    }
+    function zoom_child(e, x, ratio) {
+        if (e.attributes != undefined) {
+            if (e.attributes.x != undefined) {
+                orig_save(e, "x");
+                e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - ${xpad}) * ratio + ${xpad};
+                if (e.tagName == "text")
+                    e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+            }
+            if (e.attributes.width != undefined) {
+                orig_save(e, "width");
+                e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+            }
+        }
+
+        if (e.childNodes == undefined) return;
+        for (var i = 0, c = e.childNodes; i < c.length; i++) {
+            zoom_child(c[i], x - ${xpad}, ratio);
+        }
+    }
+    function zoom_parent(e) {
+        if (e.attributes) {
+            if (e.attributes.x != undefined) {
+                orig_save(e, "x");
+                e.attributes.x.value = ${xpad};
+            }
+            if (e.attributes.width != undefined) {
+                orig_save(e, "width");
+                e.attributes.width.value = parseInt(svg.width.baseVal.value) - (${xpad} * 2);
+            }
+        }
+        if (e.childNodes == undefined) return;
+        for (var i = 0, c = e.childNodes; i < c.length; i++) {
+            zoom_parent(c[i]);
+        }
+    }
+    function zoom(node) {
+        var attr = find_child(node, "rect").attributes;
+        var width = parseFloat(attr.width.value);
+        var xmin = parseFloat(attr.x.value);
+        var xmax = parseFloat(xmin + width);
+        var ymin = parseFloat(attr.y.value);
+        var ratio = (svg.width.baseVal.value - 2 * ${xpad}) / width;
+
+        var fudge = 0.0001;
+
+        unzoombtn.classList.remove("hide");
+
+        var el = document.getElementById("frames").children;
+        for (var i = 0; i < el.length; i++) {
+            var e = el[i];
+            var a = find_child(e, "rect").attributes;
+            var ex = parseFloat(a.x.value);
+            var ew = parseFloat(a.width.value);
+            var upstack;
+            // Is it an ancestor
+            if (0 == 0) {
+                upstack = parseFloat(a.y.value) > ymin;
+            } else {
+                upstack = parseFloat(a.y.value) < ymin;
+            }
+            if (upstack) {
+                // Direct ancestor
+                if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+                    e.classList.add("parent");
+                    zoom_parent(e);
+                    update_text(e);
+                }
+                // not in current path
+                else
+                    e.classList.add("hide");
+            }
+            // Children maybe
+            else {
+                // no common path
+                if (ex < xmin || ex + fudge >= xmax) {
+                    e.classList.add("hide");
+                }
+                else {
+                    zoom_child(e, xmin, ratio);
+                    update_text(e);
+                }
+            }
+        }
+        search();
+    }
+    function unzoom(dont_update_text) {
+        unzoombtn.classList.add("hide");
+        var el = document.getElementById("frames").children;
+        for(var i = 0; i < el.length; i++) {
+            el[i].classList.remove("parent");
+            el[i].classList.remove("hide");
+            zoom_reset(el[i]);
+            if(!dont_update_text) update_text(el[i]);
+        }
+        search();
+    }
+    function clearzoom() {
+        unzoom();
+    }
+
+    function toggle_ignorecase() {
+        ignorecase = !ignorecase;
+        if (ignorecase) {
+            ignorecaseBtn.classList.add("show");
+        } else {
+            ignorecaseBtn.classList.remove("show");
+        }
+        reset_search();
+        search();
+    }
+    function reset_search() {
+        var el = document.querySelectorAll("#frames rect");
+        for (var i = 0; i < el.length; i++) {
+            orig_load(el[i], "fill")
+        }
+    }
+    function search_prompt() {
+        if (!searching) {
+            var term = prompt("Enter a search term (regexp allowed, eg: ^ext4_)" + (ignorecase ? ", ignoring case" : "") + "\\nPress Ctrl-i to toggle case sensitivity", "");
+            if (term != null) search(term);
+        } else {
+            reset_search();
+            searching = 0;
+            currentSearchTerm = null;
+            searchbtn.classList.remove("show");
+            searchbtn.firstChild.nodeValue = "Search"
+            matchedtxt.classList.add("hide");
+            matchedtxt.firstChild.nodeValue = ""
+        }
+    }
+    function search(term) {
+        if (term) currentSearchTerm = term;
+
+        var re = new RegExp(currentSearchTerm, ignorecase ? 'i' : '');
+        var el = document.getElementById("frames").children;
+        var matches = new Object();
+        var maxwidth = 0;
+        for (var i = 0; i < el.length; i++) {
+            var e = el[i];
+            var func = g_to_func(e);
+            var rect = find_child(e, "rect");
+            if (func == null || rect == null)
+                continue;
+
+            var w = parseFloat(rect.attributes.width.value);
+            if (w > maxwidth)
+                maxwidth = w;
+
+            if (func.match(re)) {
+                var x = parseFloat(rect.attributes.x.value);
+                orig_save(rect, "fill");
+                rect.attributes.fill.value = "${searchcolor}";
+
+                if (matches[x] == undefined) {
+                    matches[x] = w;
+                } else {
+                    if (w > matches[x]) {
+                        matches[x] = w;
+                    }
+                }
+                searching = 1;
+            }
+        }
+        if (!searching)
+            return;
+
+        searchbtn.classList.add("show");
+        searchbtn.firstChild.nodeValue = "Reset Search";
+
+        var count = 0;
+        var lastx = -1;
+        var lastw = 0;
+        var keys = Array();
+        for (k in matches) {
+            if (matches.hasOwnProperty(k))
+                keys.push(k);
+        }
+        keys.sort(function(a, b){
+            return a - b;
+        });
+        var fudge = 0.0001;
+        for (var k in keys) {
+            var x = parseFloat(keys[k]);
+            var w = matches[keys[k]];
+            if (x >= lastx + lastw - fudge) {
+                count += w;
+                lastx = x;
+                lastw = w;
+            }
+        }
+        matchedtxt.classList.remove("hide");
+        var pct = 100 * count / maxwidth;
+        if (pct != 100) pct = pct.toFixed(1)
+        matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+    }
+]]><\/script>\n`;
+        }
+
         // Load stats on page load
         loadStats();
         // Start auto-refresh with default interval
