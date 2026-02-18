@@ -462,9 +462,6 @@ std::map<std::pair<TypeIndex, String>, NodeToSubcolumnTransformer> node_transfor
         {TypeIndex::Object, "distinctJSONPaths"}, optimizeDistinctJSONPaths,
     },
     {
-        {TypeIndex::Object, "tupleElement"}, optimizeTupleOrVariantElement<DataTypeObject>,
-    },
-    {
         {TypeIndex::Object, "JSONExtractInt"}, optimizeJSONExtractToSubcolumn<>,
     },
     {
