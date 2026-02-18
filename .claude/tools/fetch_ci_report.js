@@ -15,13 +15,14 @@
  *   --failed         Show failed test names in PR summary
  *   --all            Show all test results (not just summary)
  *   --links          Show artifact links
+ *   --cidb           Show CIDB links for failed tests
  *   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
  *   --report <number> For PR URLs: fetch only one specific report (default: fetch all)
  *   --credentials <user,password>  HTTP Basic Auth credentials (comma-separated). Only for ClickHouse_private repository
  *
  * Examples:
  *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171"
- *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --failed
+ *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --failed --cidb
  *   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2
  *   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&..."
  *   node fetch_ci_report.js "https://s3.amazonaws.com/.../result_integration_tests.json"
@@ -192,11 +193,26 @@ function parseTestResults(jsonData) {
         extractTests(result.results, prefix ? `${prefix}/${result.name}` : result.name);
       } else {
         // Leaf result - this is a test
-        tests.push({
+        const test = {
           name: prefix ? `${prefix}/${result.name}` : result.name,
           status: result.status || 'UNKNOWN',
           duration: result.duration || 0
-        });
+        };
+
+        // Extract CIDB links from ext.hlabels
+        if (result.ext && result.ext.hlabels) {
+          const cidbLinks = [];
+          for (const hlabel of result.ext.hlabels) {
+            if (Array.isArray(hlabel) && hlabel[0] === 'cidb' && hlabel[1]) {
+              cidbLinks.push(hlabel[1]);
+            }
+          }
+          if (cidbLinks.length > 0) {
+            test.cidbLinks = cidbLinks;
+          }
+        }
+
+        tests.push(test);
       }
     }
   }
@@ -342,6 +358,7 @@ async function fetchReport(inputUrl, options = {}) {
               index: i + 1,
               jobName: fullJobName,
               url,
+              isPRLevel: !subJobName, // true if this is a PR-level report (no name_1)
               ...result
             });
           } catch (error) {
@@ -350,6 +367,7 @@ async function fetchReport(inputUrl, options = {}) {
               index: i + 1,
               jobName: fullJobName,
               url,
+              isPRLevel: !subJobName,
               error: error.message
             });
           }
@@ -384,11 +402,22 @@ async function fetchReport(inputUrl, options = {}) {
 
           const status = failed.length > 0 ? '❌' : '✅';
           console.log(`[${result.index}] ${status} ${result.jobName}`);
-          console.log(`    Total: ${testResults.length} | Passed: ${passed.length} | Failed: ${failed.length} | Skipped: ${skipped.length}`);
+          console.log(`    Total: ${testResults.length} | ✅ Passed: ${passed.length} | ❌ Failed: ${failed.length} | ⏭️  Skipped: ${skipped.length}`);
 
-          if (failed.length > 0 && options.failedOnly) {
+          // For nested reports with failures, show the HTML link
+          if (!result.isPRLevel && failed.length > 0 && result.url) {
+            console.log(`    🔗 Report: ${result.url}`);
+          }
+
+          // Skip showing individual test failures for PR-level reports to avoid duplication
+          if (failed.length > 0 && options.failedOnly && !result.isPRLevel) {
             for (const test of failed) {
-              console.log(`      FAIL: ${test.name}`);
+              console.log(`      ❌ FAIL: ${test.name}`);
+              if (options.showCidb && test.cidbLinks && test.cidbLinks.length > 0) {
+                for (const cidbLink of test.cidbLinks) {
+                  console.log(`         📊 CIDB: ${cidbLink}`);
+                }
+              }
             }
           }
           console.log();
@@ -503,12 +532,17 @@ async function fetchReport(inputUrl, options = {}) {
     const passed = filteredResults.filter(t => t.status === 'success' || t.status === 'OK');
     const skipped = filteredResults.filter(t => t.status === 'skipped' || t.status === 'SKIPPED');
 
-    console.log(`Total: ${filteredResults.length} | Passed: ${passed.length} | Failed: ${failed.length} | Skipped: ${skipped.length}\n`);
+    console.log(`Total: ${filteredResults.length} | ✅ Passed: ${passed.length} | ❌ Failed: ${failed.length} | ⏭️  Skipped: ${skipped.length}\n`);
 
     if (failed.length > 0) {
       console.log('--- Failed Tests ---');
       for (const test of failed) {
-        console.log(`FAIL  ${test.name}  (${test.duration}s)`);
+        console.log(`❌ FAIL  ${test.name}  (${test.duration}s)`);
+        if (options.showCidb && test.cidbLinks && test.cidbLinks.length > 0) {
+          for (const cidbLink of test.cidbLinks) {
+            console.log(`   📊 CIDB: ${cidbLink}`);
+          }
+        }
       }
       console.log('');
     }
@@ -579,13 +613,14 @@ Options:
   --failed         Show failed test names in PR summary
   --all            Show all test results (not just summary)
   --links          Show artifact links
+  --cidb           Show CIDB links for failed tests
   --download-logs  Download logs.tar.gz to /tmp/ci_logs.tar.gz
   --report <number> For PR URLs: fetch only one specific report (default: fetch all)
   --credentials <user,password>  HTTP Basic Auth credentials
 
 Examples:
   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171"
-  node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --failed
+  node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --failed --cidb
   node fetch_ci_report.js "https://github.com/ClickHouse/ClickHouse/pull/97171" --report 2
   node fetch_ci_report.js "https://s3.amazonaws.com/clickhouse-test-reports/json.html?PR=94537&sha=abc123&name_0=Integration%20tests"
   node fetch_ci_report.js "<url>" --test peak_memory --links
@@ -600,6 +635,7 @@ Examples:
     failedOnly: false,
     showAll: false,
     showLinks: false,
+    showCidb: false,
     downloadLogs: false,
     reportIndex: null,
     credentials: null,
@@ -618,6 +654,9 @@ Examples:
         break;
       case '--links':
         options.showLinks = true;
+        break;
+      case '--cidb':
+        options.showCidb = true;
         break;
       case '--download-logs':
         options.downloadLogs = true;
