@@ -1,7 +1,9 @@
-#include <Storages/MergeTree/MergeTreeReadersChain.h>
+#include <Columns/IColumn_fwd.h>
+#include <Core/ColumnsWithTypeAndName.h>
 #include <Storages/MergeTree/IMergeTreeReader.h>
-#include <Common/logger_useful.h>
+#include <Storages/MergeTree/MergeTreeReadersChain.h>
 #include <Storages/MergeTree/PatchParts/PatchPartsUtils.h>
+#include <Common/logger_useful.h>
 
 #include <Processors/QueryPlan/Optimizations/RuntimeDataflowStatistics.h>
 #include <Storages/MergeTree/MergeTreeReadTask.h>
@@ -59,6 +61,19 @@ static std::optional<UInt64> getMaxPatchVersionForStep(const MergeTreeRangeReade
     return prewhere_info ? prewhere_info->mutation_version : std::nullopt;
 }
 
+static ColumnsWithTypeAndName toColumnsWithTypeAndName(const Columns & columns, const Block & header)
+{
+    ColumnsWithTypeAndName res;
+    res.reserve(columns.size());
+    for (size_t i = 0; i < columns.size(); ++i)
+    {
+        const auto & column = columns[i];
+        const auto & header_column = header.getByPosition(i);
+        res.emplace_back(column, header_column.type, header_column.name);
+    }
+    return res;
+}
+
 MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(size_t max_rows, MarkRanges & ranges, std::vector<MarkRanges> & patch_ranges)
 {
     static const RuntimeDataflowStatisticsCacheUpdaterPtr dummy_updater;
@@ -94,6 +109,7 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
         throw;
     }
 
+    bool should_continue_sampling = true;
     if (read_result.num_rows != 0)
     {
         first_reader.getReader()->fillVirtualColumns(read_result.columns, read_result.num_rows);
@@ -101,8 +117,8 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
 
         if (updater)
         {
-            updater->recordInputColumns(
-                first_reader.getReadSampleBlock().cloneWithColumns(read_result.columns).getColumnsWithTypeAndName(),
+            should_continue_sampling = updater->recordInputColumns(
+                toColumnsWithTypeAndName(read_result.columns, first_reader.getSampleBlock()),
                 info->data_part->getColumns(),
                 info->data_part->getColumnSizes(),
                 read_result.num_bytes_read);
@@ -135,10 +151,10 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
             if (num_read_rows == 0)
                 num_read_rows = read_result.num_rows;
 
-            if (updater)
+            if (updater && should_continue_sampling)
             {
                 updater->recordInputColumns(
-                    range_readers[i].getReadSampleBlock().cloneWithColumns(columns).getColumnsWithTypeAndName(),
+                    toColumnsWithTypeAndName(columns, range_readers[i].getReadSampleBlock()),
                     info->data_part->getColumns(),
                     info->data_part->getColumnSizes(),
                     read_result.num_bytes_read - num_bytes_read_so_far);

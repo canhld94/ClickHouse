@@ -215,11 +215,12 @@ void RuntimeDataflowStatisticsCacheUpdater::recordAggregationKeySizes(const Aggr
     statistics.elapsed_microseconds += watch.elapsedMicroseconds();
 }
 
-void RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
+bool RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
     const ColumnsWithTypeAndName & input_columns,
     const NamesAndTypesList & part_columns,
     const ColumnSizeByName & column_sizes,
-    size_t read_bytes)
+    size_t read_bytes,
+    std::optional<bool> should_continue_sampling)
 {
     Stopwatch watch;
 
@@ -230,6 +231,7 @@ void RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
             read_bytes += column.column->byteSize();
     }
 
+    bool continue_sampling = should_continue_sampling.value_or(false);
     size_t sample_bytes = 0;
     size_t compressed_bytes = 0;
     auto & statistics = input_bytes_statistics[type];
@@ -253,7 +255,7 @@ void RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
         else
         {
             // We don't have individual column size info, likely because it is a compact part. Let's try to estimate it.
-            if (shouldSampleBlock(statistics, input_columns[0].column->size()))
+            if (continue_sampling || shouldSampleBlock(statistics, input_columns[0].column->size()))
             {
                 for (const auto & column : input_columns)
                 {
@@ -265,6 +267,11 @@ void RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
                         compressed_bytes += compressed;
                     }
                 }
+                continue_sampling = true;
+            }
+            else
+            {
+                continue_sampling = false;
             }
         }
     }
@@ -277,6 +284,7 @@ void RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
         statistics.compressed_bytes += compressed_bytes;
     }
     statistics.elapsed_microseconds += watch.elapsedMicroseconds();
+    return continue_sampling;
 }
 
 RuntimeDataflowStatisticsCache & getRuntimeDataflowStatisticsCache()
