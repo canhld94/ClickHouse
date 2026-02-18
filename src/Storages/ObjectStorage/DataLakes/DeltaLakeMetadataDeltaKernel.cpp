@@ -302,17 +302,17 @@ ObjectIterator DeltaLakeMetadataDeltaKernel::iterate(
     /// Use the snapshot version from the storage metadata snapshot if available.
     /// This ensures we use the same version that was captured when the storage snapshot was created,
     /// preventing logical races where the table is updated between snapshot creation and iteration.
-    SnapshotVersion snapshot_version;
+    std::optional<SnapshotVersion> snapshot_version;
     if (auto version_from_metadata = extractDeltaLakeSnapshotVersionFromMetadata(storage_metadata_snapshot))
     {
         snapshot_version = static_cast<SnapshotVersion>(*version_from_metadata);
-        LOG_TEST(log, "Using snapshot version {} from storage metadata snapshot", snapshot_version);
+        LOG_TEST(log, "Using snapshot version {} from storage metadata snapshot", snapshot_version.value());
     }
     else
     {
         /// Fall back to reading from settings if no version is stored in metadata.
         snapshot_version = getSnapshotVersion(context->getSettingsRef());
-        LOG_TEST(log, "Using snapshot version {} from settings (no version in metadata)", snapshot_version);
+        //LOG_TEST(log, "Using snapshot version {} from settings (no version in metadata)", snapshot_version);
     }
 
     return getTableSnapshot(snapshot_version)->iterate(filter_dag, callback, list_batch_size, context);
@@ -462,17 +462,17 @@ ReadFromFormatInfo DeltaLakeMetadataDeltaKernel::prepareReadingFromFormat(
     /// Use the snapshot version from the storage metadata snapshot if available.
     /// This ensures we use the same version that was captured when the storage snapshot was created,
     /// preventing logical races where the table is updated between snapshot creation and reading.
-    SnapshotVersion snapshot_version;
+    std::optional<SnapshotVersion> snapshot_version;
     if (auto version_from_metadata = extractDeltaLakeSnapshotVersionFromMetadata(storage_snapshot->metadata))
     {
         snapshot_version = static_cast<SnapshotVersion>(*version_from_metadata);
-        LOG_TEST(log, "Using snapshot version {} from storage metadata snapshot for prepareReadingFromFormat", snapshot_version);
+        LOG_TEST(log, "Using snapshot version {} from storage metadata snapshot for prepareReadingFromFormat", snapshot_version.value());
     }
     else
     {
         /// Fall back to reading from settings if no version is stored in metadata.
         snapshot_version = getSnapshotVersion(context->getSettingsRef());
-        LOG_TEST(log, "Using snapshot version {} from settings for prepareReadingFromFormat (no version in metadata)", snapshot_version);
+        //LOG_TEST(log, "Using snapshot version {} from settings for prepareReadingFromFormat (no version in metadata)", snapshot_version);
     }
 
     auto snapshot = getTableSnapshot(snapshot_version);
