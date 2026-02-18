@@ -472,8 +472,8 @@ async function fetchReport(inputUrl, options = {}) {
     // Parse test results
     const testResults = parseTestResults(targetData);
 
-    // Extract artifact links
-    const artifactLinks = extractArtifactLinks(jsonData);
+    // Extract artifact links from targetData (specific task) rather than jsonData (entire PR)
+    const artifactLinks = extractArtifactLinks(targetData);
 
     // Apply filters (but keep original results for summary)
     let filteredResults = testResults;
