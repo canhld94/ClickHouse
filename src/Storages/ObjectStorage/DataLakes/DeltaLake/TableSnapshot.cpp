@@ -40,7 +40,6 @@ namespace DB::ErrorCodes
 {
     extern const int NOT_IMPLEMENTED;
     extern const int BAD_ARGUMENTS;
-    extern const int LOGICAL_ERROR;
 }
 
 namespace DB::Setting
@@ -253,8 +252,8 @@ public:
                         && (!filter.has_value() || !enable_engine_predicate))
                     {
                         update_stats_func(SnapshotStats{
-                            .version = kernel_snapshot_state->snapshot_version,
                             .total_bytes = total_bytes,
+                            /// total_rows is an optional statistic, but total_bytes is obligatory.
                             .total_rows = total_rows
                         });
                     }
@@ -444,12 +443,10 @@ public:
 
         context->total_data_files += 1;
         context->total_bytes += size;
-        if (stats)
-        {
-            if (!context->total_rows.has_value())
-                context->total_rows.emplace();
-            *context->total_rows += stats->num_records;
-        }
+        if (stats && context->total_rows.has_value())
+            context->total_rows.value() += stats->num_records;
+        else
+            context->total_rows = std::nullopt;
 
         context->data_files_cv.notify_one();
     }
@@ -489,7 +486,7 @@ private:
     /// and data scanning thread is finished.
     bool iterator_finished = false;
 
-    std::optional<size_t> total_rows;
+    std::optional<size_t> total_rows = 0;
     size_t total_bytes = 0;
     size_t total_data_files = 0;
 
@@ -530,12 +527,12 @@ size_t TableSnapshot::getVersionUnlocked() const
 
 TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStats() const
 {
-    if (!snapshot_stats.has_value() || snapshot_stats->version != getVersionUnlocked())
+    if (!snapshot_stats.has_value())
     {
         snapshot_stats = getSnapshotStatsImpl();
         LOG_TEST(
             log, "Updated statistics for snapshot version {}",
-            snapshot_stats->version);
+            getVersionUnlocked());
     }
     return snapshot_stats.value();
 }
@@ -564,7 +561,7 @@ TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
         size_t total_data_files = 0;
         size_t total_bytes = 0;
         /// Not all writers add rows count to metadata
-        std::optional<size_t> total_rows;
+        std::optional<size_t> total_rows = 0;
 
         static void visit(
             ffi::NullableCvoid engine_context,
@@ -579,12 +576,10 @@ TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
             auto * visitor = static_cast<StatsVisitor *>(engine_context);
             visitor->total_data_files += 1;
             visitor->total_bytes += static_cast<size_t>(size);
-            if (stats)
-            {
-                if (!visitor->total_rows.has_value())
-                    visitor->total_rows.emplace(0);
+            if (stats && visitor->total_rows.has_value())
                 visitor->total_rows.value() += stats->num_records;
-            }
+            else
+                visitor->total_rows = std::nullopt;
         }
 
         static void visitData(void * engine_context, ffi::SharedScanMetadata * scan_metadata)
@@ -617,9 +612,9 @@ TableSnapshot::SnapshotStats TableSnapshot::getSnapshotStatsImpl() const
         visitor.total_bytes);
 
     return SnapshotStats{
-        .version = state->snapshot_version,
         .total_bytes = visitor.total_bytes,
-        .total_rows = visitor.total_rows
+        /// total_rows is an optional statistic, but total_bytes is obligatory.
+        .total_rows = visitor.total_rows,
     };
 }
 
@@ -635,30 +630,9 @@ std::optional<size_t> TableSnapshot::getTotalBytes() const
     return getSnapshotStats().total_bytes;
 }
 
-void TableSnapshot::updateSnapshotVersion()
+void TableSnapshot::initOrUpdateSnapshot() const
 {
-    if (snapshot_version_to_read.has_value())
-    {
-        /// If version is set, we cannot update it.
-        throw DB::Exception(
-            DB::ErrorCodes::LOGICAL_ERROR,
-            "Table snapshot has a set snapshot version {}",
-            snapshot_version_to_read.value());
-    }
-
-    std::lock_guard lock(mutex);
-    if (!kernel_snapshot_state)
-    {
-        /// Snapshot is not yet created,
-        /// so next attempt to create it would return the latest snapshot.
-        return;
-    }
-    initOrUpdateSnapshot(/* recreate */true);
-}
-
-void TableSnapshot::initOrUpdateSnapshot(bool recreate) const
-{
-    if (!recreate && kernel_snapshot_state)
+    if (kernel_snapshot_state)
         return;
 
     LOG_TEST(log, "Initializing snapshot");
@@ -709,24 +683,27 @@ DB::ObjectIterator TableSnapshot::iterate(
     size_t list_batch_size,
     DB::ContextPtr context)
 {
-    auto update_stats_func = [self = shared_from_this(), this](SnapshotStats && stats)
-    {
-        std::unique_lock lock(mutex, std::defer_lock);
-        if (lock.try_lock()
-            && (!snapshot_stats.has_value()
-                || snapshot_stats->version < stats.version))
-        {
-            snapshot_stats.emplace(std::move(stats));
-            LOG_TEST(
-                log, "Updated statistics from data files iterator for snapshot version {}",
-                snapshot_stats->version);
-        }
-    };
     const auto & settings = context->getSettingsRef();
     std::lock_guard lock(mutex);
     initOrUpdateSchemaIfChanged();
+    auto state = getKernelSnapshotState();
+    auto update_stats_func = [self = shared_from_this(), version = state->snapshot_version, this]
+        (SnapshotStats && stats)
+        {
+            std::unique_lock lk(mutex, std::defer_lock);
+            if (lk.try_lock())
+            {
+                if (!snapshot_stats.has_value())
+                {
+                    snapshot_stats.emplace(std::move(stats));
+                    LOG_TEST(
+                        log, "Updated statistics from data files iterator for snapshot version {}",
+                        version);
+                }
+            }
+        };
     return std::make_shared<TableSnapshot::Iterator>(
-        getKernelSnapshotState(),
+        state,
         helper,
         schema->read_schema,
         schema->table_schema,
@@ -745,7 +722,7 @@ DB::ObjectIterator TableSnapshot::iterate(
 
 void TableSnapshot::initOrUpdateSchemaIfChanged() const
 {
-    if (!schema.has_value() || schema->version != getVersionUnlocked())
+    if (!schema.has_value())
     {
         auto state = getKernelSnapshotState();
         auto [table_schema, physical_names_map] = getTableSchemaFromSnapshot(state->snapshot.get());
@@ -765,7 +742,6 @@ void TableSnapshot::initOrUpdateSchemaIfChanged() const
             physical_names_map.size());
 
         schema.emplace(SchemaInfo{
-            .version = state->snapshot_version,
             .table_schema = std::move(table_schema),
             .read_schema = std::move(read_schema),
             .physical_names_map = std::move(physical_names_map),

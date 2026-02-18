@@ -52,10 +52,10 @@ namespace Setting
     extern const SettingsInt64 delta_lake_snapshot_version;
 }
 
-[[maybe_unused]] static void tracingCallback(struct ffi::Event event)
+void tracingCallback(struct ffi::Event event)
 {
-    /// Do not pollute logs.
-    if (event.message.len > 100)
+    /// Do not pollute logs with very long messages
+    if (event.message.len > 200)
         return;
 
     const auto message = fmt::format(
@@ -126,17 +126,18 @@ DeltaLakeMetadataDeltaKernel::DeltaLakeMetadataDeltaKernel(
         /* max_size_in_bytes */0, /// Unlimitted, will be limited by max_count
         /* max_count */10)
 {
-#ifdef DEBUG_OR_SANITIZER_BUILD
-    //ffi::enable_event_tracing(tracingCallback, ffi::Level::TRACE);
-#endif
 }
 
 
-static DeltaLakeMetadataDeltaKernel::SnapshotVersion getSnapshotVersion(const Settings & settings)
+static std::optional<DeltaLakeMetadataDeltaKernel::SnapshotVersion>
+getSnapshotVersion(const Settings & settings)
 {
     const auto & value = settings[Setting::delta_lake_snapshot_version].value;
-    if (value == DeltaLake::TableSnapshot::LATEST_SNAPSHOT_VERSION || value >= 0)
-        return value;
+    if (value >= 0)
+        return static_cast<UInt64>(value);
+
+    if (value == DeltaLake::TableSnapshot::LATEST_SNAPSHOT_VERSION)
+        return std::nullopt;
 
     throw Exception(
         ErrorCodes::BAD_ARGUMENTS,
@@ -150,20 +151,43 @@ DeltaLake::TableSnapshotPtr
 DeltaLakeMetadataDeltaKernel::getTableSnapshot(std::optional<SnapshotVersion> version) const
 {
     std::lock_guard lock(snapshots_mutex);
-    return snapshots.getOrSet(
-        version.value_or(DeltaLake::TableSnapshot::LATEST_SNAPSHOT_VERSION),
-        [&]()
-        {
-            auto actual_snapshot_version = version.has_value() && version.value() >= 0
-                ? std::optional<size_t>(static_cast<size_t>(version.value()))
-                : std::nullopt;
 
-            return std::make_shared<DeltaLake::TableSnapshot>(
-                actual_snapshot_version,
-                kernel_helper,
-                object_storage,
-                log);
-        }).first;
+    /// Fallback to latest_snapshot_version.
+    /// In case we needed a newer version - update() must
+    /// have been called to reload latest_snapshot_version.
+    std::optional<SnapshotVersion> result_snapshot_version = version.has_value()
+        ? version
+        : latest_snapshot_version;
+
+    auto snapshot_creator = [&]()
+    {
+        /// Constructor itself is lightweight.
+        return std::make_shared<DeltaLake::TableSnapshot>(
+            result_snapshot_version,
+            kernel_helper,
+            object_storage,
+            log);
+    };
+
+    DeltaLake::TableSnapshotPtr snapshot;
+    if (result_snapshot_version.has_value())
+    {
+        snapshot = snapshots.getOrSet(
+            result_snapshot_version.value(), std::move(snapshot_creator)).first;
+    }
+    else
+    {
+        snapshot = snapshot_creator();
+        latest_snapshot_version = snapshot->getVersion();
+        snapshots.set(latest_snapshot_version.value(), snapshot);
+    }
+
+    LOG_TEST(
+        log, "Using snapshot version: {}, latest snapshot version: {}",
+        snapshot->getVersion(),
+        latestSnapshotVersionToStr());
+
+    return snapshot;
 }
 
 bool DeltaLakeMetadataDeltaKernel::operator ==(const IDataLakeMetadata & metadata) const
@@ -221,8 +245,24 @@ std::optional<size_t> DeltaLakeMetadataDeltaKernel::totalBytes(ContextPtr contex
 void DeltaLakeMetadataDeltaKernel::update(const ContextPtr & context)
 {
     const auto snapshot_version = getSnapshotVersion(context->getSettingsRef());
-    if (snapshot_version == DeltaLake::TableSnapshot::LATEST_SNAPSHOT_VERSION)
-        getTableSnapshot()->updateSnapshotVersion();
+    if (!snapshot_version.has_value())
+    {
+        std::lock_guard lock(snapshots_mutex);
+        auto latest_snapshot = std::make_shared<DeltaLake::TableSnapshot>(
+                /* version */std::nullopt,
+                kernel_helper,
+                object_storage,
+                log);
+
+        size_t version = latest_snapshot->getVersion();
+        snapshots.getOrSet(version, [&]() { return latest_snapshot; });
+
+        LOG_TEST(
+            log, "Updating latest snapshot version from {} to {}",
+            latestSnapshotVersionToStr(), version);
+
+        latest_snapshot_version = version;
+    }
 }
 
 DeltaLake::TableChangesPtr DeltaLakeMetadataDeltaKernel::getTableChanges(
@@ -598,6 +638,11 @@ void DeltaLakeMetadataDeltaKernel::logMetadataFiles(ContextPtr context) const
         insertDeltaRowToLogTable(context, json_str, kernel_helper->getDataPath(), key);
     }
 
+}
+
+std::string DeltaLakeMetadataDeltaKernel::latestSnapshotVersionToStr() const
+{
+    return latest_snapshot_version.has_value() ? toString(latest_snapshot_version.value()) : "Unknown";
 }
 
 }

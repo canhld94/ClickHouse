@@ -39,10 +39,6 @@ public:
     std::optional<size_t> getTotalRows() const;
     std::optional<size_t> getTotalBytes() const;
 
-    /// Update snapshot to latest version
-    /// or the one specified in delta_lake_snapshot_version setting.
-    void updateSnapshotVersion();
-
     /// Iterate over DeltaLake data files.
     DB::ObjectIterator iterate(
         const DB::ActionsDAG * filter_dag,
@@ -93,11 +89,12 @@ private:
 
     struct SchemaInfo
     {
-        /// Snapshot version
-        size_t version;
         /// Table logical schema
+        /// (e.g. actual table schema)
         TableSchema table_schema;
         /// Table read schema
+        /// (contains only columns contained in data file,
+        /// e.g. does not contain partition columns, generated columns, etc)
         ReadSchema read_schema;
         /// Mapping for physical names of parquet data files
         DB::NameToNameMap physical_names_map;
@@ -108,8 +105,6 @@ private:
 
     struct SnapshotStats
     {
-        /// Snapshot version
-        size_t version;
         /// Total number of bytes in table
         std::optional<size_t> total_bytes;
         /// Total number of rows in table
@@ -121,7 +116,7 @@ private:
 
     size_t getVersionUnlocked() const TSA_REQUIRES(mutex);
 
-    void initOrUpdateSnapshot(bool recreate = false) const TSA_REQUIRES(mutex);
+    void initOrUpdateSnapshot() const TSA_REQUIRES(mutex);
     void initOrUpdateSchemaIfChanged() const TSA_REQUIRES(mutex);
 
     SnapshotStats getSnapshotStats() const TSA_REQUIRES(mutex);
