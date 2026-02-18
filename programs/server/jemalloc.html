@@ -1857,14 +1857,32 @@
                 return null;
             }
         }
-        async function flushProfile() {
-            const button = document.getElementById('flush-profile-btn');
+        function updateSymbolizationVisibility() {
+            const outputFormat = document.getElementById('profile-output-format').value;
+            const symbolizationContainer = document.getElementById('symbolization-mode-container');
+            if (outputFormat === 'Symbolized' || outputFormat === 'Collapsed') {
+                symbolizationContainer.style.display = 'flex';
+            } else {
+                symbolizationContainer.style.display = 'none';
+            }
+        }
+        async function getProfile() {
+            const button = document.getElementById('get-profile-btn');
             const resultDiv = document.getElementById('profile-result');
+            const outputFormat = document.getElementById('profile-output-format').value;
+            const symbolizationMode = document.getElementById('profile-symbolization-mode').value;
             button.disabled = true;
-            button.textContent = 'Flushing...';
-            resultDiv.innerHTML = '<p>Generating profile...</p>';
+            button.textContent = 'Getting profile...';
+            resultDiv.innerHTML = '<p>Fetching profile...</p>';
             try {
-                const query = "SYSTEM JEMALLOC FLUSH PROFILE";
+                // Build settings based on selection (values must be lowercase)
+                const outputFormatLower = outputFormat.toLowerCase();
+                const symbolizationModeLower = symbolizationMode.toLowerCase();
+                let settings = `jemalloc_profile_output_format = '${outputFormatLower}'`;
+                if (outputFormat === 'Symbolized' || outputFormat === 'Collapsed') {
+                    settings += `, jemalloc_profile_symbolization_mode = '${symbolizationModeLower}'`;
+                }
+                const query = `SELECT * FROM system.jemalloc_profile SETTINGS ${settings}`;
                 let url = `${host}?default_format=TabSeparated&query=${encodeURIComponent(query)}`;
                 if (user) {
                     url += `&user=${encodeURIComponent(user)}`;
@@ -1880,21 +1898,19 @@
                 const timestamp = new Date().toLocaleString();
                 resultDiv.innerHTML = `
                     <div class="metric-card" style="margin-top: 1rem;">
-                        <div class="metric-label">Last Generated Profile</div>
-                        <div style="margin-top: 0.5rem; font-family: Monaco, Consolas, monospace; font-size: 0.9rem; word-break: break-all;">
-                            ${result || 'Profile flushed successfully'}
-                        </div>
+                        <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? ' - ' + symbolizationMode : ''})</div>
                         <div style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.7;">
                             Generated at: ${timestamp}
                         </div>
+                        <pre style="margin-top: 0.5rem; background: var(--table-header-bg); padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 600px; font-size: 0.85rem; line-height: 1.5; white-space: pre;">${result || 'No profile data'}</pre>
                     </div>
                 `;
             } catch (error) {
-                console.error('Error flushing profile:', error);
+                console.error('Error getting profile:', error);
                 resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
             } finally {
                 button.disabled = false;
-                button.textContent = 'Flush Profile';
+                button.textContent = 'Get Profile';
             }
         }
         async function renderProfileStats() {
@@ -1923,9 +1939,26 @@
                     ${isEnabled ? '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is active. Note that per-query profiling can still be enabled independently.</p>' : '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is not enabled. To enable it, set <code style="background: var(--table-header-bg); padding: 0.2rem 0.4rem; border-radius: 3px;">jemalloc_enable_global_profiler</code> in server config and restart the instance. Note that per-query profiling can still be used independently.</p>'}
                 </div>
                 <div style="margin-top: 2rem;">
-                    <button id="flush-profile-btn" class="btn btn-primary" onclick="flushProfile()">Flush Profile</button>
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem;">
+                        <div style="display: flex; flex-direction: column; gap: 0.3rem;">
+                            <label for="profile-output-format" style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Output Format</label>
+                            <select id="profile-output-format" onchange="updateSymbolizationVisibility()" style="padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color); font-size: 0.9rem; cursor: pointer; min-width: 140px;">
+                                <option value="Raw">Raw</option>
+                                <option value="Symbolized">Symbolized</option>
+                                <option value="Collapsed">Collapsed</option>
+                            </select>
+                        </div>
+                        <div id="symbolization-mode-container" style="display: none; flex-direction: column; gap: 0.3rem;">
+                            <label for="profile-symbolization-mode" style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Symbolization Mode</label>
+                            <select id="profile-symbolization-mode" style="padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color); font-size: 0.9rem; cursor: pointer; min-width: 140px;">
+                                <option value="fast">Fast</option>
+                                <option value="regular">Regular</option>
+                            </select>
+                        </div>
+                        <button id="get-profile-btn" class="btn btn-primary" onclick="getProfile()" style="padding: 0.5rem 1.5rem; height: 38px;">Get Profile</button>
+                    </div>
                     <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
-                        Generates a new heap profile dump. The profile will be saved to the directory configured in jemalloc settings. Works with both global and per-query profiling.
+                        Retrieves the jemalloc heap profile with the selected output format. Works with both global and per-query profiling.
                     </p>
                 </div>
                 <div id="profile-result"></div>
