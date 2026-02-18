@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>ClickHouse Jemalloc Stats</title>
     <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1NCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDExIDEwIj48c3R5bGU+LmJne2ZpbGw6IzAwMH0ub3tmaWxsOiNmZjB9PC9zdHlsZT48cmVjdCBjbGFzcz0iYmciIHg9IjAiIHk9IjAiIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiLz48cGF0aCBkPSJNMSwxIGgxIHY4IGgtMSB6IiBjbGFzcz0ibyIvPjxwYXRoIGQ9Ik0zLDEgaDEgdjggaC0xIHoiIGNsYXNzPSJvIi8+PHBhdGggZD0iTTUsMSBoMSB2OCBoLTEgeiIgY2xhc3M9Im8iLz48cGF0aCBkPSJNNywxIGgxIHY4IGgtMSB6IiBjbGFzcz0ibyIvPjxwYXRoIGQ9Ik05LDQuMjUgaDEgdjEuNSBoLTEgeiIgY2xhc3M9Im8iLz48L3N2Zz4">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.21/dist/uPlot.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.21/dist/uPlot.iife.min.js"></script>
     <style>
         :root {
             --color: black;
@@ -402,7 +404,8 @@
                 <button class="tab" onclick="switchTab('bins', event)">Allocations</button>
                 <button class="tab" onclick="switchTab('arenas', event)">Arenas</button>
                 <button class="tab" onclick="switchTab('operations', event)">Operations</button>
-                <button class="tab" onclick="switchTab('profile', event)">Heap Profile</button>
+                <button class="tab" onclick="switchTab('profile', event)">Global Profiler</button>
+                <button class="tab" onclick="switchTab('query-profile', event)">Query Profiler</button>
                 <button class="tab" onclick="switchTab('raw', event)">Raw Output</button>
             </div>
             <div id="tab-summary" class="tab-content active">
@@ -431,8 +434,14 @@
             </div>
             <div id="tab-profile" class="tab-content">
                 <div class="section">
-                    <div class="section-title">Heap Profile</div>
+                    <div class="section-title">Global Profiler</div>
                     <div id="profile-stats"></div>
+                </div>
+            </div>
+            <div id="tab-query-profile" class="tab-content">
+                <div class="section">
+                    <div class="section-title">Query Profiler</div>
+                    <div id="query-profile-stats"></div>
                 </div>
             </div>
             <div id="tab-raw" class="tab-content">
@@ -1988,14 +1997,31 @@
             }
         }
 
+        let profileAbortController = null;
+
         async function getProfile() {
             const button = document.getElementById('get-profile-btn');
             const resultDiv = document.getElementById('profile-result');
+
+            // If already running, cancel it
+            if (profileAbortController) {
+                profileAbortController.abort();
+                profileAbortController = null;
+                button.textContent = 'Get Profile';
+                button.disabled = false;
+                resultDiv.innerHTML = '<p>Profile request cancelled.</p>';
+                return;
+            }
+
             const outputFormat = document.getElementById('profile-output-format').value;
             const symbolizationMode = document.getElementById('profile-symbolization-mode').value;
-            button.disabled = true;
-            button.textContent = 'Getting profile...';
+            button.disabled = false;
+            button.textContent = 'Cancel';
             resultDiv.innerHTML = '<p>Fetching profile...</p>';
+
+            // Create abort controller for this request
+            profileAbortController = new AbortController();
+
             try {
                 // Build settings based on selection (values must be lowercase)
                 const outputFormatLower = outputFormat.toLowerCase();
@@ -2012,7 +2038,10 @@
                 if (password) {
                     url += `&password=${encodeURIComponent(password)}`;
                 }
-                const response = await fetch(url, { method: 'POST' });
+                const response = await fetch(url, {
+                    method: 'POST',
+                    signal: profileAbortController.signal
+                });
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -2075,8 +2104,13 @@
                 }
             } catch (error) {
                 console.error('Error getting profile:', error);
-                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                if (error.name === 'AbortError') {
+                    resultDiv.innerHTML = `<p>Profile request cancelled.</p>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                }
             } finally {
+                profileAbortController = null;
                 button.disabled = false;
                 button.textContent = 'Get Profile';
             }
@@ -2144,7 +2178,7 @@
             const statusIcon = isEnabled ? '✓' : '✗';
             container.innerHTML = `
                 <div class="metric-card" style="border-left: 4px solid ${statusColor};">
-                    <div class="metric-label">Global Profiler Status</div>
+                    <div class="metric-label">Global Profilerr Status</div>
                     <div class="metric-value">${statusIcon} ${statusText}</div>
                     ${isEnabled ? '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is active. Note that per-query profiling can still be enabled independently.</p>' : '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is not enabled. To enable it, set <code style="background: var(--table-header-bg); padding: 0.2rem 0.4rem; border-radius: 3px;">jemalloc_enable_global_profiler</code> in server config and restart the instance. Note that per-query profiling can still be used independently.</p>'}
                 </div>
@@ -2155,10 +2189,10 @@
                             <select id="profile-output-format" onchange="updateSymbolizationVisibility()" style="padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color); font-size: 0.9rem; cursor: pointer; min-width: 140px;">
                                 <option value="Raw">Raw</option>
                                 <option value="Symbolized">Symbolized</option>
-                                <option value="Collapsed">Collapsed</option>
+                                <option value="Collapsed" selected>Collapsed</option>
                             </select>
                         </div>
-                        <div id="symbolization-mode-container" style="display: none; flex-direction: column; gap: 0.3rem;">
+                        <div id="symbolization-mode-container" style="display: flex; flex-direction: column; gap: 0.3rem;">
                             <label for="profile-symbolization-mode" style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Symbolization Mode</label>
                             <select id="profile-symbolization-mode" style="padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color); font-size: 0.9rem; cursor: pointer; min-width: 140px;">
                                 <option value="fast">Fast</option>
@@ -2174,6 +2208,323 @@
                 <div id="profile-result"></div>
             `;
         }
+        async function renderQueryProfileStats() {
+            const container = document.getElementById('query-profile-stats');
+            container.innerHTML = `
+                <div class="metric-card">
+                    <div class="metric-label">Query Profilerr</div>
+                    <p style="margin-top: 1rem; font-size: 0.9rem; line-height: 1.6;">
+                        This can be used to profile queries that were run with the following settings:
+                    </p>
+                    <pre style="margin-top: 0.5rem; background: var(--table-header-bg); padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem;">SETTINGS jemalloc_enable_profiler = 1,
+         jemalloc_collect_profile_samples_in_trace_log = 1</pre>
+                    <p style="margin-top: 1rem; font-size: 0.9rem; line-height: 1.6;">
+                        Example query:
+                    </p>
+                    <pre style="margin-top: 0.5rem; background: var(--table-header-bg); padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem;">SELECT count() FROM system.numbers LIMIT 1000000
+SETTINGS jemalloc_enable_profiler = 1,
+         jemalloc_collect_profile_samples_in_trace_log = 1</pre>
+                </div>
+                <div style="margin-top: 2rem;">
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem;">
+                        <div style="display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 300px;">
+                            <label for="query-profile-id" style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Query ID</label>
+                            <input type="text" id="query-profile-id" placeholder="Enter query_id..." style="padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color); font-size: 0.9rem; font-family: monospace;">
+                        </div>
+                        <button id="query-profile-btn" class="btn btn-primary" onclick="getQueryProfile()" style="padding: 0.5rem 1.5rem; height: 38px;">Profile</button>
+                    </div>
+                </div>
+                <div id="query-profile-result"></div>
+            `;
+        }
+        async function getQueryProfile() {
+            const button = document.getElementById('query-profile-btn');
+            const resultDiv = document.getElementById('query-profile-result');
+            const queryIdInput = document.getElementById('query-profile-id');
+            const queryId = queryIdInput.value.trim();
+
+            if (!queryId) {
+                alert('Please enter a query ID');
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Getting profile...';
+            resultDiv.innerHTML = '<p>Fetching profile data...</p>';
+
+            try {
+                // First, flush the logs to ensure all data is written
+                const flushQuery = 'SYSTEM FLUSH LOGS';
+                let flushUrl = `${host}?query=${encodeURIComponent(flushQuery)}`;
+                if (user) {
+                    flushUrl += `&user=${encodeURIComponent(user)}`;
+                }
+                if (password) {
+                    flushUrl += `&password=${encodeURIComponent(password)}`;
+                }
+
+                const flushResponse = await fetch(flushUrl, { method: 'POST' });
+                if (!flushResponse.ok) {
+                    throw new Error(`Failed to flush logs: HTTP ${flushResponse.status}: ${flushResponse.statusText}`);
+                }
+
+                // Query to get min and max event_time_microseconds for JemallocSample events
+                const query = `SELECT toUnixTimestamp64Micro(min(event_time_microseconds)) AS min_time, toUnixTimestamp64Micro(max(event_time_microseconds)) AS max_time FROM system.trace_log WHERE query_id = '${queryId}' AND trace_type = 'JemallocSample'`;
+
+                let url = `${host}?default_format=TabSeparated&query=${encodeURIComponent(query)}`;
+                if (user) {
+                    url += `&user=${encodeURIComponent(user)}`;
+                }
+                if (password) {
+                    url += `&password=${encodeURIComponent(password)}`;
+                }
+
+                const response = await fetch(url, { method: 'POST' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.text();
+                const lines = result.trim().split('\n');
+
+                if (lines.length === 0 || !lines[0]) {
+                    resultDiv.innerHTML = `<div class="error">No JemallocSample events found for query_id: ${queryId}</div>`;
+                    return;
+                }
+
+                const [minTime, maxTime] = lines[0].split('\t');
+
+                // Now get cumulative memory usage over time with at most 10000 points
+                const maxPoints = 10000;
+                const timeRange = BigInt(maxTime) - BigInt(minTime);
+                // Use Math.ceil to round up, ensuring we don't exceed maxPoints
+                const bucketSize = timeRange > BigInt(0) ? Math.max(1, Math.ceil(Number(timeRange) / maxPoints)) : 1;
+
+                const cumulativeQuery = `WITH per_bucket AS (SELECT intDiv(toUnixTimestamp64Micro(event_time_microseconds) - ${minTime}, ${bucketSize}) * ${bucketSize} + ${minTime} AS bucket_time, sum(size) AS bucket_sum FROM system.trace_log WHERE trace_type = 'JemallocSample' AND query_id = '${queryId}' GROUP BY bucket_time) SELECT bucket_time, sum(bucket_sum) OVER (ORDER BY bucket_time ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_size FROM per_bucket ORDER BY bucket_time`;
+
+                let cumulativeUrl = `${host}?default_format=TabSeparated&query=${encodeURIComponent(cumulativeQuery)}`;
+                if (user) {
+                    cumulativeUrl += `&user=${encodeURIComponent(user)}`;
+                }
+                if (password) {
+                    cumulativeUrl += `&password=${encodeURIComponent(password)}`;
+                }
+
+                const cumulativeResponse = await fetch(cumulativeUrl, { method: 'POST' });
+                if (!cumulativeResponse.ok) {
+                    throw new Error(`HTTP ${cumulativeResponse.status}: ${cumulativeResponse.statusText}`);
+                }
+
+                const cumulativeResult = await cumulativeResponse.text();
+                const cumulativeLines = cumulativeResult.trim().split('\n');
+
+                // Parse data for plotting
+                const dataPoints = cumulativeLines.map(line => {
+                    const [time, size] = line.split('\t');
+                    return { time: Number(time), size: Number(size) };
+                });
+
+                // Get max memory usage and its timepoint
+                const maxMemQuery = `SELECT argMax(bucket_time, cumulative_size), max(cumulative_size) FROM (WITH per_bucket AS (SELECT event_time_microseconds AS bucket_time, sum(size) AS bucket_sum FROM system.trace_log WHERE trace_type = 'JemallocSample' AND query_id = '${queryId}' GROUP BY bucket_time) SELECT bucket_time, sum(bucket_sum) OVER (ORDER BY bucket_time ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative_size, formatReadableSize(cumulative_size) AS cumulative_size_readable FROM per_bucket ORDER BY bucket_time)`;
+
+                let maxMemUrl = `${host}?default_format=TabSeparated&query=${encodeURIComponent(maxMemQuery)}`;
+                if (user) {
+                    maxMemUrl += `&user=${encodeURIComponent(user)}`;
+                }
+                if (password) {
+                    maxMemUrl += `&password=${encodeURIComponent(password)}`;
+                }
+
+                const maxMemResponse = await fetch(maxMemUrl, { method: 'POST' });
+                if (!maxMemResponse.ok) {
+                    throw new Error(`HTTP ${maxMemResponse.status}: ${maxMemResponse.statusText}`);
+                }
+
+                const maxMemResult = await maxMemResponse.text();
+                const [maxMemTime, maxMemSize] = maxMemResult.trim().split('\t');
+
+                function formatBytes(bytes) {
+                    if (bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+                }
+
+                function formatTime(timestamp) {
+                    // If it's already a DateTime64 string, use it as-is
+                    if (typeof timestamp === 'string' && timestamp.includes('-')) {
+                        return timestamp;
+                    }
+                    // Otherwise convert from microsecond timestamp
+                    const date = new Date(Number(timestamp) / 1000);
+                    return date.toISOString().replace('T', ' ').replace('Z', '');
+                }
+
+                resultDiv.innerHTML = `
+                    <div class="metric-card" style="margin-top: 1rem;">
+                        <div class="metric-label">Overview</div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+                            <div>
+                                <div style="font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px;">First Sample</div>
+                                <div style="font-family: monospace; font-size: 0.85rem; margin-top: 0.25rem;">${formatTime(minTime)}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px;">Last Sample</div>
+                                <div style="font-family: monospace; font-size: 0.85rem; margin-top: 0.25rem;">${formatTime(maxTime)}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px;">Peak Memory</div>
+                                <div style="font-family: monospace; font-size: 0.85rem; margin-top: 0.25rem;">${formatTime(maxMemTime)}</div>
+                                <div style="font-size: 0.85rem; margin-top: 0.25rem;">${formatBytes(maxMemSize)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="metric-card" style="margin-top: 1rem;">
+                        <div class="metric-label">Memory Usage Over Time</div>
+                        <div id="memory-chart" style="margin-top: 1rem; height: 400px;"></div>
+                    </div>
+                    <div class="metric-card" style="margin-top: 1rem;">
+                        <div class="metric-label">Flame Graph</div>
+                        <div style="margin-top: 1rem; display: flex; gap: 1rem; align-items: flex-end;">
+                            <div style="flex: 1;">
+                                <label for="flamegraph-time" style="display: block; font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem;">Time</label>
+                                <input type="text" id="flamegraph-time" value="${formatTime(maxMemTime)}" style="width: 100%; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; background: var(--input-background); color: var(--color); border: 1px solid var(--border-color); border-radius: 4px;">
+                            </div>
+                            <button id="generate-query-flamegraph-btn" onclick="generateQueryFlameGraph()" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">🔥 Generate Flame Graph</button>
+                        </div>
+                    </div>
+                `;
+
+                // Prepare data for uPlot
+                const times = dataPoints.map(p => p.time / 1000000); // Convert microseconds to seconds
+                const sizes = dataPoints.map(p => p.size);
+
+                function formatBytes(bytes) {
+                    if (bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+                }
+
+                // Create uPlot chart
+                const chartEl = document.getElementById('memory-chart');
+                const opts = {
+                    width: chartEl.clientWidth,
+                    height: 400,
+                    padding: [null, 60, null, null],
+                    scales: {
+                        x: { time: true },
+                        y: { range: (u, dataMin, dataMax) => [0, dataMax * 1.1] }
+                    },
+                    axes: [
+                        {
+                            stroke: getComputedStyle(document.body).getPropertyValue('--color'),
+                            grid: { stroke: getComputedStyle(document.body).getPropertyValue('--border-color'), width: 1 / devicePixelRatio },
+                            splits: (u, axisIdx, scaleMin, scaleMax, foundIncr, foundSpace, forceMin) => [scaleMin, scaleMax],
+                            values: (u, splits) => splits.map(v => new Date(v * 1000).toISOString().substring(0, 19).replace('T', ' '))
+                        },
+                        {
+                            stroke: getComputedStyle(document.body).getPropertyValue('--color'),
+                            values: (u, vals) => vals.map(v => formatBytes(v)),
+                            grid: { stroke: getComputedStyle(document.body).getPropertyValue('--border-color'), width: 1 / devicePixelRatio },
+                            size: 80
+                        }
+                    ],
+                    series: [
+                        {
+                            label: 'Time',
+                            value: (u, v) => v == null ? '-' : new Date(v * 1000).toISOString().replace('T', ' ').replace('Z', ' UTC')
+                        },
+                        {
+                            label: 'Cumulative Memory',
+                            stroke: 'rgb(0, 200, 100)',
+                            width: 2,
+                            points: { show: false },
+                            value: (u, v) => v == null ? '-' : formatBytes(v)
+                        }
+                    ]
+                };
+
+                new uPlot(opts, [times, sizes], chartEl);
+
+            } catch (error) {
+                console.error('Error getting query profile:', error);
+                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Profile';
+            }
+        }
+
+        async function generateQueryFlameGraph() {
+            const button = document.getElementById('generate-query-flamegraph-btn');
+            const queryIdInput = document.getElementById('query-profile-id');
+            const timeInput = document.getElementById('flamegraph-time');
+            const queryId = queryIdInput.value.trim();
+            const time = timeInput.value.trim();
+
+            if (!queryId) {
+                alert('Please enter a query ID first and click Profile to load the data.');
+                return;
+            }
+
+            if (!time) {
+                alert('Please enter a time.');
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Generating...';
+
+            try {
+                // Query to get collapsed flame graph data
+                const query = `SELECT arrayJoin(flameGraph(arrayReverse(trace), size, ptr)) FROM system.trace_log WHERE trace_type = 'JemallocSample' AND query_id = '${queryId}' AND event_time_microseconds <= '${time}'`;
+
+                let url = `${host}?default_format=TabSeparated&query=${encodeURIComponent(query)}`;
+                if (user) {
+                    url += `&user=${encodeURIComponent(user)}`;
+                }
+                if (password) {
+                    url += `&password=${encodeURIComponent(password)}`;
+                }
+
+                const response = await fetch(url, { method: 'POST' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const collapsedData = await response.text();
+
+                if (!collapsedData || collapsedData.trim() === '') {
+                    alert('No flame graph data found for the specified query ID and time.');
+                    return;
+                }
+
+                // Generate the flame graph SVG
+                const svg = generateFlameGraphSVG(collapsedData, window.innerWidth);
+
+                // Download the SVG file
+                const blob = new Blob([svg], { type: 'image/svg+xml' });
+                const url2 = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url2;
+                a.download = `query-flamegraph-${queryId}-${new Date().toISOString().replace(/[:.]/g, '-')}.svg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url2);
+
+            } catch (error) {
+                console.error('Error generating flame graph:', error);
+                alert(`Error generating flame graph: ${error.message}`);
+            } finally {
+                button.disabled = false;
+                button.textContent = '🔥 Generate Flame Graph';
+            }
+        }
+
         async function loadStats(isManualRefresh = false) {
             const loading = document.getElementById('loading');
             const content = document.getElementById('content');
@@ -2214,6 +2565,7 @@
                 // Only check profile status on first load or manual refresh
                 if (isFirstLoad || isManualRefresh) {
                     renderProfileStats();
+                    renderQueryProfileStats();
                 }
                 // Only update raw stats on manual refresh or first load
                 const rawStatsEl = document.getElementById('raw-stats');
