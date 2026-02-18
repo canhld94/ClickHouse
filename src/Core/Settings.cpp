@@ -7297,6 +7297,12 @@ See [Allocation Profiling](/operations/allocation-profiling))", 0) \
     DECLARE(Bool, jemalloc_collect_profile_samples_in_trace_log, false, R"(
 Collect jemalloc allocation and deallocation samples in trace log.
     )", 0) \
+    DECLARE(JemallocProfileFormat, jemalloc_profile_output_format, JemallocProfileFormat::Symbolized, R"(
+Output format for jemalloc heap profile in system.jemalloc_profile table. Can be: 'raw' (raw profile), 'symbolized' (jeprof format with symbols), or 'collapsed' (FlameGraph format).
+    )", 0) \
+    DECLARE(JemallocProfileSymbolizationMode, jemalloc_profile_symbolization_mode, JemallocProfileSymbolizationMode::Regular, R"(
+Symbolization mode for jemalloc heap profile. Can be: 'fast' (skip inline frames, ~milliseconds) or 'regular' (include inline frames, ~10 seconds). Only affects 'symbolized' and 'collapsed' output formats.
+    )", 0) \
     DECLARE_WITH_ALIAS(Int32, os_threads_nice_value_query, 0, R"(
 Linux nice value for query processing threads. Lower values mean higher CPU priority.
 

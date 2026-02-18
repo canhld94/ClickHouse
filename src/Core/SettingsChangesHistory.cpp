@@ -56,6 +56,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"allow_insert_into_iceberg", false, true, "Insert into iceberg was moved to Beta"},
             {"output_format_arrow_date_as_uint16", true, false, "Write Date as Arrow DATE32 instead of plain UInt16 by default."},
             {"opentelemetry_start_keeper_trace_probability", 0.0, 0.0, "New setting"},
+            {"jemalloc_profile_output_format", "symbolized", "symbolized", "New setting to control output format for system.jemalloc_profile table"},
+            {"jemalloc_profile_symbolization_mode", "regular", "regular", "New setting to control symbolization mode for system.jemalloc_profile table"},
         });
         addSettingsChanges(settings_changes_history, "26.1",
         {
