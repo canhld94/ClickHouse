@@ -4,7 +4,7 @@
 -- Test that skip index file names are hashed when they exceed max_file_name_length
 -- Tests both explicit and implicit indices with compact, and wide parts
 
-SET enable_analyzer = 0; -- Old analyzer: EXPLAIN output differs
+SET enable_analyzer = 1; -- Old analyzer: EXPLAIN output differs
 
 DROP TABLE IF EXISTS test_long_index_name;
 
