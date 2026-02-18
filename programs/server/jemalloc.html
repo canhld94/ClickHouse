@@ -1866,6 +1866,7 @@
                 symbolizationContainer.style.display = 'none';
             }
         }
+
         async function getProfile() {
             const button = document.getElementById('get-profile-btn');
             const resultDiv = document.getElementById('profile-result');
@@ -1896,9 +1897,15 @@
                 }
                 const result = await response.text();
                 const timestamp = new Date().toLocaleString();
+                const visualizeButton = outputFormat === 'Collapsed'
+                    ? '<button class="btn btn-primary" onclick="visualizeFlameGraph()" style="padding: 0.4rem 1rem; font-size: 0.85rem; margin-top: 0.5rem;">🔥 Visualize Flame Graph</button>'
+                    : '';
                 resultDiv.innerHTML = `
                     <div class="metric-card" style="margin-top: 1rem;">
-                        <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? ' - ' + symbolizationMode : ''})</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? ' - ' + symbolizationMode : ''})</div>
+                            ${visualizeButton}
+                        </div>
                         <div style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.7;">
                             Generated at: ${timestamp}
                         </div>
