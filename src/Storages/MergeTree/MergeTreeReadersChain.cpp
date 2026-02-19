@@ -61,22 +61,24 @@ static std::optional<UInt64> getMaxPatchVersionForStep(const MergeTreeRangeReade
     return prewhere_info ? prewhere_info->mutation_version : std::nullopt;
 }
 
-static ColumnsWithTypeAndName toColumnsWithTypeAndName(const Columns & columns, const Block & header)
+/// Builds `ColumnsWithTypeAndName` using the on-disk column descriptions (from `IMergeTreeReader::getColumnsToRead`).
+/// This is important when columns have not yet been converted, i.e. their types with differ those contained in `getReadSampleBlock`.
+static ColumnsWithTypeAndName toColumnsWithTypeAndName(const Columns & columns, const NamesAndTypes & on_disk_columns)
 {
-    if (columns.size() != header.columns())
+    if (columns.size() != on_disk_columns.size())
         throw Exception(
             ErrorCodes::LOGICAL_ERROR,
-            "Number of columns doesn't match number of columns in header, columns size: {}, header columns: {}",
+            "Number of columns doesn't match number of on-disk columns, columns size: {}, on_disk_columns size: {}",
             columns.size(),
-            header.columns());
+            on_disk_columns.size());
 
     ColumnsWithTypeAndName res;
     res.reserve(columns.size());
     for (size_t i = 0; i < columns.size(); ++i)
     {
-        const auto & column = columns[i];
-        const auto & header_column = header.getByPosition(i);
-        res.emplace_back(column, header_column.type, header_column.name);
+        /// Columns might be null, e.g. not yet filled by `fillMissingColumns`
+        if (columns[i])
+            res.emplace_back(columns[i], on_disk_columns[i].type, on_disk_columns[i].name);
     }
     return res;
 }
@@ -122,17 +124,17 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
         first_reader.getReader()->fillVirtualColumns(read_result.columns, read_result.num_rows);
         readPatches(first_reader.getReadSampleBlock(), patch_ranges, read_result);
 
-        executeActionsBeforePrewhere(read_result, read_result.columns, first_reader, {}, read_result.num_rows);
-
         if (updater)
         {
             updater->recordInputColumns(
-                toColumnsWithTypeAndName(read_result.columns, first_reader.getReadSampleBlock()),
+                toColumnsWithTypeAndName(read_result.columns, first_reader.getReader()->getColumnsToRead()),
                 info->data_part->getColumns(),
                 info->data_part->getColumnSizes(),
                 read_result.num_bytes_read,
                 should_continue_sampling);
         }
+
+        executeActionsBeforePrewhere(read_result, read_result.columns, first_reader, {}, read_result.num_rows);
 
         executePrewhereActions(first_reader, read_result, {}, range_readers.size() == 1);
         addPatchVirtuals(read_result, first_reader.getSampleBlock());
@@ -159,19 +161,19 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
             if (num_read_rows == 0)
                 num_read_rows = read_result.num_rows;
 
-            executeActionsBeforePrewhere(read_result, columns, range_readers[i], previous_header, num_read_rows);
-
             if (updater)
             {
-                // It is important that we call `recordInputColumns` here even if `should_continue_sampling` is already set to false,
-                // because we still need to update the total number of bytes seen, even if we won't sample.
+                // It is important that we call `recordInputColumns` here even if `should_continue_sampling`
+                // is already set to false, because we still need to update the total bytes seen.
                 updater->recordInputColumns(
-                    toColumnsWithTypeAndName(columns, range_readers[i].getReadSampleBlock()),
+                    toColumnsWithTypeAndName(columns, range_readers[i].getReader()->getColumnsToRead()),
                     info->data_part->getColumns(),
                     info->data_part->getColumnSizes(),
                     read_result.num_bytes_read - num_bytes_read_so_far,
                     should_continue_sampling);
             }
+
+            executeActionsBeforePrewhere(read_result, columns, range_readers[i], previous_header, num_read_rows);
 
             read_result.columns.insert(read_result.columns.end(), columns.begin(), columns.end());
         }
