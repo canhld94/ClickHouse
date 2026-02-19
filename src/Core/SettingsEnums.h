@@ -547,12 +547,5 @@ enum class JemallocProfileFormat : uint8_t
     Collapsed
 };
 
-enum class JemallocProfileSymbolizationMode : uint8_t
-{
-    Fast = 0,   /// Skip inline frames (fast, ~milliseconds)
-    Regular     /// Include inline frames (slow, ~10 seconds)
-};
-
 DECLARE_SETTING_ENUM(JemallocProfileFormat)
-DECLARE_SETTING_ENUM(JemallocProfileSymbolizationMode)
 }

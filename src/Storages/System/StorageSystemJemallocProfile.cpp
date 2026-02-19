@@ -43,12 +43,12 @@ public:
         const SharedHeader & header_,
         size_t max_block_size_,
         JemallocProfileFormat mode_,
-        JemallocProfileSymbolizationMode symbolization_mode_)
+        bool symbolize_with_inline_)
         : ISource(header_)
         , filename(filename_)
         , max_block_size(max_block_size_)
         , mode(mode_)
-        , symbolization_mode(symbolization_mode_)
+        , symbolize_with_inline(symbolize_with_inline_)
     {
         if (mode == JemallocProfileFormat::Raw)
         {
@@ -173,7 +173,7 @@ private:
                         symbols.push_back(frame.symbol.value_or("??"));
                     };
 
-                    bool resolve_inlines = (symbolization_mode == JemallocProfileSymbolizationMode::Regular);
+                    bool resolve_inlines = symbolize_with_inline;
                     StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
 
                     std::string symbol_line;
@@ -475,7 +475,7 @@ private:
                                         frame_symbols.push_back(frame.symbol.value_or("??"));
                                     };
 
-                                    bool resolve_inlines = (symbolization_mode == JemallocProfileSymbolizationMode::Regular);
+                                    bool resolve_inlines = symbolize_with_inline;
                                     StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
 
                                     /// Store in cache (in reverse order for easier reuse)
@@ -543,7 +543,7 @@ private:
     size_t max_block_size;
     bool is_finished = false;
     JemallocProfileFormat mode;
-    JemallocProfileSymbolizationMode symbolization_mode;
+    bool symbolize_with_inline;
 
     /// For Symbolized mode streaming
     SymbolizedPhase symbolized_phase = SymbolizedPhase::CollectingAddresses;
@@ -571,7 +571,7 @@ private:
 namespace Setting
 {
     extern const SettingsJemallocProfileFormat jemalloc_profile_output_format;
-    extern const SettingsJemallocProfileSymbolizationMode jemalloc_profile_symbolization_mode;
+    extern const SettingsBool jemalloc_profile_symbolize_with_inline;
 }
 
 namespace ErrorCodes
@@ -616,7 +616,7 @@ Pipe StorageSystemJemallocProfile::read(
 
     /// Get the output format from settings
     auto format = context->getSettingsRef()[Setting::jemalloc_profile_output_format];
-    auto symbolization_mode = context->getSettingsRef()[Setting::jemalloc_profile_symbolization_mode];
+    auto symbolize_with_inline = context->getSettingsRef()[Setting::jemalloc_profile_symbolize_with_inline];
 
     /// Create source that reads and processes the profile according to the format
     auto source = std::make_shared<JemallocProfileSource>(
@@ -624,7 +624,7 @@ Pipe StorageSystemJemallocProfile::read(
         std::make_shared<const Block>(std::move(header)),
         max_block_size,
         format,
-        symbolization_mode);
+        symbolize_with_inline);
 
     return Pipe(std::move(source));
 #else

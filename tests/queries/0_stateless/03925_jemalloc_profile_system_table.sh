@@ -15,4 +15,4 @@ echo "Testing raw format:"
 ${CLICKHOUSE_CLIENT} -q "SELECT count() > 0 FROM system.jemalloc_profile SETTINGS jemalloc_profile_output_format = 'raw'";
 
 echo "Testing symbolized format:"
-${CLICKHOUSE_CLIENT} -q "SELECT count() > 0 FROM system.jemalloc_profile SETTINGS jemalloc_profile_output_format = 'symbolized', jemalloc_profile_symbolization_mode = 'fast'";
+${CLICKHOUSE_CLIENT} -q "SELECT count() > 0 FROM system.jemalloc_profile SETTINGS jemalloc_profile_output_format = 'symbolized', jemalloc_profile_symbolize_with_inline = 0";
