@@ -265,6 +265,44 @@
             font-size: 0.85rem;
             opacity: 0.7;
         }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 2.4rem;
+            height: 1.35rem;
+            flex-shrink: 0;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--border-color);
+            border-radius: 1.35rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 1rem;
+            height: 1rem;
+            left: 0.18rem;
+            top: 0.18rem;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--btn-primary-bg);
+        }
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(1.05rem);
+        }
         .heatmap-split-view {
             display: flex;
             gap: 1rem;
@@ -2014,7 +2052,7 @@
             }
 
             const outputFormat = document.getElementById('profile-output-format').value;
-            const symbolizationMode = document.getElementById('profile-symbolization-mode').value;
+            const symbolizeWithInline = document.getElementById('profile-symbolize-with-inline').checked;
             button.disabled = false;
             button.textContent = 'Cancel';
             resultDiv.innerHTML = '<p>Fetching profile...</p>';
@@ -2025,10 +2063,9 @@
             try {
                 // Build settings based on selection (values must be lowercase)
                 const outputFormatLower = outputFormat.toLowerCase();
-                const symbolizationModeLower = symbolizationMode.toLowerCase();
                 let settings = `jemalloc_profile_output_format = '${outputFormatLower}'`;
                 if (outputFormat === 'Symbolized' || outputFormat === 'Collapsed') {
-                    settings += `, jemalloc_profile_symbolization_mode = '${symbolizationModeLower}'`;
+                    settings += `, jemalloc_profile_symbolize_with_inline = ${symbolizeWithInline ? 1 : 0}`;
                 }
                 const query = `SELECT * FROM system.jemalloc_profile SETTINGS ${settings}`;
                 let url = `${host}?default_format=TabSeparated&query=${encodeURIComponent(query)}`;
@@ -2061,7 +2098,7 @@
                 resultDiv.innerHTML = `
                     <div class="metric-card" style="margin-top: 1rem;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                            <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? ' - ' + symbolizationMode : ''})</div>
+                            <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? (symbolizeWithInline ? ' - with inline' : ' - no inline') : ''})</div>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 ${visualizeButton}
                                 <button class="btn btn-secondary" onclick="copyProfileOutput()" style="padding: 0.4rem 1rem; font-size: 0.85rem;">Copy All</button>
@@ -2183,7 +2220,7 @@
                     ${isEnabled ? '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is active. Note that per-query profiling can still be enabled independently.</p>' : '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is not enabled. To enable it, set <code style="background: var(--table-header-bg); padding: 0.2rem 0.4rem; border-radius: 3px;">jemalloc_enable_global_profiler</code> in server config and restart the instance. Note that per-query profiling can still be used independently.</p>'}
                 </div>
                 <div style="margin-top: 2rem;">
-                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 0.5rem;">
                         <div style="display: flex; flex-direction: column; gap: 0.3rem;">
                             <label for="profile-output-format" style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Output Format</label>
                             <select id="profile-output-format" onchange="updateSymbolizationVisibility()" style="padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color); font-size: 0.9rem; cursor: pointer; min-width: 140px;">
@@ -2193,14 +2230,18 @@
                             </select>
                         </div>
                         <div id="symbolization-mode-container" style="display: flex; flex-direction: column; gap: 0.3rem;">
-                            <label for="profile-symbolization-mode" style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Symbolization Mode</label>
-                            <select id="profile-symbolization-mode" style="padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color); font-size: 0.9rem; cursor: pointer; min-width: 140px;">
-                                <option value="fast">Fast</option>
-                                <option value="regular">Regular</option>
-                            </select>
+                            <label style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Inline Frames</label>
+                            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; user-select: none; height: 38px; padding: 0 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background);">
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="profile-symbolize-with-inline" onchange="document.getElementById('inline-warning').style.display = this.checked ? '' : 'none'">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                                Symbolize with inline
+                            </label>
                         </div>
                         <button id="get-profile-btn" class="btn btn-primary" onclick="getProfile()" style="padding: 0.5rem 1.5rem; height: 38px;">Get Profile</button>
                     </div>
+                    <div id="inline-warning" style="display: none; margin-bottom: 0.5rem; font-size: 0.82rem; color: var(--warning-color);">&#9888; Symbolizing with inline frames is significantly slower.</div>
                     <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
                         Retrieves the jemalloc heap profile with the selected output format. Works with both global and per-query profiling.
                     </p>
