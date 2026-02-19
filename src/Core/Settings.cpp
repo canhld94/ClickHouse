@@ -7308,8 +7308,8 @@ Collect jemalloc allocation and deallocation samples in trace log.
     DECLARE(JemallocProfileFormat, jemalloc_profile_output_format, JemallocProfileFormat::Symbolized, R"(
 Output format for jemalloc heap profile in system.jemalloc_profile table. Can be: 'raw' (raw profile), 'symbolized' (jeprof format with symbols), or 'collapsed' (FlameGraph format).
     )", 0) \
-    DECLARE(JemallocProfileSymbolizationMode, jemalloc_profile_symbolization_mode, JemallocProfileSymbolizationMode::Regular, R"(
-Symbolization mode for jemalloc heap profile. Can be: 'fast' (skip inline frames, ~milliseconds) or 'regular' (include inline frames, ~10 seconds). Only affects 'symbolized' and 'collapsed' output formats.
+    DECLARE(Bool, jemalloc_profile_symbolize_with_inline, true, R"(
+Whether to include inline frames when symbolizing jemalloc heap profile. When enabled, inline frames are included which can slow down symbolization process drastically; when disabled, they are skipped. Only affects 'symbolized' and 'collapsed' output formats.
     )", 0) \
     DECLARE_WITH_ALIAS(Int32, os_threads_nice_value_query, 0, R"(
 Linux nice value for query processing threads. Lower values mean higher CPU priority.

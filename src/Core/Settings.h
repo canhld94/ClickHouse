@@ -73,7 +73,6 @@ class WriteBuffer;
     M(CLASS_NAME, JoinAlgorithm) \
     M(CLASS_NAME, JoinStrictness) \
     M(CLASS_NAME, JemallocProfileFormat) \
-    M(CLASS_NAME, JemallocProfileSymbolizationMode) \
     M(CLASS_NAME, LightweightMutationProjectionMode) \
     M(CLASS_NAME, LightweightDeleteMode) \
     M(CLASS_NAME, AlterUpdateMode) \
