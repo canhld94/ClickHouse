@@ -13,22 +13,12 @@ INSERT INTO tab SELECT 1, 'ccc', 2;
 CREATE ROW POLICY pol1 ON tab USING y != 'ccc' TO ALL;
 
 SELECT '= full plan: both deferred =';
-SELECT explain FROM (
-    EXPLAIN actions=1 SELECT * FROM tab FINAL PREWHERE y != 'ccc' ORDER BY x
-    SETTINGS apply_row_policy_after_final=1, apply_prewhere_after_final=1
-) WHERE
-    explain NOT LIKE '%Actions%' AND explain NOT LIKE '%Positions%'
-    AND explain NOT LIKE '%INPUT%' AND explain NOT LIKE '%FUNCTION%'
-    AND explain NOT LIKE '%COLUMN%' AND explain NOT LIKE '%ALIAS%';
+EXPLAIN actions=1 SELECT * FROM tab FINAL PREWHERE y != 'ccc' ORDER BY x
+SETTINGS apply_row_policy_after_final=1, apply_prewhere_after_final=1, optimize_read_in_order=1;
 
 SELECT '= full plan: nothing deferred =';
-SELECT explain FROM (
-    EXPLAIN actions=1 SELECT * FROM tab FINAL PREWHERE y != 'ccc' ORDER BY x
-    SETTINGS apply_row_policy_after_final=0, apply_prewhere_after_final=0
-) WHERE
-    explain NOT LIKE '%Actions%' AND explain NOT LIKE '%Positions%'
-    AND explain NOT LIKE '%INPUT%' AND explain NOT LIKE '%FUNCTION%'
-    AND explain NOT LIKE '%COLUMN%' AND explain NOT LIKE '%ALIAS%';
+EXPLAIN actions=1 SELECT * FROM tab FINAL PREWHERE y != 'ccc' ORDER BY x
+SETTINGS apply_row_policy_after_final=0, apply_prewhere_after_final=0, optimize_read_in_order=1;
 
 SELECT '= row policy deferred =';
 SELECT explain FROM (EXPLAIN actions=1 SELECT * FROM tab FINAL ORDER BY x SETTINGS apply_row_policy_after_final=1) WHERE explain LIKE '%Deferred%';
