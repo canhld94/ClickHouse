@@ -4,6 +4,7 @@
 #include <DataTypes/DataTypeVariant.h>
 #include <Functions/FunctionVariantAdaptor.h>
 
+#include <Columns/ColumnConst.h>
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnVariant.h>
 #include <Interpreters/castColumn.h>
@@ -32,7 +33,13 @@ static void removeLowCardinalityFromResult(DataTypePtr & result_type, ColumnPtr 
     if (typeid_cast<const DataTypeLowCardinality *>(result_type.get()))
     {
         result_type = removeLowCardinality(result_type);
-        result_column = result_column->convertToFullColumnIfLowCardinality();
+        /// ColumnConst does not override convertToFullColumnIfLowCardinality,
+        /// so we need to handle it separately using removeLowCardinality
+        /// which correctly unwraps LowCardinality inside a Const wrapper.
+        if (const auto * column_const = typeid_cast<const ColumnConst *>(result_column.get()))
+            result_column = column_const->removeLowCardinality();
+        else
+            result_column = result_column->convertToFullColumnIfLowCardinality();
     }
 }
 
