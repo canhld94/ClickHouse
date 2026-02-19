@@ -20,6 +20,7 @@
 
 
 #include <memory>
+#include <utility>
 
 
 namespace DB
@@ -42,15 +43,54 @@ YTsaurusClient::YTsaurusClient(ContextPtr context_, const ConnectionInfo & conne
 }
 
 
-ReadBufferPtr YTsaurusClient::readTable(const String & cypress_path)
+ReadBufferPtr YTsaurusClient::readTable(const String & cypress_path, const std::pair<size_t, size_t>& rows_range)
 {
-    YTsaurusQueryPtr read_table_query(new YTsaurusReadTableQuery(cypress_path));
+    YTsaurusQueryPtr read_table_query(new YTsaurusReadTableQuery(cypress_path, rows_range));
     return executeQuery(read_table_query);
+}
+
+String YTsaurusClient::startTx(size_t timeout_ms)
+{
+    YTsaurusQueryPtr start_tx_query(new YTsaurusStartTxQuery(timeout_ms));
+    auto read_buff = executeQuery(start_tx_query);
+    String res;
+    // Generally the result of each YTsaurus query should be json.
+    // But... for start_tx query the result always doble quoted string.
+    readDoubleQuotedString(res, *read_buff);
+    return res;
+}
+
+void YTsaurusClient::commitTx(const String& transaction_id)
+{
+    YTsaurusQueryPtr commit_tx_query(new YTsaurusCommitTxQuery(transaction_id));
+    executeQuery(commit_tx_query);
+}
+
+String YTsaurusClient::lock(const String& cypress_path, const String& transaction_id)
+{
+    YTsaurusQueryPtr lock_query(new YTsaurusLockQuery(cypress_path, transaction_id));
+    auto read_buff = executeQuery(lock_query);
+    String res;
+    // Generally the result of each YTsaurus query should be json.
+    // But... for start_tx query the result always doble quoted string.
+    readDoubleQuotedString(res, *read_buff);
+    return res;
+}
+
+String YTsaurusClient::getNodeIdFromLock(const String & lock_id)
+{
+
+    String lock_metadata_path = fmt::format("{}/{}/@node_id", LOCKS_STORAGE_CYPRESS_PATH, lock_id);
+    YTsaurusQueryPtr get_query(new YTsaurusGetQuery(lock_metadata_path));
+    auto read_buff = executeQuery(get_query);
+    String res;
+    readDoubleQuotedString(res, *read_buff);
+    return res;
 }
 
 YTsaurusNodeType YTsaurusClient::getNodeType(const String & cypress_path)
 {
-    auto json_ptr = getTableInfo(cypress_path);
+    auto json_ptr = getNodeMetadata(cypress_path);
     return getNodeTypeFromAttributes(json_ptr);
 }
 
@@ -197,21 +237,21 @@ Poco::Dynamic::Var YTsaurusClient::getMetadata(const String & path)
     auto buf = executeQuery(get_query);
 
     String json_str;
-    readJSONObjectPossiblyInvalid(json_str, *buf);
 
+    readStringUntilEOF(json_str, *buf);
     Poco::JSON::Parser parser;
     Poco::Dynamic::Var json = parser.parse(json_str);
     return json;
 }
 
-Poco::JSON::Object::Ptr YTsaurusClient::getTableInfo(const String & cypress_path)
+Poco::JSON::Object::Ptr YTsaurusClient::getNodeMetadata(const String & cypress_path)
 {
     String attributes_path = cypress_path + "/@";
     auto json = getMetadata(attributes_path);
     return json.extract<Poco::JSON::Object::Ptr>();
 }
 
-Poco::Dynamic::Var YTsaurusClient::getTableAttribute(const String & cypress_path, const String & attribute_name)
+Poco::Dynamic::Var YTsaurusClient::getNodeAttribute(const String & cypress_path, const String & attribute_name)
 {
     String attribute_path = cypress_path + "/@" + attribute_name;
     auto json = getMetadata(attribute_path);
@@ -220,7 +260,7 @@ Poco::Dynamic::Var YTsaurusClient::getTableAttribute(const String & cypress_path
 
 YTsaurusClient::SchemaDescription YTsaurusClient::getTableSchema(const String & cypress_path)
 {
-    auto schema = getTableAttribute(cypress_path, "schema");
+    auto schema = getNodeAttribute(cypress_path, "schema");
     const auto & schema_json = schema.extract<Poco::JSON::Object::Ptr>();
 
     if (!schema_json->has("$attributes"))
@@ -280,6 +320,31 @@ bool YTsaurusClient::checkSchemaCompatibility(const String & table_path, const S
         }
     }
     return true;
+}
+
+size_t YTsaurusClient::getTableNumberOfRows(const String& table_path)
+{
+    String lock_metadata_path = fmt::format("{}/@row_count", table_path);
+    YTsaurusQueryPtr get_query(new YTsaurusGetQuery(lock_metadata_path));
+    auto read_buff = executeQuery(get_query);
+    size_t row_count;
+    DB::readIntText(row_count, *read_buff);
+    return row_count;
+}
+
+YTsaurusTableLock::YTsaurusTableLock(YTsaurusClientPtr client_, const String& cypress_path_, size_t transaction_timeout_ms)
+    : client(client_)
+{
+    transaction_id = client->startTx(transaction_timeout_ms);
+    lock_id = client->lock(cypress_path_, transaction_id);
+    auto node_id = client->getNodeIdFromLock(lock_id);
+    node_cypress_path = fmt::format("#{}",node_id);
+}
+
+YTsaurusTableLock::~YTsaurusTableLock()
+{
+    if (!transaction_id.empty())
+        client->commitTx(transaction_id);
 }
 
 }
