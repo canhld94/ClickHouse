@@ -17,11 +17,11 @@ SET allow_suspicious_low_cardinality_types = 1;
 -- 3. The NULL must be typed as Nullable(UInt8), not Nullable(Nothing), to avoid
 --    the defaultImplementationForNothing short-circuit.
 
-CREATE TABLE IF NOT EXISTS 03925_lc_{CLICKHOUSE_DATABASE:Identifier} (x LowCardinality(String)) ENGINE = Memory;
-CREATE TABLE IF NOT EXISTS 03925_other_{CLICKHOUSE_DATABASE:Identifier} (x DateTime) ENGINE = Memory;
-INSERT INTO 03925_lc_{CLICKHOUSE_DATABASE:Identifier} VALUES ('a'), ('b'), ('c');
+CREATE TABLE IF NOT EXISTS 03925_lc (x LowCardinality(String)) ENGINE = Memory;
+CREATE TABLE IF NOT EXISTS 03925_other (x DateTime) ENGINE = Memory;
+INSERT INTO 03925_lc VALUES ('a'), ('b'), ('c');
 
 SELECT equals(CAST(NULL AS Nullable(UInt8)), x) FROM merge(currentDatabase(), '^03925_') SETTINGS optimize_move_to_prewhere = 0;
 
-DROP TABLE 03925_lc_{CLICKHOUSE_DATABASE:Identifier};
-DROP TABLE 03925_other_{CLICKHOUSE_DATABASE:Identifier};
+DROP TABLE 03925_lc;
+DROP TABLE 03925_other;
