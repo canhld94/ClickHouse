@@ -4937,15 +4937,11 @@ private:
 
     template <typename FloatType>
     static ColumnPtr convertArrayToQBit(
-        ColumnsWithTypeAndName & arguments, const DataTypePtr &, const ColumnNullable * nullable_source, size_t n, size_t size)
+        ColumnsWithTypeAndName & arguments, const DataTypePtr &, const ColumnNullable * /* nullable_source */, size_t n, size_t size)
     {
         using Word = std::conditional_t<sizeof(FloatType) == 2, UInt16, std::conditional_t<sizeof(FloatType) == 4, UInt32, UInt64>>;
 
         ColumnPtr src_col = arguments.front().column;
-
-        if (nullable_source)
-            src_col = nullable_source->getNestedColumnPtr();
-
         const auto * col_array = checkAndGetColumn<ColumnArray>(src_col.get());
 
         if (!col_array)
@@ -5036,17 +5032,20 @@ private:
                 element_size](
                    ColumnsWithTypeAndName & arguments,
                    const DataTypePtr & result_type,
-                   const ColumnNullable * nullable_source,
+                   const ColumnNullable * /* nullable_source */,
                    size_t /* input_rows_count */) -> ColumnPtr
         {
             const auto & col_array = assert_cast<const ColumnArray &>(*arguments.front().column);
 
+            /// Don't propagate nullable_source into array elements — the inner data column
+            /// has a different size (total elements vs. number of rows), and the original
+            /// nullable_source column may have a different type than the converted column.
             ColumnsWithTypeAndName nested_columns{{col_array.getDataPtr(), from_nested_type, ""}};
-            auto converted_nested = nested_function(nested_columns, to_nested_type, nullable_source, nested_columns.front().column->size());
+            auto converted_nested = nested_function(nested_columns, to_nested_type, nullptr, nested_columns.front().column->size());
             auto converted_array = ColumnArray::create(converted_nested, col_array.getOffsetsPtr());
             ColumnsWithTypeAndName converted_arguments{{std::move(converted_array), std::make_shared<DataTypeArray>(to_nested_type), ""}};
 
-            return convertArrayToQBit<T>(converted_arguments, result_type, nullable_source, dimension, element_size);
+            return convertArrayToQBit<T>(converted_arguments, result_type, nullptr, dimension, element_size);
         };
     }
 
