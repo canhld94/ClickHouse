@@ -1,3 +1,38 @@
+= full plan: both deferred =
+Expression (Project names)
+  Sorting (Sorting for ORDER BY)
+  Prefix sort description: __table1.x ASC
+  Result sort description: __table1.x ASC
+    Expression ((Before ORDER BY + (Projection + Change column names to column identifiers)))
+      ReadFromMergeTree (default.tab)
+      ReadType: InOrder
+      Parts: 3
+      Granules: 3
+      Prewhere info
+      Need filter: 1
+        Prewhere filter
+        Prewhere filter column: notEquals(y, \'ccc\'_String) (removed)
+        Row level filter
+        Row level filter column: notEquals(y, \'ccc\'_String) (removed)
+        Deferred filters (applied after FINAL)
+          Deferred row level filter column: notEquals(y, \'ccc\'_String)
+          Deferred prewhere filter column: notEquals(y, \'ccc\'_String)
+= full plan: nothing deferred =
+Expression (Project names)
+  Sorting (Sorting for ORDER BY)
+  Prefix sort description: __table1.x ASC
+  Result sort description: __table1.x ASC
+    Expression ((Before ORDER BY + (Projection + Change column names to column identifiers)))
+      ReadFromMergeTree (default.tab)
+      ReadType: InOrder
+      Parts: 3
+      Granules: 3
+      Prewhere info
+      Need filter: 1
+        Prewhere filter
+        Prewhere filter column: notEquals(y, \'ccc\'_String) (removed)
+        Row level filter
+        Row level filter column: notEquals(y, \'ccc\'_String) (removed)
 = row policy deferred =
         Deferred filters (applied after FINAL)
           Deferred row level filter column: notEquals(y, \'ccc\'_String)
