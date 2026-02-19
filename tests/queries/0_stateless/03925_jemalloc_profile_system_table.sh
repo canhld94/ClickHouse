@@ -15,4 +15,7 @@ echo "Testing raw format:"
 ${CLICKHOUSE_CLIENT} -q "SELECT count() > 0 FROM system.jemalloc_profile SETTINGS jemalloc_profile_output_format = 'raw'";
 
 echo "Testing symbolized format:"
-${CLICKHOUSE_CLIENT} -q "SELECT count() > 0 FROM system.jemalloc_profile SETTINGS jemalloc_profile_output_format = 'symbolized', jemalloc_profile_symbolize_with_inline = 0";
+${CLICKHOUSE_CLIENT} -q "SELECT count() > 0 FROM system.jemalloc_profile WHERE line LIKE '%DB::MergeTreeDataPartBuilder::build()%' SETTINGS jemalloc_profile_output_format = 'symbolized', jemalloc_profile_symbolize_with_inline = 0";
+
+echo "Testing collapsed format:"
+${CLICKHOUSE_CLIENT} -q "SELECT count() > 0 FROM system.jemalloc_profile SETTINGS jemalloc_profile_output_format = 'collapsed', jemalloc_profile_symbolize_with_inline = 0";
