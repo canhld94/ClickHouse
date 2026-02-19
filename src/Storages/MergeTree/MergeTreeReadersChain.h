@@ -1,16 +1,13 @@
 #pragma once
-
-#include <Storages/ColumnSize.h>
 #include <Storages/MergeTree/MergeTreeRangeReader.h>
 #include <Storages/MergeTree/PatchParts/MergeTreePatchReader.h>
+
+#include <functional>
 
 namespace DB
 {
 
 using RangeReaders = std::vector<MergeTreeRangeReader>;
-
-class RuntimeDataflowStatisticsCacheUpdater;
-using RuntimeDataflowStatisticsCacheUpdaterPtr = std::shared_ptr<RuntimeDataflowStatisticsCacheUpdater>;
 
 struct ColumnForPatch
 {
@@ -35,7 +32,8 @@ using ColumnsForPatches = std::vector<ColumnsForPatch>;
 
 class MergeTreeReadersChain
 {
-    using ColumnSizeByName = std::unordered_map<std::string, ColumnSize>;
+    using DataflowCacheUpdateCallback
+        = std::function<void(const ColumnsWithTypeAndName & columns, size_t read_bytes, std::optional<bool> & should_continue_sampling)>;
 
 public:
     MergeTreeReadersChain() = default;
@@ -46,13 +44,8 @@ public:
 
     ReadResult read(size_t max_rows, MarkRanges & ranges, std::vector<MarkRanges> & patch_ranges);
 
-    ReadResult read(
-        size_t max_rows,
-        MarkRanges & ranges,
-        std::vector<MarkRanges> & patch_ranges,
-        const RuntimeDataflowStatisticsCacheUpdaterPtr & updater,
-        const NamesAndTypesList & part_columns,
-        const ColumnSizeByName & column_sizes);
+    ReadResult
+    read(size_t max_rows, MarkRanges & ranges, std::vector<MarkRanges> & patch_ranges, const DataflowCacheUpdateCallback & update_cb);
 
     size_t numReadRowsInCurrentGranule() const;
     size_t numPendingRowsInCurrentGranule() const;

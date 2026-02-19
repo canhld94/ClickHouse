@@ -1,12 +1,7 @@
-#include <Columns/IColumn_fwd.h>
-#include <Core/ColumnsWithTypeAndName.h>
 #include <Storages/MergeTree/IMergeTreeReader.h>
 #include <Storages/MergeTree/MergeTreeReadersChain.h>
 #include <Storages/MergeTree/PatchParts/PatchPartsUtils.h>
 #include <Common/logger_useful.h>
-
-#include <Processors/QueryPlan/Optimizations/RuntimeDataflowStatistics.h>
-#include <Storages/MergeTree/MergeTreeReadTask.h>
 
 namespace DB
 {
@@ -85,19 +80,15 @@ static ColumnsWithTypeAndName toColumnsWithTypeAndName(const Columns & columns, 
 
 MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(size_t max_rows, MarkRanges & ranges, std::vector<MarkRanges> & patch_ranges)
 {
-    static const RuntimeDataflowStatisticsCacheUpdaterPtr dummy_updater;
-    static const NamesAndTypesList dummy_columns;
-    static const ColumnSizeByName dummy_column_sizes;
-    return read(max_rows, ranges, patch_ranges, dummy_updater, dummy_columns, dummy_column_sizes);
+    static const DataflowCacheUpdateCallback dummy_update_cb;
+    return read(max_rows, ranges, patch_ranges, dummy_update_cb);
 }
 
 MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
     size_t max_rows,
     MarkRanges & ranges,
     std::vector<MarkRanges> & patch_ranges,
-    const RuntimeDataflowStatisticsCacheUpdaterPtr & updater,
-    const NamesAndTypesList & part_columns,
-    const ColumnSizeByName & column_sizes)
+    const DataflowCacheUpdateCallback & dataflow_cache_update_cb)
 {
     if (max_rows == 0)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Expected at least 1 row to read, got 0.");
@@ -126,15 +117,11 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
         first_reader.getReader()->fillVirtualColumns(read_result.columns, read_result.num_rows);
         readPatches(first_reader.getReadSampleBlock(), patch_ranges, read_result);
 
-        if (updater)
-        {
-            updater->recordInputColumns(
+        if (dataflow_cache_update_cb)
+            dataflow_cache_update_cb(
                 toColumnsWithTypeAndName(read_result.columns, first_reader.getReader()->getColumnsToRead()),
-                part_columns,
-                column_sizes,
                 read_result.num_bytes_read,
                 should_continue_sampling);
-        }
 
         executeActionsBeforePrewhere(read_result, read_result.columns, first_reader, {}, read_result.num_rows);
 
@@ -163,15 +150,13 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
             if (num_read_rows == 0)
                 num_read_rows = read_result.num_rows;
 
-            if (updater)
+            if (dataflow_cache_update_cb)
             {
                 chassert(read_result.num_bytes_read >= num_bytes_read_so_far);
                 // It is important that we call `recordInputColumns` here even if `should_continue_sampling`
                 // is already set to false, because we still need to update the total bytes seen.
-                updater->recordInputColumns(
+                dataflow_cache_update_cb(
                     toColumnsWithTypeAndName(columns, range_readers[i].getReader()->getColumnsToRead()),
-                    part_columns,
-                    column_sizes,
                     read_result.num_bytes_read - num_bytes_read_so_far,
                     should_continue_sampling);
             }
@@ -495,4 +480,5 @@ void MergeTreeReadersChain::applyPatches(
     result_columns = result_block.getColumns();
     result_columns.resize(result_header.columns());
 }
+
 }
