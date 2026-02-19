@@ -215,12 +215,12 @@ void RuntimeDataflowStatisticsCacheUpdater::recordAggregationKeySizes(const Aggr
     statistics.elapsed_microseconds += watch.elapsedMicroseconds();
 }
 
-bool RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
+void RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
     const ColumnsWithTypeAndName & input_columns,
     const NamesAndTypesList & part_columns,
     const ColumnSizeByName & column_sizes,
     size_t read_bytes,
-    std::optional<bool> should_continue_sampling)
+    std::optional<bool> & should_continue_sampling)
 {
     Stopwatch watch;
 
@@ -231,7 +231,6 @@ bool RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
             read_bytes += column.column->byteSize();
     }
 
-    bool continue_sampling = should_continue_sampling.value_or(false);
     size_t sample_bytes = 0;
     size_t compressed_bytes = 0;
     auto & statistics = input_bytes_statistics[type];
@@ -254,8 +253,11 @@ bool RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
         }
         else
         {
+            if (!should_continue_sampling.has_value())
+                should_continue_sampling = shouldSampleBlock(statistics, input_columns[0].column->size());
+
             // We don't have individual column size info, likely because it is a compact part. Let's try to estimate it.
-            if (continue_sampling || shouldSampleBlock(statistics, input_columns[0].column->size()))
+            if (*should_continue_sampling)
             {
                 for (const auto & column : input_columns)
                 {
@@ -267,11 +269,6 @@ bool RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
                         compressed_bytes += compressed;
                     }
                 }
-                continue_sampling = true;
-            }
-            else
-            {
-                continue_sampling = false;
             }
         }
     }
@@ -284,7 +281,6 @@ bool RuntimeDataflowStatisticsCacheUpdater::recordInputColumns(
         statistics.compressed_bytes += compressed_bytes;
     }
     statistics.elapsed_microseconds += watch.elapsedMicroseconds();
-    return continue_sampling;
 }
 
 RuntimeDataflowStatisticsCache & getRuntimeDataflowStatisticsCache()

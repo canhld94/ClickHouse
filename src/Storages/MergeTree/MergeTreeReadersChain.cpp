@@ -63,6 +63,13 @@ static std::optional<UInt64> getMaxPatchVersionForStep(const MergeTreeRangeReade
 
 static ColumnsWithTypeAndName toColumnsWithTypeAndName(const Columns & columns, const Block & header)
 {
+    if (columns.size() != header.columns())
+        throw Exception(
+            ErrorCodes::LOGICAL_ERROR,
+            "Number of columns doesn't match number of columns in header, columns size: {}, header columns: {}",
+            columns.size(),
+            header.columns());
+
     ColumnsWithTypeAndName res;
     res.reserve(columns.size());
     for (size_t i = 0; i < columns.size(); ++i)
@@ -109,7 +116,7 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
         throw;
     }
 
-    bool should_continue_sampling = true;
+    std::optional<bool> should_continue_sampling;
     if (read_result.num_rows != 0)
     {
         first_reader.getReader()->fillVirtualColumns(read_result.columns, read_result.num_rows);
@@ -117,11 +124,12 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
 
         if (updater)
         {
-            should_continue_sampling = updater->recordInputColumns(
-                toColumnsWithTypeAndName(read_result.columns, first_reader.getSampleBlock()),
+            updater->recordInputColumns(
+                toColumnsWithTypeAndName(read_result.columns, first_reader.getReadSampleBlock()),
                 info->data_part->getColumns(),
                 info->data_part->getColumnSizes(),
-                read_result.num_bytes_read);
+                read_result.num_bytes_read,
+                should_continue_sampling);
         }
 
         executeActionsBeforePrewhere(read_result, read_result.columns, first_reader, {}, read_result.num_rows);
@@ -151,13 +159,16 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
             if (num_read_rows == 0)
                 num_read_rows = read_result.num_rows;
 
-            if (updater && should_continue_sampling)
+            if (updater)
             {
+                // It is important that we call `recordInputColumns` here even if `should_continue_sampling` is already set to false,
+                // because we still need to update the total number of bytes seen, even if we won't sample.
                 updater->recordInputColumns(
                     toColumnsWithTypeAndName(columns, range_readers[i].getReadSampleBlock()),
                     info->data_part->getColumns(),
                     info->data_part->getColumnSizes(),
-                    read_result.num_bytes_read - num_bytes_read_so_far);
+                    read_result.num_bytes_read - num_bytes_read_so_far,
+                    should_continue_sampling);
             }
 
             executeActionsBeforePrewhere(read_result, columns, range_readers[i], previous_header, num_read_rows);
