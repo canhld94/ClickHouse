@@ -86,8 +86,9 @@ static ColumnsWithTypeAndName toColumnsWithTypeAndName(const Columns & columns, 
 MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(size_t max_rows, MarkRanges & ranges, std::vector<MarkRanges> & patch_ranges)
 {
     static const RuntimeDataflowStatisticsCacheUpdaterPtr dummy_updater;
-    static const MergeTreeReadTaskInfoPtr dummy_info;
-    return read(max_rows, ranges, patch_ranges, dummy_updater, dummy_info);
+    static const NamesAndTypesList dummy_columns;
+    static const ColumnSizeByName dummy_column_sizes;
+    return read(max_rows, ranges, patch_ranges, dummy_updater, dummy_columns, dummy_column_sizes);
 }
 
 MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
@@ -95,7 +96,8 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
     MarkRanges & ranges,
     std::vector<MarkRanges> & patch_ranges,
     const RuntimeDataflowStatisticsCacheUpdaterPtr & updater,
-    const MergeTreeReadTaskInfoPtr & info)
+    const NamesAndTypesList & part_columns,
+    const ColumnSizeByName & column_sizes)
 {
     if (max_rows == 0)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Expected at least 1 row to read, got 0.");
@@ -128,8 +130,8 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
         {
             updater->recordInputColumns(
                 toColumnsWithTypeAndName(read_result.columns, first_reader.getReader()->getColumnsToRead()),
-                info->data_part->getColumns(),
-                info->data_part->getColumnSizes(),
+                part_columns,
+                column_sizes,
                 read_result.num_bytes_read,
                 should_continue_sampling);
         }
@@ -163,18 +165,18 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
 
             if (updater)
             {
+                chassert(read_result.num_bytes_read >= num_bytes_read_so_far);
                 // It is important that we call `recordInputColumns` here even if `should_continue_sampling`
                 // is already set to false, because we still need to update the total bytes seen.
                 updater->recordInputColumns(
                     toColumnsWithTypeAndName(columns, range_readers[i].getReader()->getColumnsToRead()),
-                    info->data_part->getColumns(),
-                    info->data_part->getColumnSizes(),
+                    part_columns,
+                    column_sizes,
                     read_result.num_bytes_read - num_bytes_read_so_far,
                     should_continue_sampling);
             }
 
             executeActionsBeforePrewhere(read_result, columns, range_readers[i], previous_header, num_read_rows);
-
             read_result.columns.insert(read_result.columns.end(), columns.begin(), columns.end());
         }
 
@@ -493,5 +495,4 @@ void MergeTreeReadersChain::applyPatches(
     result_columns = result_block.getColumns();
     result_columns.resize(result_header.columns());
 }
-
 }

@@ -1,4 +1,6 @@
 #pragma once
+
+#include <Storages/ColumnSize.h>
 #include <Storages/MergeTree/MergeTreeRangeReader.h>
 #include <Storages/MergeTree/PatchParts/MergeTreePatchReader.h>
 
@@ -9,9 +11,6 @@ using RangeReaders = std::vector<MergeTreeRangeReader>;
 
 class RuntimeDataflowStatisticsCacheUpdater;
 using RuntimeDataflowStatisticsCacheUpdaterPtr = std::shared_ptr<RuntimeDataflowStatisticsCacheUpdater>;
-
-struct MergeTreeReadTaskInfo;
-using MergeTreeReadTaskInfoPtr = std::shared_ptr<const MergeTreeReadTaskInfo>;
 
 struct ColumnForPatch
 {
@@ -36,6 +35,8 @@ using ColumnsForPatches = std::vector<ColumnsForPatch>;
 
 class MergeTreeReadersChain
 {
+    using ColumnSizeByName = std::unordered_map<std::string, ColumnSize>;
+
 public:
     MergeTreeReadersChain() = default;
     MergeTreeReadersChain(RangeReaders range_readers_, MergeTreePatchReaders patch_readers_);
@@ -50,7 +51,8 @@ public:
         MarkRanges & ranges,
         std::vector<MarkRanges> & patch_ranges,
         const RuntimeDataflowStatisticsCacheUpdaterPtr & updater,
-        const MergeTreeReadTaskInfoPtr & info);
+        const NamesAndTypesList & part_columns,
+        const ColumnSizeByName & column_sizes);
 
     size_t numReadRowsInCurrentGranule() const;
     size_t numPendingRowsInCurrentGranule() const;
