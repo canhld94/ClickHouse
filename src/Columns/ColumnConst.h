@@ -40,6 +40,7 @@ public:
     }
 
     ColumnPtr removeLowCardinality() const;
+    ColumnPtr convertToFullColumnIfLowCardinality() const override { return removeLowCardinality(); }
 
     std::string getName() const override
     {
