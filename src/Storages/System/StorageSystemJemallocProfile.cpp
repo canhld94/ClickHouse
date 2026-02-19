@@ -1,35 +1,36 @@
-#include <Storages/System/StorageSystemJemallocProfile.h>
-#include <DataTypes/DataTypeString.h>
-#include <QueryPipeline/Pipe.h>
-#include <Core/NamesAndTypes.h>
-#include <Common/Exception.h>
-#include <Common/Jemalloc.h>
-#include <Interpreters/Context.h>
-#include <Core/Settings.h>
-#include <Processors/ISource.h>
-#include <Columns/ColumnString.h>
-#include <IO/ReadBufferFromFile.h>
-#include <IO/ReadHelpers.h>
-#include <IO/WriteBufferFromString.h>
-#include <Core/SettingsEnums.h>
-
 #include "config.h"
 
+#include <QueryPipeline/Pipe.h>
+#include <Storages/System/StorageSystemJemallocProfile.h>
+
 #if USE_JEMALLOC
-#include <Common/FramePointers.h>
-#include <Common/StackTrace.h>
-#include <Common/StringUtils.h>
-#include <Common/getExecutablePath.h>
-#include <IO/WriteHelpers.h>
-#include <base/hex.h>
-#include <ranges>
-#include <unordered_set>
-#include <unordered_map>
+#    include <ranges>
+#    include <unordered_map>
+#    include <unordered_set>
+#    include <Columns/ColumnString.h>
+#    include <Core/NamesAndTypes.h>
+#    include <Core/Settings.h>
+#    include <Core/SettingsEnums.h>
+#    include <DataTypes/DataTypeString.h>
+#    include <IO/ReadBufferFromFile.h>
+#    include <IO/ReadHelpers.h>
+#    include <IO/WriteBufferFromString.h>
+#    include <IO/WriteHelpers.h>
+#    include <Interpreters/Context.h>
+#    include <Processors/ISource.h>
+#    include <base/hex.h>
+#    include <Common/Exception.h>
+#    include <Common/FramePointers.h>
+#    include <Common/Jemalloc.h>
+#    include <Common/StackTrace.h>
+#    include <Common/StringUtils.h>
+#    include <Common/getExecutablePath.h>
 #endif
 
 namespace DB
 {
 
+#if USE_JEMALLOC
 namespace
 {
 
@@ -114,7 +115,6 @@ private:
 
     Chunk generateSymbolized()
     {
-#if USE_JEMALLOC
         auto column = ColumnString::create();
 
         while (column->size() < max_block_size)
@@ -259,15 +259,10 @@ private:
         columns.push_back(std::move(column));
 
         return Chunk(std::move(columns), num_rows);
-#else
-        is_finished = true;
-        return {};
-#endif
     }
 
     void collectAddresses()
     {
-#if USE_JEMALLOC
         ReadBufferFromFile in(filename);
 
         /// Helper to parse hex address from string_view and advance it
@@ -345,12 +340,10 @@ private:
 
         /// Convert set to vector for iteration
         addresses.assign(unique_addresses.begin(), unique_addresses.end());
-#endif
     }
 
     Chunk generateCollapsed()
     {
-#if USE_JEMALLOC
         /// For collapsed mode, we need to aggregate first, so we still use vector approach
         if (collapsed_lines.empty())
         {
@@ -543,10 +536,6 @@ private:
         columns.push_back(std::move(column));
 
         return Chunk(std::move(columns), num_rows);
-#else
-        is_finished = true;
-        return {};
-#endif
     }
 
     std::string filename;
@@ -590,6 +579,8 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
 }
 
+#endif
+
 StorageSystemJemallocProfile::StorageSystemJemallocProfile(const StorageID & table_id_)
     : IStorage(table_id_)
 {
@@ -607,12 +598,12 @@ ColumnsDescription StorageSystemJemallocProfile::getColumnsDescription()
 }
 
 Pipe StorageSystemJemallocProfile::read(
-    const Names & column_names,
-    const StorageSnapshotPtr & storage_snapshot,
-    SelectQueryInfo &,
-    ContextPtr context,
+    [[maybe_unused]] const Names & column_names,
+    [[maybe_unused]] const StorageSnapshotPtr & storage_snapshot,
+    SelectQueryInfo & /*query_info*/,
+    [[maybe_unused]] ContextPtr context,
     QueryProcessingStage::Enum /*processed_stage*/,
-    const size_t max_block_size,
+    [[maybe_unused]] const size_t max_block_size,
     const size_t /*num_streams*/)
 {
 #if USE_JEMALLOC
