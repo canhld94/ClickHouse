@@ -122,6 +122,8 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
         first_reader.getReader()->fillVirtualColumns(read_result.columns, read_result.num_rows);
         readPatches(first_reader.getReadSampleBlock(), patch_ranges, read_result);
 
+        executeActionsBeforePrewhere(read_result, read_result.columns, first_reader, {}, read_result.num_rows);
+
         if (updater)
         {
             updater->recordInputColumns(
@@ -131,8 +133,6 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
                 read_result.num_bytes_read,
                 should_continue_sampling);
         }
-
-        executeActionsBeforePrewhere(read_result, read_result.columns, first_reader, {}, read_result.num_rows);
 
         executePrewhereActions(first_reader, read_result, {}, range_readers.size() == 1);
         addPatchVirtuals(read_result, first_reader.getSampleBlock());
@@ -159,6 +159,8 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
             if (num_read_rows == 0)
                 num_read_rows = read_result.num_rows;
 
+            executeActionsBeforePrewhere(read_result, columns, range_readers[i], previous_header, num_read_rows);
+
             if (updater)
             {
                 // It is important that we call `recordInputColumns` here even if `should_continue_sampling` is already set to false,
@@ -171,7 +173,6 @@ MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
                     should_continue_sampling);
             }
 
-            executeActionsBeforePrewhere(read_result, columns, range_readers[i], previous_header, num_read_rows);
             read_result.columns.insert(read_result.columns.end(), columns.begin(), columns.end());
         }
 
