@@ -1,0 +1,17 @@
+= row policy deferred =
+        Deferred filters (applied after FINAL)
+          Deferred row level filter column: notEquals(y, \'ccc\'_String)
+= row policy not deferred =
+= prewhere deferred =
+        Deferred filters (applied after FINAL)
+          Deferred prewhere filter column: notEquals(y, \'ccc\'_String)
+= prewhere not deferred =
+= both deferred =
+        Deferred filters (applied after FINAL)
+          Deferred row level filter column: notEquals(y, \'ccc\'_String)
+          Deferred prewhere filter column: notEquals(y, \'ccc\'_String)
+= row policy on non-sorting-key defers prewhere =
+        Deferred filters (applied after FINAL)
+          Deferred row level filter column: notEquals(y, \'ccc\'_String)
+          Deferred prewhere filter column: notEquals(y, \'ccc\'_String)
+= no FINAL - no deferred =
