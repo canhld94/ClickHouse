@@ -74,7 +74,7 @@ private:
 struct YTsaurusSourceFactory
 {
     static Pipe
-    createPipe(YTsaurusClientPtr client, const String & cypress_path, YTsaurusTableSourceOptions source_options, const SharedHeader & sample_block, UInt64 max_block_size, size_t max_streams);
+    createPipe(YTsaurusClientPtr client, const String & cypress_path, YTsaurusTableSourceOptions source_options, const SharedHeader & sample_block, UInt64 max_block_size, UInt64 max_streams);
 };
 
 }

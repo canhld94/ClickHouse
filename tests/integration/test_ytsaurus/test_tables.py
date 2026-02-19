@@ -568,7 +568,7 @@ def test_yt_parallelization(started_cluster):
         SETTINGS max_streams = 4, min_rows_for_spawn_stream = 25
         """
     )
-    expected_sum = (0 + (N - 1)) * N / 2
+    expected_sum = (0 + (N - 1)) * N // 2
     assert int(instance.query("SELECT sum(a) FROM t0")) == expected_sum
     instance.query("DROP TABLE t0 SYNC")
     yt.remove_table(table)

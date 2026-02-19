@@ -55,9 +55,11 @@ public:
 
     explicit YTsaurusClient(ContextPtr context_, const ConnectionInfo & connection_info_);
 
+    YTsaurusClient(const YTsaurusClient & other);
+
     const ConnectionInfo & getConnectionInfo() { return connection_info; }
 
-    ReadBufferPtr readTable(const String & cypress_path, const std::pair<size_t, size_t>& rows_range);
+    ReadBufferPtr readTable(const String & cypress_path, const std::pair<size_t, size_t> & rows_range);
 
     ReadBufferPtr lookupRows(const String & cypress_path, const Block & lookup_block_input);
 
@@ -73,7 +75,7 @@ public:
 
     String getNodeIdFromLock(const String & lock_id);
 
-    String lock(const String& cypress_path, const String & transaction_id);
+    String lock(const String & cypress_path, const String & transaction_id);
 
     size_t getTableNumberOfRows(const String& table_path);
 

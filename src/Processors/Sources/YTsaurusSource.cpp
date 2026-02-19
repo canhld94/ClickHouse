@@ -30,7 +30,7 @@ namespace YTsaurusSetting
 }
 
 YTsaurusTableSourceStaticTable::YTsaurusTableSourceStaticTable(
-    YTsaurusClientPtr client_,  const String & cypress_path_, std::pair<size_t, size_t> rows_range_, const YTsaurusTableSourceOptions & source_options_, const SharedHeader & sample_block_, const UInt64 & max_block_size_)
+    YTsaurusClientPtr client_, const String & cypress_path_, std::pair<size_t, size_t> rows_range_, const YTsaurusTableSourceOptions & source_options_, const SharedHeader & sample_block_, const UInt64 & max_block_size_)
     : ISource(sample_block_)
     , client(std::move(client_))
     , cypress_path(cypress_path_)
@@ -124,9 +124,13 @@ Pipe YTsaurusSourceFactory::createPipe(
         else
             max_streams_allowed = std::min<size_t>(settings[YTsaurusSetting::max_streams], max_streams);
 
-        auto pipes_num = std::min(max_streams_allowed,
-            std::max<size_t>(1u, rows_count / settings[YTsaurusSetting::min_rows_for_spawn_stream]
-        ));
+        size_t pipes_num = max_streams_allowed;
+
+        auto min_rows_for_spawn_stream = settings[YTsaurusSetting::min_rows_for_spawn_stream];
+        if (min_rows_for_spawn_stream)
+            pipes_num = std::min(max_streams_allowed,
+                std::max<size_t>(1u, rows_count / settings[YTsaurusSetting::min_rows_for_spawn_stream]
+            ));
 
         size_t rows_batch_count = rows_count / pipes_num;
         Pipes pipes;
@@ -136,9 +140,14 @@ Pipe YTsaurusSourceFactory::createPipe(
         {
             size_t row_from = i * rows_batch_count;
             size_t row_to = (i + 1 == pipes_num) ? rows_count :  (i + 1) * rows_batch_count;
-
+            YTsaurusClientPtr client_for_source(new YTsaurusClient(*client));
             pipes.emplace_back(std::make_shared<YTsaurusTableSourceStaticTable>(
-               client, cypress_path, std::make_pair(row_from, row_to), source_options, sample_block, max_block_size
+                  client_for_source
+                , cypress_path
+                , std::make_pair(row_from, row_to)
+                , source_options
+                , sample_block
+                , max_block_size
             ));
         }
         auto pipe = Pipe::unitePipes(std::move(pipes));
