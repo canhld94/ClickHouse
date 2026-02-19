@@ -36,7 +36,9 @@ Once the file path is known, pass it to all subsequent steps.
 
 ## Step 2 — Parallel initial analysis
 
-**Launch the following three Task agents IN PARALLEL** (single message, three tool calls):
+**Launch the following three Task agents IN PARALLEL** (single message, three tool calls) all with `run_in_background: true`.
+**Then call TaskOutput for ALL three agents** (also in parallel, single message) before proceeding to Step 3.
+Do NOT start Step 3 until every agent has finished.
 
 ### Agent A — Summary statistics (`subagent_type=Bash`)
 
@@ -192,18 +194,40 @@ by_leaf = defaultdict(int)
 by_root = defaultdict(int)  # first frame (thread entry point)
 by_caller = defaultdict(int)  # second-to-last frame (the direct caller)
 
-ALLOC_NOISE = {"operator new", "operator new[]", "malloc", "calloc", "realloc",
-               "je_malloc", "je_calloc", "je_realloc", "posix_memalign",
-               "do_rallocx", "do_mallocx", "tcache_alloc", "arena_malloc",
-               "__libc_malloc", "mi_malloc", "DB::Memory", "Allocator<",
-               "PODArrayBase::realloc", "PODArrayBase::alloc",
-               "std::__detail::_Hash_node", "std::_Rb_tree"}
+# jemalloc profiling infrastructure — always at the bottom of every stack
+JEMALLOC_PREFIXES = (
+    "prof_backtrace", "prof_alloc_prep", "prof_tctx", "prof_",
+    "imalloc", "ialloc", "irallocx", "imallocx",
+    "arena_malloc", "arena_palloc", "arena_ralloc", "arena_",
+    "tcache_alloc", "tcache_",
+    "large_malloc", "large_palloc",
+    "chunk_alloc", "huge_malloc", "huge_palloc",
+    "je_malloc", "je_calloc", "je_realloc", "je_rallocx", "je_mallocx",
+    "je_posix_memalign", "je_aligned_alloc",
+)
+# libc / C++ allocator wrappers that add no information
+ALLOC_SUBSTRINGS = (
+    "operator new", "operator new[]",
+    "__libc_malloc", "__libc_calloc", "_int_malloc",
+    "posix_memalign", "aligned_alloc",
+    "do_rallocx", "do_mallocx",
+    "mi_malloc", "mi_calloc",
+    # ClickHouse allocator wrappers — informative only as callers, not as leaf
+    "DB::Memory<", "Allocator<false", "Allocator<true",
+    "PODArrayBase::realloc", "PODArrayBase::alloc",
+    # STL internals
+    "std::__detail::_Hash_node", "std::_Rb_tree",
+    "std::vector<", "std::string::",
+)
 
 def is_noise(frame):
-    return any(n in frame for n in ALLOC_NOISE)
+    return (any(frame.startswith(p) for p in JEMALLOC_PREFIXES) or
+            any(s in frame for s in ALLOC_SUBSTRINGS))
 
 def meaningful_leaf(frames):
-    # Walk from deepest frame upward, skip raw allocator noise
+    # Walk from innermost (last) frame upward, skipping allocator/profiling noise.
+    # In jemalloc collapsed format frames are outermost-first, so the bottom of
+    # the stack (profiling infra + raw allocators) is at the end of the list.
     for f in reversed(frames):
         if f and not is_noise(f):
             return f
@@ -235,6 +259,8 @@ EOF
 
 ## Step 3 — Synthesize results
 
+**MANDATORY: All three agents from Step 2 must have completed (TaskOutput returned) before launching this step.**
+
 **Use Task tool with `subagent_type=general-purpose`** to combine the three agents' outputs and produce a final structured report. The agent should:
 
 1. Present **summary statistics** (total, trace count)
@@ -255,25 +281,50 @@ After presenting the summary, use `AskUserQuestion`:
 
 - **Option 1: "Drill into a specific subsystem"**
   Description: "Show all stack traces for a chosen component (e.g., MergeTree, SystemLog)"
-  → Ask which subsystem with a follow-up `AskUserQuestion`, then use Task (Bash) to filter and print all matching traces sorted by size
+  → Ask which subsystem with a follow-up `AskUserQuestion`
+  → **Launch Task (`subagent_type=Bash`) in the background** (`run_in_background: true`) with a Python script that:
+    - Filters all traces whose stack contains any keyword matching the chosen subsystem
+    - Sorts by value descending
+    - Prints each trace as: `MB (pct%) | frame1 ← frame2 ← ... ← frameN`
+    - Also prints the full call stack for the top 5 matches
+    - Prints a sub-total for the subsystem
+  → Use TaskOutput to wait, then pass output to a `general-purpose` Task agent for a concise summary
 
 - **Option 2: "Show full stacks for top N traces"**
   Description: "Print complete call stacks for the largest N allocations"
-  → Use Task (Bash) to extract and format the top N stacks in full detail
+  → Ask N with a follow-up `AskUserQuestion` (suggest 10 as default)
+  → **Launch Task (`subagent_type=Bash`) in the background** with a Python script that:
+    - Parses the file, sorts by value, takes top N
+    - For each: prints rank, MB, %, and the full reversed call stack with depth indices
+  → Use TaskOutput to wait, then pass output to a `general-purpose` Task agent for a concise narrative summary
 
 - **Option 3: "Search for a keyword in stacks"**
   Description: "Filter traces containing a specific function or class name"
-  → Ask for the keyword, then use Task (Bash) to grep and aggregate matching lines
+  → Ask for the keyword via `AskUserQuestion`
+  → **Launch two Task agents in parallel** (`run_in_background: true`):
+    - **Agent X (`subagent_type=Bash`)**: filter and aggregate all matching traces — sum total, count, top 20 by size, full stacks for top 5
+    - **Agent Y (`subagent_type=Bash`)**: find related keywords by scanning all frames containing the keyword and extracting their neighboring frames (co-occurring functions), to suggest related call paths
+  → Use TaskOutput (both) then pass combined output to a `general-purpose` Task agent for synthesis
 
 - **Option 4: "Generate flamegraph SVG"**
   Description: "Render an SVG flamegraph using flamegraph.pl (must be installed)"
-  → Use Task (Bash) to run: `flamegraph.pl --title "Allocation Profile" --countname bytes <file> > /tmp/alloc_flamegraph.svg`
-  → Report path to SVG and remind user to open it in a browser
+  → **Launch Task (`subagent_type=Bash`) in the background**:
+    ```bash
+    flamegraph.pl --title "Allocation Profile" --countname bytes --width 1800 \
+      PATH_TO_FILE > /tmp/alloc_flamegraph.svg
+    ```
+  → Use TaskOutput to wait for completion
+  → Report the output path `/tmp/alloc_flamegraph.svg` and remind user to open it in a browser
 
 - **Option 5: "Done"**
   Description: "Exit without further analysis"
 
-Repeat drill-down until user selects "Done".
+**IMPORTANT:** For every drill-down option (1–4):
+- Always run the analysis inside a Task subagent — never process the file in the main context
+- Always run the Bash analysis task in the background with `run_in_background: true` and wait with TaskOutput
+- Always pass raw output through a `general-purpose` Task agent for a concise, human-readable summary before showing it to the user
+
+Repeat drill-down (return to the `AskUserQuestion`) until user selects "Done".
 
 ## Notes
 

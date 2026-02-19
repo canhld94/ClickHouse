@@ -2178,7 +2178,7 @@
             const statusIcon = isEnabled ? '✓' : '✗';
             container.innerHTML = `
                 <div class="metric-card" style="border-left: 4px solid ${statusColor};">
-                    <div class="metric-label">Global Profilerr Status</div>
+                    <div class="metric-label">Global Profiler Status</div>
                     <div class="metric-value">${statusIcon} ${statusText}</div>
                     ${isEnabled ? '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is active. Note that per-query profiling can still be enabled independently.</p>' : '<p style="margin-top: 1rem; font-size: 0.9rem;">Global heap profiling is not enabled. To enable it, set <code style="background: var(--table-header-bg); padding: 0.2rem 0.4rem; border-radius: 3px;">jemalloc_enable_global_profiler</code> in server config and restart the instance. Note that per-query profiling can still be used independently.</p>'}
                 </div>
@@ -2204,6 +2204,12 @@
                     <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
                         Retrieves the jemalloc heap profile with the selected output format. Works with both global and per-query profiling.
                     </p>
+                    <div style="margin-top: 0.75rem; padding: 0.6rem 1rem; border-left: 4px solid var(--success-color); background: var(--table-header-bg); border-radius: 0 4px 4px 0; font-size: 0.85rem; line-height: 1.6;">
+                        The <strong>Collapsed</strong> format is best for analysis with AI tools.
+                        For help analyzing it with Claude, you can fetch the
+                        <a href="https://github.com/ClickHouse/ClickHouse/blob/master/.claude/skills/alloc-profile/SKILL.md" target="_blank" style="color: var(--link-color);">alloc-profile skill</a>
+                        into your Claude Code project and use it with <code style="background: var(--card-background); padding: 0.1rem 0.3rem; border-radius: 3px;">/alloc-profile</code>.
+                    </div>
                 </div>
                 <div id="profile-result"></div>
             `;
@@ -2212,7 +2218,7 @@
             const container = document.getElementById('query-profile-stats');
             container.innerHTML = `
                 <div class="metric-card">
-                    <div class="metric-label">Query Profilerr</div>
+                    <div class="metric-label">Query Profiler</div>
                     <p style="margin-top: 1rem; font-size: 0.9rem; line-height: 1.6;">
                         This can be used to profile queries that were run with the following settings:
                     </p>
