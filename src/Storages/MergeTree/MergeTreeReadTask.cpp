@@ -81,16 +81,18 @@ MergeTreeReadTask::MergeTreeReadTask(
     , block_size_params(block_size_params_)
     , size_predictor(std::move(size_predictor_))
     , updater(std::move(updater_))
-    , dataflow_cache_update_cb(
-          [&](const ColumnsWithTypeAndName & columns, size_t read_bytes, std::optional<bool> & should_continue_sampling) -> void
-          {
-              if (!updater)
-                  return;
-              const auto & part_columns = info->data_part->getColumns();
-              const auto & column_sizes = info->data_part->getColumnSizes();
-              updater->recordInputColumns(columns, part_columns, column_sizes, read_bytes, should_continue_sampling);
-          })
 {
+    if (updater)
+    {
+        dataflow_cache_update_cb
+            = [&](const ColumnsWithTypeAndName & columns, size_t read_bytes, std::optional<bool> & should_continue_sampling) -> void
+        {
+            chassert(updater);
+            const auto & part_columns = info->data_part->getColumns();
+            const auto & column_sizes = info->data_part->getColumnSizes();
+            updater->recordInputColumns(columns, part_columns, column_sizes, read_bytes, should_continue_sampling);
+        };
+    }
 }
 
 /// Returns pointer to the index if all columns in the read step belongs to the read step for that index.
