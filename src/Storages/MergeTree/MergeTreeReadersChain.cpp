@@ -78,12 +78,6 @@ static ColumnsWithTypeAndName toColumnsWithTypeAndName(const Columns & columns, 
     return res;
 }
 
-MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(size_t max_rows, MarkRanges & ranges, std::vector<MarkRanges> & patch_ranges)
-{
-    static const DataflowCacheUpdateCallback dummy_update_cb;
-    return read(max_rows, ranges, patch_ranges, dummy_update_cb);
-}
-
 MergeTreeReadersChain::ReadResult MergeTreeReadersChain::read(
     size_t max_rows,
     MarkRanges & ranges,
