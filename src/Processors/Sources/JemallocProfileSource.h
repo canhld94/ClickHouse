@@ -6,7 +6,6 @@
 
 #    include <memory>
 #    include <string>
-#    include <unordered_map>
 #    include <vector>
 #    include <Core/SettingsEnums.h>
 #    include <IO/ReadBufferFromFile.h>
@@ -23,7 +22,7 @@ namespace DB
 /// - Collapsed:  produces FlameGraph-compatible collapsed stacks.
 ///
 /// The Symbolized and Collapsed formats support a symbolize_with_inline flag: when true, inline
-/// frames are resolved (~10 seconds); when false they are skipped (~milliseconds).
+/// frames are resolved; when false they are skipped.
 class JemallocProfileSource : public ISource
 {
 public:
@@ -32,7 +31,8 @@ public:
         const SharedHeader & header_,
         size_t max_block_size_,
         JemallocProfileFormat mode_,
-        bool symbolize_with_inline_);
+        bool symbolize_with_inline_,
+        bool collapsed_use_count_ = false);
 
     String getName() const override { return "JemallocProfile"; }
 
@@ -61,6 +61,7 @@ private:
     bool is_finished = false;
     JemallocProfileFormat mode;
     bool symbolize_with_inline;
+    bool collapsed_use_count;
 
     /// For Symbolized mode streaming
     SymbolizedPhase symbolized_phase = SymbolizedPhase::CollectingAddresses;
@@ -79,8 +80,7 @@ private:
     std::vector<std::string> collapsed_lines;
     size_t current_collapsed_line_index = 0;
 
-    /// Cache for symbolized addresses to avoid redundant symbolization
-    std::unordered_map<UInt64, std::vector<std::string>> symbolization_cache;
+
 };
 
 /// Convenience wrapper: runs JemallocProfileSource and writes every output line to output_filename.
