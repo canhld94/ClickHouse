@@ -1,7 +1,7 @@
 #include "config.h"
 
 #include <QueryPipeline/Pipe.h>
-#include <Storages/System/StorageSystemJemallocProfile.h>
+#include <Storages/System/StorageSystemJemallocProfileText.h>
 
 #if USE_JEMALLOC
 #    include <Core/Settings.h>
@@ -17,9 +17,9 @@ namespace DB
 #if USE_JEMALLOC
 namespace Setting
 {
-    extern const SettingsJemallocProfileFormat jemalloc_profile_output_format;
-    extern const SettingsBool jemalloc_profile_symbolize_with_inline;
-    extern const SettingsBool jemalloc_profile_collapsed_use_count;
+    extern const SettingsJemallocProfileFormat jemalloc_profile_text_output_format;
+    extern const SettingsBool jemalloc_profile_text_symbolize_with_inline;
+    extern const SettingsBool jemalloc_profile_text_collapsed_use_count;
 }
 #endif
 
@@ -28,7 +28,7 @@ namespace ErrorCodes
     extern const int NOT_IMPLEMENTED;
 }
 
-StorageSystemJemallocProfile::StorageSystemJemallocProfile(const StorageID & table_id_)
+StorageSystemJemallocProfileText::StorageSystemJemallocProfileText(const StorageID & table_id_)
     : IStorage(table_id_)
 {
     StorageInMemoryMetadata storage_metadata;
@@ -36,7 +36,7 @@ StorageSystemJemallocProfile::StorageSystemJemallocProfile(const StorageID & tab
     setInMemoryMetadata(storage_metadata);
 }
 
-ColumnsDescription StorageSystemJemallocProfile::getColumnsDescription()
+ColumnsDescription StorageSystemJemallocProfileText::getColumnsDescription()
 {
     return ColumnsDescription
     {
@@ -44,7 +44,7 @@ ColumnsDescription StorageSystemJemallocProfile::getColumnsDescription()
     };
 }
 
-Pipe StorageSystemJemallocProfile::read(
+Pipe StorageSystemJemallocProfileText::read(
     [[maybe_unused]] const Names & column_names,
     [[maybe_unused]] const StorageSnapshotPtr & storage_snapshot,
     SelectQueryInfo & /*query_info*/,
@@ -62,9 +62,9 @@ Pipe StorageSystemJemallocProfile::read(
     auto last_profile = std::string(Jemalloc::flushProfile("/tmp/jemalloc_clickhouse"));
 
     /// Get the output format from settings
-    auto format = context->getSettingsRef()[Setting::jemalloc_profile_output_format];
-    auto symbolize_with_inline = context->getSettingsRef()[Setting::jemalloc_profile_symbolize_with_inline];
-    auto collapsed_use_count = context->getSettingsRef()[Setting::jemalloc_profile_collapsed_use_count];
+    auto format = context->getSettingsRef()[Setting::jemalloc_profile_text_output_format];
+    auto symbolize_with_inline = context->getSettingsRef()[Setting::jemalloc_profile_text_symbolize_with_inline];
+    auto collapsed_use_count = context->getSettingsRef()[Setting::jemalloc_profile_text_collapsed_use_count];
 
     /// Create source that reads and processes the profile according to the format
     auto source = std::make_shared<JemallocProfileSource>(

@@ -6,12 +6,12 @@ namespace DB
 {
 
 /// System table that reads and displays the latest jemalloc heap profile
-class StorageSystemJemallocProfile final : public IStorage
+class StorageSystemJemallocProfileText final : public IStorage
 {
 public:
-    explicit StorageSystemJemallocProfile(const StorageID & table_id_);
+    explicit StorageSystemJemallocProfileText(const StorageID & table_id_);
 
-    std::string getName() const override { return "SystemJemallocProfile"; }
+    std::string getName() const override { return "SystemJemallocProfileText"; }
 
     static ColumnsDescription getColumnsDescription();
 

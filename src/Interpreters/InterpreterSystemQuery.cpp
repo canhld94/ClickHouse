@@ -113,8 +113,8 @@ namespace Setting
 {
     extern const SettingsUInt64 keeper_max_retries;
 #if USE_JEMALLOC
-    extern const SettingsJemallocProfileFormat jemalloc_profile_output_format;
-    extern const SettingsBool jemalloc_profile_symbolize_with_inline;
+    extern const SettingsJemallocProfileFormat jemalloc_profile_text_output_format;
+    extern const SettingsBool jemalloc_profile_text_symbolize_with_inline;
 #endif
     extern const SettingsUInt64 keeper_retry_initial_backoff_ms;
     extern const SettingsUInt64 keeper_retry_max_backoff_ms;
@@ -1038,8 +1038,8 @@ BlockIO InterpreterSystemQuery::execute()
             auto context = getContext();
             context->checkAccess(AccessType::SYSTEM_JEMALLOC);
             auto filename = std::string(Jemalloc::flushProfile("/tmp/jemalloc_clickhouse"));
-            auto format = context->getSettingsRef()[Setting::jemalloc_profile_output_format];
-            auto symbolize_with_inline = context->getSettingsRef()[Setting::jemalloc_profile_symbolize_with_inline];
+            auto format = context->getSettingsRef()[Setting::jemalloc_profile_text_output_format];
+            auto symbolize_with_inline = context->getSettingsRef()[Setting::jemalloc_profile_text_symbolize_with_inline];
 
             std::string output_filename;
             if (format == JemallocProfileFormat::Raw)

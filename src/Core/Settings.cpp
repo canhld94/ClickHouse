@@ -7305,13 +7305,13 @@ See [Allocation Profiling](/operations/allocation-profiling))", 0) \
     DECLARE(Bool, jemalloc_collect_profile_samples_in_trace_log, false, R"(
 Collect jemalloc allocation and deallocation samples in trace log.
     )", 0) \
-    DECLARE(JemallocProfileFormat, jemalloc_profile_output_format, JemallocProfileFormat::Collapsed, R"(
-Output format for jemalloc heap profile in system.jemalloc_profile table. Can be: 'raw' (raw profile), 'symbolized' (jeprof format with symbols), or 'collapsed' (FlameGraph format).
+    DECLARE(JemallocProfileFormat, jemalloc_profile_text_output_format, JemallocProfileFormat::Collapsed, R"(
+Output format for jemalloc heap profile in system.jemalloc_profile_text table. Can be: 'raw' (raw profile), 'symbolized' (jeprof format with symbols), or 'collapsed' (FlameGraph format).
     )", 0) \
-    DECLARE(Bool, jemalloc_profile_symbolize_with_inline, true, R"(
+    DECLARE(Bool, jemalloc_profile_text_symbolize_with_inline, true, R"(
 Whether to include inline frames when symbolizing jemalloc heap profile. When enabled, inline frames are included which can slow down symbolization process drastically; when disabled, they are skipped. Only affects 'symbolized' and 'collapsed' output formats.
     )", 0) \
-    DECLARE(Bool, jemalloc_profile_collapsed_use_count, false, R"(
+    DECLARE(Bool, jemalloc_profile_text_collapsed_use_count, false, R"(
 When using the 'collapsed' output format for jemalloc heap profile, aggregate by allocation count instead of bytes. When false (default), each stack is weighted by live bytes; when true, by live allocation count.
     )", 0) \
     DECLARE_WITH_ALIAS(Int32, os_threads_nice_value_query, 0, R"(
