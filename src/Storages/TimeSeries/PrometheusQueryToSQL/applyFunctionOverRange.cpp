@@ -146,10 +146,15 @@ SQLQueryPiece applyFunctionOverRange(
         }
 
         case StoreMethod::CONST_SCALAR:
+        case StoreMethod::SINGLE_SCALAR:
         {
             /// SELECT <aggregate_function>(timeSeriesRange(<start_time>, <end_time>, <step>),
             ///                             arrayResize([], <count_of_time_steps>, <scalar_value>)) AS values
             SelectQueryBuilder builder;
+
+            ASTPtr value = (argument.store_method == StoreMethod::CONST_SCALAR)
+                ? timeSeriesScalarToAST(argument.scalar_value, context.scalar_data_type)
+                : make_intrusive<ASTIdentifier>(ColumnNames::Value);
 
             auto new_values = makeExpressionForResultVector(
                 function_name,
@@ -163,7 +168,7 @@ SQLQueryPiece applyFunctionOverRange(
                     "arrayResize",
                     make_intrusive<ASTLiteral>(Array{}),
                     make_intrusive<ASTLiteral>(stepsInTimeSeriesRange(argument.start_time, argument.end_time, argument.step)),
-                    timeSeriesScalarToAST(argument.scalar_value, context.scalar_data_type)),
+                    std::move(value)),
                 context);
 
             new_values->setAlias(ColumnNames::Values);
