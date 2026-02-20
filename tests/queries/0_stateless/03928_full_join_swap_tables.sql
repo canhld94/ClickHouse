@@ -33,10 +33,10 @@ SELECT count(*)
 FROM lhs
 FULL ALL JOIN rhs
 ON lhs.a = rhs.a
-SETTINGS join_use_nulls = 1, log_comment = '03928_full_all_join_swap_tables';
+SETTINGS join_use_nulls = 1, log_comment = '03928_full_all_join_use_nulls_swap_tables';
 
 SYSTEM FLUSH LOGS query_log;
 
 SELECT ProfileEvents['JoinBuildTableRowCount'] AS build_table_size
 FROM system.query_log
-WHERE log_comment = '03928_full_all_join_swap_tables' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() AND event_time >= NOW() - INTERVAL '10 MINUTE';
+WHERE log_comment = '03928_full_all_join_use_nulls_swap_tables' AND current_database = currentDatabase() AND type = 'QueryFinish' AND event_date >= yesterday() AND event_time >= NOW() - INTERVAL '10 MINUTE';
