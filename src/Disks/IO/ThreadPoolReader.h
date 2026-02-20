@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <Common/Exception.h>
 #include <IO/AsynchronousReader.h>
 #include <Common/ThreadPool_fwd.h>
 #include <Common/threadPoolCallbackRunner.h>
@@ -9,10 +8,6 @@
 
 namespace DB
 {
-namespace ErrorCodes
-{
-    extern const int NOT_IMPLEMENTED;
-}
 
 /** Perform reads from separate thread pool of specified size.
   *
@@ -41,7 +36,7 @@ public:
 
     std::future<Result> submit(Request request) override;
 
-    Result execute(Request /* request */) override { throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Method `execute` not implemented for ThreadpoolReader"); }
+    Result execute(Request request) override;
 
     void wait() override;
 

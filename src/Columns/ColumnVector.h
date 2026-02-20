@@ -17,11 +17,7 @@ class SipHash;
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int NOT_IMPLEMENTED;
-    extern const int LOGICAL_ERROR;
-}
+
 
 /** A template for columns that use a simple array to store.
  */
@@ -104,7 +100,7 @@ public:
     void popBack(size_t n) override
     {
         if (n > size())
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot pop {} rows from {}: there are only {} rows", n, this->getName(), size());
+            throwCannotPopBack(n, this->getName(), size());
 
         data.resize_assume_reserved(data.size() - n);
     }
@@ -225,7 +221,7 @@ public:
         if constexpr (is_arithmetic_v<T>)
             return UInt64(data[n]);
         else
-            throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Cannot get the value of {} as UInt", TypeName<T>);
+            throwColumnConvertNotSupported(TypeName<T>.data(), "UInt");
     }
 
     /// Out of range conversion is permitted.
@@ -234,7 +230,7 @@ public:
         if constexpr (is_arithmetic_v<T>)
             return Int64(data[n]);
         else
-            throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Cannot get the value of {} as Int", TypeName<T>);
+            throwColumnConvertNotSupported(TypeName<T>.data(), "Int");
     }
 
     bool getBool(size_t n) const override
@@ -242,7 +238,7 @@ public:
         if constexpr (is_arithmetic_v<T>)
             return bool(data[n]);
         else
-            throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Cannot get the value of {} as bool", TypeName<T>);
+            throwColumnConvertNotSupported(TypeName<T>.data(), "bool");
     }
 
     void insert(const Field & x) override

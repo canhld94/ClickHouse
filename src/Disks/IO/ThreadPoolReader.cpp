@@ -80,7 +80,7 @@ namespace DB
 namespace ErrorCodes
 {
     extern const int CANNOT_READ_FROM_FILE_DESCRIPTOR;
-
+    extern const int NOT_IMPLEMENTED;
 }
 
 #if defined(OS_LINUX)
@@ -250,6 +250,11 @@ std::future<IAsynchronousReader::Result> ThreadPoolReader::submit(Request reques
 
         return Result{ .size = bytes_read, .offset = request.ignore };
     }, request.priority);
+}
+
+IAsynchronousReader::Result ThreadPoolReader::execute(Request /* request */)
+{
+    throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Method `execute` not implemented for ThreadpoolReader");
 }
 
 void ThreadPoolReader::wait()
