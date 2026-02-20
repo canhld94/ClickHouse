@@ -53,6 +53,7 @@ namespace DB::Setting
 namespace ProfileEvents
 {
     extern const Event DeltaLakePartitionPrunedFiles;
+    extern const Event DeltaLakeSnapshotInitializations;
 }
 
 namespace DB
@@ -635,7 +636,8 @@ void TableSnapshot::initOrUpdateSnapshot() const
     if (kernel_snapshot_state)
         return;
 
-    LOG_TEST(log, "Initializing snapshot");
+    LOG_TEST(log, "Initializing snapshot {}", StackTrace().toString());
+    ProfileEvents::increment(ProfileEvents::DeltaLakeSnapshotInitializations);
 
     kernel_snapshot_state = std::make_shared<KernelSnapshotState>(*helper, snapshot_version_to_read);
 

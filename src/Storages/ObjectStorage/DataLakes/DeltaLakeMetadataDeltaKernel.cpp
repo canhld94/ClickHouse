@@ -47,6 +47,7 @@ namespace Setting
 {
     extern const SettingsBool delta_lake_log_metadata;
     extern const SettingsBool allow_experimental_delta_lake_writes;
+    extern const SettingsBool delta_lake_reload_schema_for_consistency;
     extern const SettingsInt64 delta_lake_snapshot_start_version;
     extern const SettingsInt64 delta_lake_snapshot_end_version;
     extern const SettingsInt64 delta_lake_snapshot_version;
@@ -123,7 +124,7 @@ DeltaLakeMetadataDeltaKernel::DeltaLakeMetadataDeltaKernel(
     , snapshots(
         CurrentMetrics::end(),
         CurrentMetrics::DeltaLakeSnapshotCacheSizeElements,
-        /* max_size_in_bytes */0, /// Unlimitted, will be limited by max_count
+        /* max_size_in_bytes */10,
         /* max_count */10)
 {
 }
@@ -170,10 +171,11 @@ DeltaLakeMetadataDeltaKernel::getTableSnapshot(std::optional<SnapshotVersion> ve
     };
 
     DeltaLake::TableSnapshotPtr snapshot;
+    bool created = true;
     if (result_snapshot_version.has_value())
     {
-        snapshot = snapshots.getOrSet(
-            result_snapshot_version.value(), std::move(snapshot_creator)).first;
+        std::tie(snapshot, created) = snapshots.getOrSet(
+            result_snapshot_version.value(), std::move(snapshot_creator));
     }
     else
     {
@@ -183,9 +185,9 @@ DeltaLakeMetadataDeltaKernel::getTableSnapshot(std::optional<SnapshotVersion> ve
     }
 
     LOG_TEST(
-        log, "Using snapshot version: {}, latest snapshot version: {}",
-        snapshot->getVersion(),
-        latestSnapshotVersionToStr());
+        log, "Using snapshot version: {}, latest loaded snapshot version: {}, reused cached snapshot: {}",
+        result_snapshot_version.has_value() ? result_snapshot_version.value() : snapshot->getVersion(),
+        latestSnapshotVersionToStr(), !created);
 
     return snapshot;
 }
@@ -274,18 +276,32 @@ DeltaLake::TableChangesPtr DeltaLakeMetadataDeltaKernel::getTableChanges(
     return std::make_shared<DeltaLake::TableChanges>(version_range, kernel_helper, header, format_settings, format_name, context);
 }
 
-StorageInMemoryMetadata DeltaLakeMetadataDeltaKernel::getStorageSnapshotMetadata(ContextPtr context) const
+std::optional<DataLakeTableStateSnapshot> DeltaLakeMetadataDeltaKernel::getTableStateSnapshot(ContextPtr context) const
 {
     const auto snapshot_version = getSnapshotVersion(context->getSettingsRef());
     auto snapshot = getTableSnapshot(snapshot_version);
 
-    StorageInMemoryMetadata result;
-    result.setColumns(ColumnsDescription{snapshot->getTableSchema()});
-
     DeltaLake::TableStateSnapshot state;
     state.version = snapshot->getVersion();
-    result.setDataLakeTableState(state);
+    return DataLakeTableStateSnapshot{state};
+}
+
+std::unique_ptr<StorageInMemoryMetadata> DeltaLakeMetadataDeltaKernel::buildStorageMetadataFromState(
+    const DataLakeTableStateSnapshot & state, ContextPtr) const
+{
+    chassert(std::holds_alternative<DeltaLake::TableStateSnapshot>(state));
+    const auto & delta_state = std::get<DeltaLake::TableStateSnapshot>(state);
+    auto snapshot = getTableSnapshot(static_cast<SnapshotVersion>(delta_state.version));
+
+    auto result = std::make_unique<StorageInMemoryMetadata>();
+    result->setColumns(ColumnsDescription{snapshot->getTableSchema()});
+    result->setDataLakeTableState(state);
     return result;
+}
+
+bool DeltaLakeMetadataDeltaKernel::reloadSchemaForConsistency(ContextPtr context) const
+{
+    return context->getSettingsRef()[Setting::delta_lake_reload_schema_for_consistency];
 }
 
 ObjectIterator DeltaLakeMetadataDeltaKernel::iterate(
