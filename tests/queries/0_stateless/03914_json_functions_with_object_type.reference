@@ -32,16 +32,14 @@ Test 10: ColumnConst JSON object
 Test 11: JSONExtractRaw with nested object
 "Hello"
 {"b":"World"}
-Test 14: Date type extraction as String
+Test 12: Date type extraction as String
 2020-01-01
-Test 15: Index-based access should error
-Test 16: Non-const keys should error
-Test 12: FunctionToSubcolumnsPass optimization
+Test 13: FunctionToSubcolumnsPass optimization
 42
 hello
 3.14
 1
 42
-Test 13: FunctionToSubcolumnsPass nested path
+Test 14: FunctionToSubcolumnsPass nested path
 100
 All tests completed

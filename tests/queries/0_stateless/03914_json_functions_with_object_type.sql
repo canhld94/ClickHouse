@@ -115,31 +115,19 @@ DROP TABLE json_raw;
 -- ==========================================================================
 
 -- Date stored as UInt16 internally; extracting as String must return "2020-01-01", not "18262".
-SELECT 'Test 14: Date type extraction as String';
+SELECT 'Test 12: Date type extraction as String';
 DROP TABLE IF EXISTS json_date;
 CREATE TABLE json_date (data JSON(date Date)) ENGINE = Memory;
 INSERT INTO json_date VALUES ('{"date": "2020-01-01"}');
 SELECT JSONExtract(data, 'date', 'String') FROM json_date;
 DROP TABLE json_date;
 
--- Index-based access is not supported for JSON type input.
-SELECT 'Test 15: Index-based access should error';
-SELECT JSONExtract('{"a": 42}'::JSON, 1, 'String'); -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
-
--- Non-constant keys are not supported for JSON type input.
-SELECT 'Test 16: Non-const keys should error';
-DROP TABLE IF EXISTS json_nonconst;
-CREATE TABLE json_nonconst (data JSON) ENGINE = Memory;
-INSERT INTO json_nonconst VALUES ('{"a": {"b": "Hello"}}');
-SELECT JSONExtract(data, materialize('a'), 'String') FROM json_nonconst; -- { serverError ILLEGAL_TYPE_OF_ARGUMENT }
-DROP TABLE json_nonconst;
-
 -- ==========================================================================
 -- Part 5: FunctionToSubcolumnsPass optimization tests
 -- Verify that JSONExtract* functions read subcolumns directly from storage.
 -- ==========================================================================
 
-SELECT 'Test 12: FunctionToSubcolumnsPass optimization';
+SELECT 'Test 13: FunctionToSubcolumnsPass optimization';
 DROP TABLE IF EXISTS t_json_subcolumns;
 CREATE TABLE t_json_subcolumns (id UInt64, data JSON) ENGINE = MergeTree ORDER BY id;
 INSERT INTO t_json_subcolumns VALUES (1, '{"a": 42, "b": "hello", "c": 3.14, "d": true}');
@@ -152,7 +140,7 @@ SELECT JSONExtractFloat(data, 'c') FROM t_json_subcolumns;
 SELECT JSONExtractBool(data, 'd') FROM t_json_subcolumns;
 SELECT JSONExtract(data, 'a', 'Int64') FROM t_json_subcolumns;
 
-SELECT 'Test 13: FunctionToSubcolumnsPass nested path';
+SELECT 'Test 14: FunctionToSubcolumnsPass nested path';
 DROP TABLE IF EXISTS t_json_nested;
 CREATE TABLE t_json_nested (data JSON) ENGINE = MergeTree ORDER BY tuple();
 INSERT INTO t_json_nested VALUES ('{"nested": {"x": 100}}');

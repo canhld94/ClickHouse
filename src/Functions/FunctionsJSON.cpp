@@ -224,7 +224,7 @@ public:
                 String key;
                 if (const auto * col_const_arg = typeid_cast<const ColumnConst *>(arg.column.get()))
                     key = col_const_arg->getValue<String>();
-                else if (input_rows_count <= 1 && arg.column->size() >= 1)
+                else if (input_rows_count <= 1 && !arg.column->empty())
                 {
                     /// Constant folding: single-row column that isn't wrapped in ColumnConst.
                     key = (*arg.column)[0].safeGet<String>();
