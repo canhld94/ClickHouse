@@ -3,6 +3,11 @@
 -- Reproduces assertion failure in Set::appendSetElements when ColumnTuple has
 -- inner sparse columns from one MergeTree part and non-sparse from another.
 -- The fix: IColumn::convertToFullIfNeeded now recursively converts subcolumns.
+--
+-- The assertion fires only when the non-sparse chunk is read first (into set_elements)
+-- and the sparse chunk is inserted second, because ColumnVector::insertRangeFrom
+-- asserts typeid equality with the source, while ColumnSparse::insertRangeFrom
+-- handles both sparse and non-sparse sources.
 
 SET optimize_on_insert = 0;
 
@@ -14,14 +19,16 @@ SETTINGS ratio_of_defaults_for_sparse_serialization = 0.5;
 
 SYSTEM STOP MERGES t_sparse_tuple;
 
--- Part 1: second tuple element is mostly zeros (defaults) → sparse serialization
-INSERT INTO t_sparse_tuple SELECT number, (number, 0) FROM numbers(100);
+-- Part 1 (all_1_1_0): non-sparse inner columns (no defaults in second element).
+-- This part is read first into set_elements, so set_elements uses ColumnVector.
+INSERT INTO t_sparse_tuple SELECT number, (number + 1, number + 1) FROM numbers(100);
 
--- Part 2: second tuple element is non-zero → no sparse serialization
-INSERT INTO t_sparse_tuple SELECT number + 200, (number + 200, number + 1) FROM numbers(100);
+-- Part 2 (all_2_2_0): second tuple element is all zeros → sparse serialization.
+-- When this chunk is inserted into the Set, insertRangeFrom sees ColumnSparse
+-- source vs ColumnVector destination, triggering the assertion.
+INSERT INTO t_sparse_tuple SELECT number + 200, (number + 200, 0) FROM numbers(100);
 
--- Building a Set from a subquery that reads both parts triggers the bug:
--- first chunk has ColumnTuple with inner ColumnSparse, second chunk has ColumnVector.
+-- Building a Set from a subquery that reads both parts triggers the bug.
 SELECT count() FROM t_sparse_tuple WHERE val IN (SELECT val FROM t_sparse_tuple);
 
 DROP TABLE t_sparse_tuple;
