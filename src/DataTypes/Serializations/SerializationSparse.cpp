@@ -406,7 +406,7 @@ void SerializationSparse::deserializeBinaryBulkWithMultipleStreams(
     /// sparse values column must always contain default value at the first row that is added during ColumnSparse
     /// creation. Using column from substream cache will lead to loss of this value and unexpected column size.
     /// So, we should set insert_only_rows_in_current_range_from_substreams_cache flag to true
-    /// to insert only rows in current range from substream cache insteand of using the whole cached column if any.
+    /// to insert only rows in current range from substream cache instead of using the whole cached column if any.
     auto values_settings = settings;
     values_settings.insert_only_rows_in_current_range_from_substreams_cache = true;
     nested->deserializeBinaryBulkWithMultipleStreams(
