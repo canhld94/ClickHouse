@@ -227,7 +227,12 @@ void SerializationObject::enumerateStreams(EnumerateStreamsSettings & settings, 
             {
                 shared_data_serialization_version = SerializationObjectSharedData::SerializationVersion(settings.object_shared_data_serialization_version);
                 /// Avoid creating buckets in shared data for Wide part if shared data is empty.
-                if (settings.data_part_type != MergeTreeDataPartType::Wide || !column_object->getStatistics() || !column_object->getStatistics()->shared_data_paths_statistics.empty())
+                /// Use only statistics from merge, otherwise they may be invalidated in column
+                /// permutation before actual serialization and we will get different number of buckets
+                /// in prefix serialization.
+                if (settings.data_part_type != MergeTreeDataPartType::Wide || !column_object->getStatistics()
+                    || column_object->getStatistics()->source != ColumnObject::Statistics::Source::MERGE
+                    || column_object->getStatistics()->shared_data_paths_statistics.empty())
                     num_buckets = settings.object_shared_data_buckets;
             }
 
@@ -344,7 +349,11 @@ void SerializationObject::serializeBinaryBulkStatePrefix(
             || shared_data_serialization_version.value == SerializationObjectSharedData::SerializationVersion::ADVANCED)
         {
             /// Avoid creating buckets for Wide part if shared data is empty.
-            if (settings.data_part_type != MergeTreeDataPartType::Wide || !statistics || !statistics->shared_data_paths_statistics.empty())
+            /// Use only statistics from merge, otherwise they could be invalidated in column
+            /// permutation before actual serialization and we will get different number of buckets
+            /// in enumerting streams and prefix serialization.
+            if (settings.data_part_type != MergeTreeDataPartType::Wide || !statistics
+                || statistics->source != ColumnObject::Statistics::Source::MERGE || !statistics->shared_data_paths_statistics.empty())
                 shared_data_buckets = settings.object_shared_data_buckets;
 
             writeVarUInt(shared_data_buckets, *stream);
