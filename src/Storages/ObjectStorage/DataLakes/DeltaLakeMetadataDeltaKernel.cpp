@@ -299,7 +299,7 @@ std::unique_ptr<StorageInMemoryMetadata> DeltaLakeMetadataDeltaKernel::buildStor
     return result;
 }
 
-bool DeltaLakeMetadataDeltaKernel::reloadSchemaForConsistency(ContextPtr context) const
+bool DeltaLakeMetadataDeltaKernel::shouldReloadSchemaForConsistency(ContextPtr context) const
 {
     return context->getSettingsRef()[Setting::delta_lake_reload_schema_for_consistency];
 }

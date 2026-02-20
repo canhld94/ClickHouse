@@ -74,7 +74,7 @@ public:
 
     /// Whether to reload the schema (columns) from metadata before each query in order
     /// to keep the columns stored in the in-memory metadata in sync with the datalake.
-    virtual bool reloadSchemaForConsistency(ContextPtr) const { return false; }
+    virtual bool shouldReloadSchemaForConsistency(ContextPtr) const { return false; }
 
     /// Read schema is the schema of actual data files,
     /// which can differ from table schema from data lake metadata.

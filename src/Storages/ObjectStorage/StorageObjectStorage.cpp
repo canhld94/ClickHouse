@@ -258,7 +258,7 @@ StorageObjectStorage::StorageObjectStorage(
 
     StorageInMemoryMetadata metadata;
     metadata.setColumns(columns);
-    if (is_table_function && configuration->isDataLakeConfiguration())
+    if (!do_lazy_init && is_table_function && configuration->isDataLakeConfiguration())
     {
         /// For datalake table functions, always pin the current snapshot version so that
         /// query execution uses the same snapshot as query analysis (logical-race fix).

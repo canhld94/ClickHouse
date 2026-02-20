@@ -928,7 +928,7 @@ std::unique_ptr<StorageInMemoryMetadata> IcebergMetadata::buildStorageMetadataFr
     return result;
 }
 
-bool IcebergMetadata::reloadSchemaForConsistency(ContextPtr context) const
+bool IcebergMetadata::shouldReloadSchemaForConsistency(ContextPtr context) const
 {
     return context->getSettingsRef()[Setting::iceberg_reload_schema_for_consistency];
 }

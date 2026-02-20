@@ -242,7 +242,7 @@ public:
     bool shouldReloadSchemaForConsistency(ContextPtr context) const override
     {
         assertInitialized();
-        return current_metadata->reloadSchemaForConsistency(context);
+        return current_metadata->shouldReloadSchemaForConsistency(context);
     }
 
     IDataLakeMetadata * getExternalMetadata() override

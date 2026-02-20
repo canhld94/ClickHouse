@@ -48,7 +48,7 @@ public:
 
     std::optional<DataLakeTableStateSnapshot> getTableStateSnapshot(ContextPtr) const override;
     std::unique_ptr<StorageInMemoryMetadata> buildStorageMetadataFromState(const DataLakeTableStateSnapshot &, ContextPtr) const override;
-    bool reloadSchemaForConsistency(ContextPtr) const override;
+    bool shouldReloadSchemaForConsistency(ContextPtr) const override;
 
     ReadFromFormatInfo prepareReadingFromFormat(
         const Strings & requested_columns,
