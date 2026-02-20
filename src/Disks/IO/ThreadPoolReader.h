@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <Common/Exception.h>
 #include <IO/AsynchronousReader.h>
 #include <Common/ThreadPool_fwd.h>
 #include <Common/threadPoolCallbackRunner.h>

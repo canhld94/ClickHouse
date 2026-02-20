@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Common/Logger_fwd.h>
 #include <Interpreters/Context_fwd.h>
 #include <Storages/IStorage_fwd.h>
 #include <Core/Field.h>
@@ -91,7 +92,7 @@ private:
     void writeLabelValuesResponse(WriteBuffer & response, const Block & result_block);
 
     std::shared_ptr<const StorageTimeSeries> time_series_storage;
-    Poco::LoggerPtr log;
+    LoggerPtr log;
 };
 
 }
