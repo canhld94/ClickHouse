@@ -31,7 +31,8 @@ public:
         const SharedHeader & header_,
         size_t max_block_size_,
         JemallocProfileFormat mode_,
-        bool symbolize_with_inline_);
+        bool symbolize_with_inline_,
+        bool collapsed_use_count_ = false);
 
     String getName() const override { return "JemallocProfile"; }
 
@@ -60,6 +61,7 @@ private:
     bool is_finished = false;
     JemallocProfileFormat mode;
     bool symbolize_with_inline;
+    bool collapsed_use_count;
 
     /// For Symbolized mode streaming
     SymbolizedPhase symbolized_phase = SymbolizedPhase::CollectingAddresses;

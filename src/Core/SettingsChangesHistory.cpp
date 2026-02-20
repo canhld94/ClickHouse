@@ -59,6 +59,7 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"output_format_arrow_date_as_uint16", true, false, "Write Date as Arrow DATE32 instead of plain UInt16 by default."},
             {"jemalloc_profile_output_format", "symbolized", "symbolized", "New setting to control output format for system.jemalloc_profile table"},
             {"jemalloc_profile_symbolize_with_inline", true, true, "New setting to control whether to include inline frames when symbolizing jemalloc heap profile"},
+            {"jemalloc_profile_collapsed_use_count", false, false, "New setting to aggregate by allocation count instead of bytes in the collapsed jemalloc heap profile format"},
             {"opentelemetry_start_keeper_trace_probability", "auto", "auto", "New setting"},
         });
         addSettingsChanges(settings_changes_history, "26.1",

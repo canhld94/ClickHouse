@@ -19,6 +19,7 @@ namespace Setting
 {
     extern const SettingsJemallocProfileFormat jemalloc_profile_output_format;
     extern const SettingsBool jemalloc_profile_symbolize_with_inline;
+    extern const SettingsBool jemalloc_profile_collapsed_use_count;
 }
 #endif
 
@@ -63,6 +64,7 @@ Pipe StorageSystemJemallocProfile::read(
     /// Get the output format from settings
     auto format = context->getSettingsRef()[Setting::jemalloc_profile_output_format];
     auto symbolize_with_inline = context->getSettingsRef()[Setting::jemalloc_profile_symbolize_with_inline];
+    auto collapsed_use_count = context->getSettingsRef()[Setting::jemalloc_profile_collapsed_use_count];
 
     /// Create source that reads and processes the profile according to the format
     auto source = std::make_shared<JemallocProfileSource>(
@@ -70,7 +72,8 @@ Pipe StorageSystemJemallocProfile::read(
         std::make_shared<const Block>(std::move(header)),
         max_block_size,
         format,
-        symbolize_with_inline);
+        symbolize_with_inline,
+        collapsed_use_count);
 
     return Pipe(std::move(source));
 #else

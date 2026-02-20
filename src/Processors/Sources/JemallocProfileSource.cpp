@@ -22,6 +22,7 @@
 #    include <Common/StackTrace.h>
 #    include <Common/StringUtils.h>
 #    include <Common/getExecutablePath.h>
+#    include <base/defines.h>
 
 namespace DB
 {
@@ -73,6 +74,7 @@ struct SymbolizationLRUCache
     /// Returns a copy of the cached value on hit (moves the entry to the front), or nullopt on miss.
     std::optional<Value> get(UInt64 key)
     {
+        std::lock_guard lock(mutex);
         auto it = index.find(key);
         if (it == index.end())
             return std::nullopt;
@@ -83,6 +85,7 @@ struct SymbolizationLRUCache
     void put(UInt64 key, Value value)
     {
         MemoryTrackerSwitcher switcher(&total_memory_tracker);
+        std::lock_guard lock(mutex);
         auto it = index.find(key);
         if (it != index.end())
         {
@@ -99,12 +102,15 @@ struct SymbolizationLRUCache
         }
     }
 
-    size_t max_size;
-    List lru;
-    std::unordered_map<UInt64, List::iterator> index;
+
+private:
+    const size_t max_size;
+
+    mutable std::mutex mutex;
+    List lru TSA_GUARDED_BY(mutex);
+    std::unordered_map<UInt64, List::iterator> index TSA_GUARDED_BY(mutex);
 };
 
-std::mutex symbolization_cache_mutex;
 SymbolizationLRUCache symbolization_cache(/*max_size=*/ 100'000);
 
 }
@@ -114,17 +120,15 @@ JemallocProfileSource::JemallocProfileSource(
     const SharedHeader & header_,
     size_t max_block_size_,
     JemallocProfileFormat mode_,
-    bool symbolize_with_inline_)
+    bool symbolize_with_inline_,
+    bool collapsed_use_count_)
     : ISource(header_)
     , filename(filename_)
     , max_block_size(max_block_size_)
     , mode(mode_)
     , symbolize_with_inline(symbolize_with_inline_)
+    , collapsed_use_count(collapsed_use_count_)
 {
-    if (mode == JemallocProfileFormat::Raw)
-    {
-        file_input = std::make_unique<ReadBufferFromFile>(filename);
-    }
 }
 
 Chunk JemallocProfileSource::generate()
@@ -132,18 +136,24 @@ Chunk JemallocProfileSource::generate()
     if (is_finished)
         return {};
 
-    if (mode == JemallocProfileFormat::Raw)
-        return generateRaw();
-    else if (mode == JemallocProfileFormat::Symbolized)
-        return generateSymbolized();
-    else
-        return generateCollapsed();
+    switch (mode)
+    {
+        case JemallocProfileFormat::Raw:
+            return generateRaw();
+        case JemallocProfileFormat::Symbolized:
+            return generateSymbolized();
+        case JemallocProfileFormat::Collapsed:
+            return generateCollapsed();
+    }
 }
 
 Chunk JemallocProfileSource::generateRaw()
 {
+    if (!file_input)
+        file_input = std::make_unique<ReadBufferFromFile>(filename);
+
     /// Stream directly from file
-    if (!file_input || file_input->eof())
+    if (file_input->eof())
     {
         is_finished = true;
         return {};
@@ -222,11 +232,8 @@ Chunk JemallocProfileSource::generateSymbolized()
                 UInt64 address = addresses[current_address_index++];
 
                 std::vector<std::string> symbols;
-                {
-                    std::lock_guard lock(symbolization_cache_mutex);
-                    if (auto cached = symbolization_cache.get(address))
-                        symbols = std::move(*cached);
-                }
+                if (auto cached = symbolization_cache.get(address))
+                    symbols = std::move(*cached);
 
                 if (symbols.empty())
                 {
@@ -240,10 +247,7 @@ Chunk JemallocProfileSource::generateSymbolized()
 
                     bool resolve_inlines = symbolize_with_inline;
                     StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
-                    {
-                        std::lock_guard lock(symbolization_cache_mutex);
-                        symbolization_cache.put(address, symbols);
-                    }
+                    symbolization_cache.put(address, symbols);
                 }
 
                 std::string symbol_line;
@@ -388,7 +392,7 @@ Chunk JemallocProfileSource::generateCollapsed()
     {
         ReadBufferFromFile in(filename);
 
-        std::unordered_map<std::string, UInt64> stack_to_bytes;
+        std::unordered_map<std::string, UInt64> stack_to_metric;
         std::string line;
         std::vector<UInt64> current_stack;
 
@@ -429,28 +433,40 @@ Chunk JemallocProfileSource::generateCollapsed()
             }
             else if (!current_stack.empty() && line.find(':') != std::string::npos)
             {
-                /// Parse bytes (between 2nd colon and opening bracket)
+                /// Each allocation record follows its `@` stack line in the jemalloc heap profile format:
+                ///
+                ///   @ 0x00007f1234 0x00007f5678 0x00007f9abc
+                ///   t*: 1: 224 [0: 0]
+                ///   t725: 1: 224 [0: 0]
+                ///
+                /// The record has the form `<thread>: <live_count>: <live_bytes> [<alloc_count>: <alloc_bytes>]`,
+                /// where the bracketed pair holds the cumulative (total) counts since profiling started.
+                /// We extract either <live_bytes> (between the 2nd and 3rd colon) or <live_count>
+                /// (between the 1st and 2nd colon) depending on the `collapsed_use_count` setting.
+
                 size_t first_colon = line.find(':');
                 size_t second_colon = line.find(':', first_colon + 1);
 
                 if (second_colon != std::string::npos)
                 {
-                    size_t bracket_pos = line.find('[', second_colon);
-                    size_t end_pos = (bracket_pos != std::string::npos) ? bracket_pos : line.size();
-
-                    std::string_view bytes_str(line.data() + second_colon + 1, end_pos - second_colon - 1);
-                    trimLeft(bytes_str);
-
-                    UInt64 bytes = 0;
-                    for (char c : bytes_str)
+                    std::string_view metric_str;
+                    if (collapsed_use_count)
                     {
-                        if (c >= '0' && c <= '9')
-                            bytes = bytes * 10 + (c - '0');
-                        else
-                            break;
+                        /// <live_count>: between 1st and 2nd colon
+                        metric_str = std::string_view(line.data() + first_colon + 1, second_colon - first_colon - 1);
                     }
+                    else
+                    {
+                        /// <live_bytes>: between 2nd colon and opening bracket (or end of line)
+                        size_t bracket_pos = line.find('[', second_colon);
+                        size_t end_pos = (bracket_pos != std::string::npos) ? bracket_pos : line.size();
+                        metric_str = std::string_view(line.data() + second_colon + 1, end_pos - second_colon - 1);
+                    }
+                    trim(metric_str);
 
-                    if (bytes > 0)
+                    UInt64 metric = parseInt<UInt64>(metric_str);
+
+                    if (metric > 0)
                     {
                         /// Symbolize stack
                         std::vector<std::string> all_symbols;
@@ -465,11 +481,8 @@ Chunk JemallocProfileSource::generateCollapsed()
                             }
 
                             std::vector<std::string> addr_symbols;
-                            {
-                                std::lock_guard lock(symbolization_cache_mutex);
-                                if (auto cached = symbolization_cache.get(address))
-                                    addr_symbols = std::move(*cached);
-                            }
+                            if (auto cached = symbolization_cache.get(address))
+                                addr_symbols = std::move(*cached);
                             if (!addr_symbols.empty())
                             {
                                 for (const auto & symbol : addr_symbols)
@@ -495,10 +508,7 @@ Chunk JemallocProfileSource::generateCollapsed()
                                     addr_symbols.push_back(symbol);
                                     all_symbols.push_back(symbol);
                                 }
-                                {
-                                    std::lock_guard lock(symbolization_cache_mutex);
-                                    symbolization_cache.put(address, addr_symbols);
-                                }
+                                symbolization_cache.put(address, addr_symbols);
                             }
                         }
 
@@ -513,8 +523,8 @@ Chunk JemallocProfileSource::generateCollapsed()
                             stack_str += symbol;
                         }
 
-                        /// Aggregate bytes for same stack
-                        stack_to_bytes[stack_str] += bytes;
+                        /// Aggregate metric for same stack
+                        stack_to_metric[stack_str] += metric;
                     }
                 }
 
@@ -523,9 +533,9 @@ Chunk JemallocProfileSource::generateCollapsed()
         }
 
         /// Store aggregated stacks as lines
-        for (const auto & [stack, bytes] : stack_to_bytes)
+        for (const auto & [stack, metric] : stack_to_metric)
         {
-            collapsed_lines.push_back(stack + " " + std::to_string(bytes));
+            collapsed_lines.push_back(fmt::format("{} {}", stack, metric));
         }
     }
 
