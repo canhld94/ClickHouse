@@ -17,8 +17,6 @@ class SipHash;
 namespace DB
 {
 
-
-
 /** A template for columns that use a simple array to store.
  */
 template <typename T>
