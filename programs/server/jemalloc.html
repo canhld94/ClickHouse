@@ -550,6 +550,66 @@
                 });
             }, 0);
         }
+        const _tableSortState = {};
+        const _tableData = {};
+        const _tableRenderFns = {};
+
+        function makeSortableTh(label, col, tableId, extraClass = 'number', extraStyle = '') {
+            const state = _tableSortState[tableId];
+            const isActive = state && state.col === col;
+            const ind = isActive ? (state.dir > 0 ? ' ▲' : ' ▼') : ' ⇅';
+            const opacity = isActive ? '1' : '0.3';
+            return `<th class="${extraClass}" data-sort-col="${col}" style="cursor:pointer;white-space:nowrap;user-select:none;${extraStyle}" onclick="sortTableBy('${tableId}','${col}')">${label}<span class="sort-ind" style="opacity:${opacity};font-size:0.7em;margin-left:0.2em">${ind}</span></th>`;
+        }
+
+        function sortTableBy(tableId, col) {
+            if (!_tableSortState[tableId]) _tableSortState[tableId] = { col: null, dir: 1 };
+            const state = _tableSortState[tableId];
+            if (state.col === col) state.dir *= -1;
+            else { state.col = col; state.dir = 1; }
+            const data = _tableData[tableId];
+            if (!data) return;
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            // Sort index array — avoids any HTML re-generation
+            const order = data.map((item, i) => i).sort((a, b) => {
+                const av = data[a][col] ?? 0, bv = data[b][col] ?? 0;
+                return (av < bv ? -1 : av > bv ? 1 : 0) * state.dir;
+            });
+            // Build map from data-idx → existing DOM row
+            const rowMap = {};
+            Array.from(tbody.querySelectorAll('tr')).forEach(row => { rowMap[row.dataset.idx] = row; });
+            // Hide during reorder so the browser does one layout pass, not N
+            tbody.style.display = 'none';
+            const frag = document.createDocumentFragment();
+            order.forEach(i => { if (rowMap[i]) frag.appendChild(rowMap[i]); });
+            tbody.appendChild(frag);
+            tbody.style.display = '';
+            // Update header indicators
+            table.querySelectorAll('th[data-sort-col]').forEach(th => {
+                const span = th.querySelector('.sort-ind');
+                if (!span) return;
+                if (th.dataset.sortCol === col) {
+                    span.style.opacity = '1';
+                    span.textContent = state.dir > 0 ? ' ▲' : ' ▼';
+                } else {
+                    span.style.opacity = '0.3';
+                    span.textContent = ' ⇅';
+                }
+            });
+        }
+
+        function applySortToData(tableId, data) {
+            const state = _tableSortState[tableId];
+            if (!state || !state.col) return data;
+            return [...data].sort((a, b) => {
+                const av = a[state.col] ?? 0, bv = b[state.col] ?? 0;
+                return (av < bv ? -1 : av > bv ? 1 : 0) * state.dir;
+            });
+        }
+
         function getAllocationsTableHeader() {
             return `
                 <thead style="position: sticky; top: 0; background: var(--table-header-bg); z-index: 10;">
@@ -587,59 +647,59 @@
                     <td class="number">${formatNumber(alloc.nflush_ps)}</td>
                 </tr>`;
         }
-        function getBinsTableHeader() {
+        function getBinsTableHeader(tableId) {
             return `
                 <thead style="position: sticky; top: 0; background: var(--table-header-bg); z-index: 10;">
                     <tr>
-                        <th class="number sticky-header-100">Size</th>
-                        <th class="number">Index</th>
-                        <th class="number">Allocated</th>
-                        <th class="number">Nmalloc</th>
-                        <th class="number">Nmalloc/s</th>
-                        <th class="number">Ndalloc</th>
-                        <th class="number">Ndalloc/s</th>
-                        <th class="number">Nrequests</th>
-                        <th class="number">Nrequests/s</th>
-                        <th class="number">Nshards</th>
-                        <th class="number">Curregs</th>
-                        <th class="number">Curslabs</th>
-                        <th class="number">Nonfull Slabs</th>
-                        <th class="number">Regs</th>
-                        <th class="number">Pgs</th>
-                        <th class="number">Util</th>
-                        <th class="number">Nfills</th>
-                        <th class="number">Nfills/s</th>
-                        <th class="number">Nflushes</th>
-                        <th class="number">Nflushes/s</th>
-                        <th class="number">Nslabs</th>
-                        <th class="number">Nreslabs</th>
-                        <th class="number">Nreslabs/s</th>
-                        <th class="number">Pops</th>
-                        <th class="number">Pops/s</th>
-                        <th class="number">Failed Push</th>
-                        <th class="number">Failed Push/s</th>
-                        <th class="number">Push</th>
-                        <th class="number">Push/s</th>
-                        <th class="number">Push Elem</th>
-                        <th class="number">Push Elem/s</th>
-                        <th class="number">Lock Ops</th>
-                        <th class="number">Lock Ops/s</th>
-                        <th class="number">Waiting</th>
-                        <th class="number">Waiting/s</th>
-                        <th class="number">Spin Acq</th>
-                        <th class="number">Spin Acq/s</th>
-                        <th class="number">Owner Switch</th>
-                        <th class="number">Owner Switch/s</th>
-                        <th class="number">Total Wait (ns)</th>
-                        <th class="number">Total Wait/s</th>
-                        <th class="number">Max Wait (ns)</th>
-                        <th class="number">Max Threads</th>
+                        ${makeSortableTh('Size', 'size', tableId, 'number sticky-header-100')}
+                        ${makeSortableTh('Index', 'ind', tableId)}
+                        ${makeSortableTh('Allocated', 'allocated', tableId)}
+                        ${makeSortableTh('Nmalloc', 'nmalloc', tableId)}
+                        ${makeSortableTh('Nmalloc/s', 'nmalloc_ps', tableId)}
+                        ${makeSortableTh('Ndalloc', 'ndalloc', tableId)}
+                        ${makeSortableTh('Ndalloc/s', 'ndalloc_ps', tableId)}
+                        ${makeSortableTh('Nrequests', 'nrequests', tableId)}
+                        ${makeSortableTh('Nrequests/s', 'nrequests_ps', tableId)}
+                        ${makeSortableTh('Nshards', 'nshards', tableId)}
+                        ${makeSortableTh('Curregs', 'curregs', tableId)}
+                        ${makeSortableTh('Curslabs', 'curslabs', tableId)}
+                        ${makeSortableTh('Nonfull Slabs', 'nonfull_slabs', tableId)}
+                        ${makeSortableTh('Regs', 'regs', tableId)}
+                        ${makeSortableTh('Pgs', 'pgs', tableId)}
+                        ${makeSortableTh('Util', 'util', tableId)}
+                        ${makeSortableTh('Nfills', 'nfills', tableId)}
+                        ${makeSortableTh('Nfills/s', 'nfills_ps', tableId)}
+                        ${makeSortableTh('Nflushes', 'nflushes', tableId)}
+                        ${makeSortableTh('Nflushes/s', 'nflushes_ps', tableId)}
+                        ${makeSortableTh('Nslabs', 'nslabs', tableId)}
+                        ${makeSortableTh('Nreslabs', 'nreslabs', tableId)}
+                        ${makeSortableTh('Nreslabs/s', 'nreslabs_ps', tableId)}
+                        ${makeSortableTh('Pops', 'pops', tableId)}
+                        ${makeSortableTh('Pops/s', 'pops_ps', tableId)}
+                        ${makeSortableTh('Failed Push', 'failed_push', tableId)}
+                        ${makeSortableTh('Failed Push/s', 'failed_push_ps', tableId)}
+                        ${makeSortableTh('Push', 'push', tableId)}
+                        ${makeSortableTh('Push/s', 'push_ps', tableId)}
+                        ${makeSortableTh('Push Elem', 'push_elem', tableId)}
+                        ${makeSortableTh('Push Elem/s', 'push_elem_ps', tableId)}
+                        ${makeSortableTh('Lock Ops', 'n_lock_ops', tableId)}
+                        ${makeSortableTh('Lock Ops/s', 'n_lock_ops_ps', tableId)}
+                        ${makeSortableTh('Waiting', 'n_waiting', tableId)}
+                        ${makeSortableTh('Waiting/s', 'n_waiting_ps', tableId)}
+                        ${makeSortableTh('Spin Acq', 'n_spin_acq', tableId)}
+                        ${makeSortableTh('Spin Acq/s', 'n_spin_acq_ps', tableId)}
+                        ${makeSortableTh('Owner Switch', 'n_owner_switch', tableId)}
+                        ${makeSortableTh('Owner Switch/s', 'n_owner_switch_ps', tableId)}
+                        ${makeSortableTh('Total Wait (ns)', 'total_wait_ns', tableId)}
+                        ${makeSortableTh('Total Wait/s', 'total_wait_ns_ps', tableId)}
+                        ${makeSortableTh('Max Wait (ns)', 'max_wait_ns', tableId)}
+                        ${makeSortableTh('Max Threads', 'max_n_thds', tableId)}
                     </tr>
                 </thead>`;
         }
         function renderBinRow(bin) {
             return `
-                <tr>
+                <tr data-idx="${bin._idx}">
                     <td class="number sticky-cell-100">${formatBytes(bin.size)}</td>
                     <td class="number">${bin.ind}</td>
                     <td class="number">${formatBytes(bin.allocated)}</td>
@@ -685,26 +745,26 @@
                     <td class="number">${formatNumber(bin.max_n_thds)}</td>
                 </tr>`;
         }
-        function getLargeTableHeader() {
+        function getLargeTableHeader(tableId) {
             return `
                 <thead style="position: sticky; top: 0; background: var(--table-header-bg); z-index: 10;">
                     <tr>
-                        <th class="number sticky-header-100">Size</th>
-                        <th class="number">Index</th>
-                        <th class="number">Allocated</th>
-                        <th class="number">Nmalloc</th>
-                        <th class="number">Nmalloc/s</th>
-                        <th class="number">Ndalloc</th>
-                        <th class="number">Ndalloc/s</th>
-                        <th class="number">Nrequests</th>
-                        <th class="number">Nrequests/s</th>
-                        <th class="number">Curlextents</th>
+                        ${makeSortableTh('Size', 'size', tableId, 'number sticky-header-100')}
+                        ${makeSortableTh('Index', 'ind', tableId)}
+                        ${makeSortableTh('Allocated', 'allocated', tableId)}
+                        ${makeSortableTh('Nmalloc', 'nmalloc', tableId)}
+                        ${makeSortableTh('Nmalloc/s', 'nmalloc_ps', tableId)}
+                        ${makeSortableTh('Ndalloc', 'ndalloc', tableId)}
+                        ${makeSortableTh('Ndalloc/s', 'ndalloc_ps', tableId)}
+                        ${makeSortableTh('Nrequests', 'nrequests', tableId)}
+                        ${makeSortableTh('Nrequests/s', 'nrequests_ps', tableId)}
+                        ${makeSortableTh('Curlextents', 'curlextents', tableId)}
                     </tr>
                 </thead>`;
         }
         function renderLargeRow(item) {
             return `
-                <tr>
+                <tr data-idx="${item._idx}">
                     <td class="number sticky-cell-100">${formatBytes(item.size)}</td>
                     <td class="number">${item.ind}</td>
                     <td class="number">${formatBytes(item.allocated)}</td>
@@ -717,26 +777,26 @@
                     <td class="number">${formatNumber(item.curlextents)}</td>
                 </tr>`;
         }
-        function getExtentsTableHeader() {
+        function getExtentsTableHeader(tableId) {
             return `
                 <thead style="position: sticky; top: 0; background: var(--table-header-bg); z-index: 10;">
                     <tr>
-                        <th class="number sticky-header-100">Size</th>
-                        <th class="number">Index</th>
-                        <th class="number">Ndirty</th>
-                        <th class="number">Dirty</th>
-                        <th class="number">Nmuzzy</th>
-                        <th class="number">Muzzy</th>
-                        <th class="number">Nretained</th>
-                        <th class="number">Retained</th>
-                        <th class="number">Ntotal</th>
-                        <th class="number">Total</th>
+                        ${makeSortableTh('Size', 'size', tableId, 'number sticky-header-100')}
+                        ${makeSortableTh('Index', 'ind', tableId)}
+                        ${makeSortableTh('Ndirty', 'ndirty', tableId)}
+                        ${makeSortableTh('Dirty', 'dirty', tableId)}
+                        ${makeSortableTh('Nmuzzy', 'nmuzzy', tableId)}
+                        ${makeSortableTh('Muzzy', 'muzzy', tableId)}
+                        ${makeSortableTh('Nretained', 'nretained', tableId)}
+                        ${makeSortableTh('Retained', 'retained', tableId)}
+                        ${makeSortableTh('Ntotal', 'ntotal', tableId)}
+                        ${makeSortableTh('Total', 'total', tableId)}
                     </tr>
                 </thead>`;
         }
         function renderExtentRow(item) {
             return `
-                <tr>
+                <tr data-idx="${item._idx}">
                     <td class="number sticky-cell-100">${formatBytes(item.size)}</td>
                     <td class="number">${item.ind}</td>
                     <td class="number">${formatNumber(item.ndirty)}</td>
@@ -1151,6 +1211,38 @@
             `;
             }
         }
+        function renderArenaComparisonRow(arena) {
+            const fragColor = arena._fragmentation < 10 ? 'var(--success-color)' :
+                              arena._fragmentation < 25 ? 'var(--warning-color)' : 'var(--error-color)';
+            return `
+                <tr data-idx="${arena._idx}">
+                    <td class="sticky-cell-100">Arena ${arena.id}</td>
+                    <td class="number">${formatBytes(arena._allocated)}</td>
+                    <td class="number">${formatBytes(arena._active)}</td>
+                    <td class="number">${formatBytes(arena._resident)}</td>
+                    <td class="number">${formatBytes(arena._mapped)}</td>
+                    <td class="number">${formatBytes(arena._retained)}</td>
+                    <td class="number" style="color:${fragColor}" title="Formula: (Active - Allocated) / Allocated × 100%">${arena._fragmentation.toFixed(2)}%</td>
+                </tr>`;
+        }
+
+        function enrichArenas(arenas) {
+            return arenas.map((a, i) => {
+                const allocated = a.stats.allocated || 0;
+                const active = a.stats.active || 0;
+                return {
+                    ...a,
+                    _idx: i,
+                    _allocated: allocated,
+                    _active: active,
+                    _resident: a.stats.resident || 0,
+                    _mapped: a.stats.mapped || 0,
+                    _retained: a.stats.retained || 0,
+                    _fragmentation: allocated > 0 ? ((active - allocated) / allocated * 100) : 0,
+                };
+            });
+        }
+
         let selectedArena = 0;
         function renderArenaStats(arenas, rawStats) {
             const container = document.getElementById('arena-stats');
@@ -1168,6 +1260,12 @@
             const arenaBins = parseArenaBins(rawStats);
             const arenaLarge = parseArenaLarge(rawStats);
             const arenaExtents = parseArenaExtents(rawStats);
+            // Store and sort arena comparison data
+            const enriched = enrichArenas(arenas);
+            _tableData['arena-comparison-table'] = enriched;
+            _tableRenderFns['arena-comparison-table'] = renderArenaComparisonRow;
+            const sortedArenaRows = applySortToData('arena-comparison-table', enriched);
+
             // Check if comparison table and dropdown already exist
             let comparisonTable = container.querySelector('#arena-comparison');
             if (!comparisonTable) {
@@ -1177,43 +1275,20 @@
                     <div id="arena-comparison" style="margin-bottom: 1.5rem;">
                         <h3 style="margin: 0.5rem 0;">Arena Comparison</h3>
                         <div style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-                            <table>
+                            <table id="arena-comparison-table">
                                 <thead style="position: sticky; top: 0; z-index: 10;">
                                     <tr>
-                                        <th class="arena-first-header">Arena</th>
-                                        <th class="number arena-header">Allocated</th>
-                                        <th class="number arena-header">Active</th>
-                                        <th class="number arena-header">Resident</th>
-                                        <th class="number arena-header">Mapped</th>
-                                        <th class="number arena-header">Retained</th>
-                                        <th class="number arena-header">Fragmentation</th>
+                                        ${makeSortableTh('Arena', 'id', 'arena-comparison-table', 'arena-first-header')}
+                                        ${makeSortableTh('Allocated', '_allocated', 'arena-comparison-table', 'number arena-header')}
+                                        ${makeSortableTh('Active', '_active', 'arena-comparison-table', 'number arena-header')}
+                                        ${makeSortableTh('Resident', '_resident', 'arena-comparison-table', 'number arena-header')}
+                                        ${makeSortableTh('Mapped', '_mapped', 'arena-comparison-table', 'number arena-header')}
+                                        ${makeSortableTh('Retained', '_retained', 'arena-comparison-table', 'number arena-header')}
+                                        ${makeSortableTh('Fragmentation', '_fragmentation', 'arena-comparison-table', 'number arena-header')}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${arenas.map(arena => {
-                                        const allocated = arena.stats.allocated || 0;
-                                        const active = arena.stats.active || 0;
-                                        const fragmentation = allocated > 0 ? ((active - allocated) / allocated * 100) : 0;
-                                        let fragColor = '';
-                                        if (fragmentation < 10) {
-                                            fragColor = 'color: var(--success-color);';
-                                        } else if (fragmentation < 25) {
-                                            fragColor = 'color: var(--warning-color);';
-                                        } else {
-                                            fragColor = 'color: var(--error-color);';
-                                        }
-                                        return `
-                                        <tr>
-                                            <td class="sticky-cell-100">Arena ${arena.id}</td>
-                                            <td class="number">${formatBytes(allocated)}</td>
-                                            <td class="number">${formatBytes(active)}</td>
-                                            <td class="number">${formatBytes(arena.stats.resident || 0)}</td>
-                                            <td class="number">${formatBytes(arena.stats.mapped || 0)}</td>
-                                            <td class="number">${formatBytes(arena.stats.retained || 0)}</td>
-                                            <td class="number" style="${fragColor}" title="Formula: (Active - Allocated) / Allocated × 100%">${fragmentation.toFixed(2)}%</td>
-                                        </tr>
-                                        `;
-                                    }).join('')}
+                                    ${sortedArenaRows.map(renderArenaComparisonRow).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -1227,38 +1302,9 @@
                     <div id="arena-details"></div>
                 `;
             } else {
-                // Update comparison table values
+                // Update comparison table tbody with current sort applied
                 const tbody = comparisonTable.querySelector('tbody');
-                if (tbody) {
-                    const rows = tbody.querySelectorAll('tr');
-                    rows.forEach((row, idx) => {
-                        if (idx < arenas.length) {
-                            const arena = arenas[idx];
-                            const cells = row.querySelectorAll('td.number');
-                            if (cells.length >= 6) {
-                                const allocated = arena.stats.allocated || 0;
-                                const active = arena.stats.active || 0;
-                                const fragmentation = allocated > 0 ? ((active - allocated) / allocated * 100) : 0;
-                                cells[0].textContent = formatBytes(allocated);
-                                cells[1].textContent = formatBytes(active);
-                                cells[2].textContent = formatBytes(arena.stats.resident || 0);
-                                cells[3].textContent = formatBytes(arena.stats.mapped || 0);
-                                cells[4].textContent = formatBytes(arena.stats.retained || 0);
-                                cells[5].textContent = `${fragmentation.toFixed(2)}%`;
-                                // Update color coding for fragmentation
-                                let fragColor = '';
-                                if (fragmentation < 10) {
-                                    fragColor = 'color: var(--success-color);';
-                                } else if (fragmentation < 25) {
-                                    fragColor = 'color: var(--warning-color);';
-                                } else {
-                                    fragColor = 'color: var(--error-color);';
-                                }
-                                cells[5].style.cssText = fragColor;
-                            }
-                        }
-                    });
-                }
+                if (tbody) tbody.innerHTML = sortedArenaRows.map(renderArenaComparisonRow).join('');
             }
             // Always update the load balancing and thread distribution heatmaps
             const loadBalancingDiv = container.querySelector('#arena-load-balancing');
@@ -1279,6 +1325,13 @@
             const bins = arenaBins[selectedArena] || [];
             const large = arenaLarge[selectedArena] || [];
             const extents = arenaExtents[selectedArena] || [];
+            // Store data for sortable tables (arena details), tagging each item with _idx
+            bins.forEach((b, i) => { b._idx = i; });
+            large.forEach((l, i) => { l._idx = i; });
+            extents.forEach((e, i) => { e._idx = i; });
+            _tableData['bins-table-arena'] = bins; _tableRenderFns['bins-table-arena'] = renderBinRow;
+            _tableData['large-table-arena'] = large; _tableRenderFns['large-table-arena'] = renderLargeRow;
+            _tableData['extents-table-arena'] = extents; _tableRenderFns['extents-table-arena'] = renderExtentRow;
             const targetDiv = container.querySelector('#arena-details') || container;
             targetDiv.innerHTML = `
                 ${renderBinHeatmapSplitView(bins)}
@@ -1296,10 +1349,10 @@
                 ${bins.length > 0 ? `
                     <h3 style="margin: 1rem 0 0.5rem 0;">Bins</h3>
                     <div style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-                        <table>
-                            ${getBinsTableHeader()}
+                        <table id="bins-table-arena">
+                            ${getBinsTableHeader('bins-table-arena')}
                             <tbody>
-                                ${bins.map(renderBinRow).join('')}
+                                ${applySortToData('bins-table-arena', bins).map(renderBinRow).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1307,10 +1360,10 @@
                 ${large.length > 0 ? `
                     <h3 style="margin: 1rem 0 0.5rem 0;">Large Allocations</h3>
                     <div style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-                        <table>
-                            ${getLargeTableHeader()}
+                        <table id="large-table-arena">
+                            ${getLargeTableHeader('large-table-arena')}
                             <tbody>
-                                ${large.map(renderLargeRow).join('')}
+                                ${applySortToData('large-table-arena', large).map(renderLargeRow).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1318,10 +1371,10 @@
                 ${extents.length > 0 ? `
                     <h3 style="margin: 1rem 0 0.5rem 0;">Extents</h3>
                     <div style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-                        <table>
-                            ${getExtentsTableHeader()}
+                        <table id="extents-table-arena">
+                            ${getExtentsTableHeader('extents-table-arena')}
                             <tbody>
-                                ${extents.map(renderExtentRow).join('')}
+                                ${applySortToData('extents-table-arena', extents).map(renderExtentRow).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1779,6 +1832,13 @@
             const bins = arenaBins.global || [];
             const large = arenaLarge.global || [];
             const extents = arenaExtents.global || [];
+            // Store data for sortable tables (global / Allocations tab), tagging each item with _idx
+            bins.forEach((b, i) => { b._idx = i; });
+            large.forEach((l, i) => { l._idx = i; });
+            extents.forEach((e, i) => { e._idx = i; });
+            _tableData['bins-table-alloc'] = bins; _tableRenderFns['bins-table-alloc'] = renderBinRow;
+            _tableData['large-table-alloc'] = large; _tableRenderFns['large-table-alloc'] = renderLargeRow;
+            _tableData['extents-table-alloc'] = extents; _tableRenderFns['extents-table-alloc'] = renderExtentRow;
             container.innerHTML = `
                 ${renderBinHeatmapSplitView(bins)}
                 <h3 style="margin: 1rem 0 0.5rem 0;">Allocations</h3>
@@ -1795,10 +1855,10 @@
                 ${bins.length > 0 ? `
                     <h3 style="margin: 1rem 0 0.5rem 0;">Bins</h3>
                     <div style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-                        <table>
-                            ${getBinsTableHeader()}
+                        <table id="bins-table-alloc">
+                            ${getBinsTableHeader('bins-table-alloc')}
                             <tbody>
-                                ${bins.map(renderBinRow).join('')}
+                                ${applySortToData('bins-table-alloc', bins).map(renderBinRow).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1806,30 +1866,10 @@
                 ${large.length > 0 ? `
                     <h3 style="margin: 1rem 0 0.5rem 0;">Large Allocations</h3>
                     <div style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-                        <table>
-                            <thead style="position: sticky; top: 0; background: var(--table-header-bg); z-index: 10;">
-                                <tr>
-                                    <th class="number sticky-header-100">Size</th>
-                                    <th class="number">Index</th>
-                                    <th class="number">Allocated</th>
-                                    <th class="number">Nmalloc</th>
-                                    <th class="number">Ndalloc</th>
-                                    <th class="number">Nrequests</th>
-                                    <th class="number">Curlextents</th>
-                                </tr>
-                            </thead>
+                        <table id="large-table-alloc">
+                            ${getLargeTableHeader('large-table-alloc')}
                             <tbody>
-                                ${large.map(l => `
-                                    <tr>
-                                        <td class="number sticky-cell-100">${formatBytes(l.size)}</td>
-                                        <td class="number">${l.ind}</td>
-                                        <td class="number">${formatBytes(l.allocated)}</td>
-                                        <td class="number">${formatNumber(l.nmalloc)}</td>
-                                        <td class="number">${formatNumber(l.ndalloc)}</td>
-                                        <td class="number">${formatNumber(l.nrequests)}</td>
-                                        <td class="number">${formatNumber(l.curlextents)}</td>
-                                    </tr>
-                                `).join('')}
+                                ${applySortToData('large-table-alloc', large).map(renderLargeRow).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1837,36 +1877,10 @@
                 ${extents.length > 0 ? `
                     <h3 style="margin: 1rem 0 0.5rem 0;">Extents</h3>
                     <div style="max-height: 400px; overflow-x: auto; overflow-y: auto;">
-                        <table>
-                            <thead style="position: sticky; top: 0; background: var(--table-header-bg); z-index: 10;">
-                                <tr>
-                                    <th class="number sticky-header-100">Size</th>
-                                    <th class="number">Index</th>
-                                    <th class="number">Ndirty</th>
-                                    <th class="number">Dirty</th>
-                                    <th class="number">Nmuzzy</th>
-                                    <th class="number">Muzzy</th>
-                                    <th class="number">Nretained</th>
-                                    <th class="number">Retained</th>
-                                    <th class="number">Ntotal</th>
-                                    <th class="number">Total</th>
-                                </tr>
-                            </thead>
+                        <table id="extents-table-alloc">
+                            ${getExtentsTableHeader('extents-table-alloc')}
                             <tbody>
-                                ${extents.map(e => `
-                                    <tr>
-                                        <td class="number sticky-cell-100">${formatBytes(e.size)}</td>
-                                        <td class="number">${e.ind}</td>
-                                        <td class="number">${formatNumber(e.ndirty)}</td>
-                                        <td class="number">${formatBytes(e.dirty)}</td>
-                                        <td class="number">${formatNumber(e.nmuzzy)}</td>
-                                        <td class="number">${formatBytes(e.muzzy)}</td>
-                                        <td class="number">${formatNumber(e.nretained)}</td>
-                                        <td class="number">${formatBytes(e.retained)}</td>
-                                        <td class="number">${formatNumber(e.ntotal)}</td>
-                                        <td class="number">${formatBytes(e.total)}</td>
-                                    </tr>
-                                `).join('')}
+                                ${applySortToData('extents-table-alloc', extents).map(renderExtentRow).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -2028,11 +2042,13 @@
         function updateSymbolizationVisibility() {
             const outputFormat = document.getElementById('profile-output-format').value;
             const symbolizationContainer = document.getElementById('symbolization-mode-container');
+            const useCountContainer = document.getElementById('use-count-container');
             if (outputFormat === 'Symbolized' || outputFormat === 'Collapsed') {
                 symbolizationContainer.style.display = 'flex';
             } else {
                 symbolizationContainer.style.display = 'none';
             }
+            useCountContainer.style.display = outputFormat === 'Collapsed' ? 'flex' : 'none';
         }
 
         let profileAbortController = null;
@@ -2063,9 +2079,13 @@
             try {
                 // Build settings based on selection (values must be lowercase)
                 const outputFormatLower = outputFormat.toLowerCase();
+                const useCount = document.getElementById('profile-collapsed-use-count').checked;
                 let settings = `jemalloc_profile_output_format = '${outputFormatLower}'`;
                 if (outputFormat === 'Symbolized' || outputFormat === 'Collapsed') {
                     settings += `, jemalloc_profile_symbolize_with_inline = ${symbolizeWithInline ? 1 : 0}`;
+                }
+                if (outputFormat === 'Collapsed') {
+                    settings += `, jemalloc_profile_collapsed_use_count = ${useCount ? 1 : 0}`;
                 }
                 const query = `SELECT * FROM system.jemalloc_profile SETTINGS ${settings}`;
                 let url = `${host}?default_format=TabSeparated&query=${encodeURIComponent(query)}`;
@@ -2098,7 +2118,7 @@
                 resultDiv.innerHTML = `
                     <div class="metric-card" style="margin-top: 1rem;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                            <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? (symbolizeWithInline ? ' - with inline' : ' - no inline') : ''})</div>
+                            <div class="metric-label">Profile Output (${outputFormat}${(outputFormat === 'Symbolized' || outputFormat === 'Collapsed') ? (symbolizeWithInline ? ' - with inline' : ' - no inline') : ''}${outputFormat === 'Collapsed' && useCount ? ' - count' : ''})</div>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 ${visualizeButton}
                                 <button class="btn btn-secondary" onclick="copyProfileOutput()" style="padding: 0.4rem 1rem; font-size: 0.85rem;">Copy All</button>
@@ -2230,18 +2250,26 @@
                             </select>
                         </div>
                         <div id="symbolization-mode-container" style="display: flex; flex-direction: column; gap: 0.3rem;">
-                            <label style="font-size: 0.85rem; font-weight: 600; color: var(--color);">Inline Frames</label>
-                            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; user-select: none; height: 38px; padding: 0 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background);">
+                            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; user-select: none; height: 38px;">
                                 <span class="toggle-switch">
-                                    <input type="checkbox" id="profile-symbolize-with-inline" onchange="document.getElementById('inline-warning').style.display = this.checked ? '' : 'none'">
+                                    <input type="checkbox" id="profile-symbolize-with-inline" checked onchange="document.getElementById('inline-warning').style.display = this.checked ? 'none' : ''">
                                     <span class="toggle-slider"></span>
                                 </span>
                                 Symbolize with inline
                             </label>
                         </div>
+                        <div id="use-count-container" style="display: flex; flex-direction: column; gap: 0.3rem;">
+                            <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.9rem; user-select: none; height: 38px;">
+                                <span class="toggle-switch">
+                                    <input type="checkbox" id="profile-collapsed-use-count">
+                                    <span class="toggle-slider"></span>
+                                </span>
+                                Count allocations (not bytes)
+                            </label>
+                        </div>
                         <button id="get-profile-btn" class="btn btn-primary" onclick="getProfile()" style="padding: 0.5rem 1.5rem; height: 38px;">Get Profile</button>
                     </div>
-                    <div id="inline-warning" style="display: none; margin-bottom: 0.5rem; font-size: 0.82rem; color: var(--warning-color);">&#9888; Symbolizing with inline frames is significantly slower.</div>
+                    <div id="inline-warning" style="display: none; margin-bottom: 0.5rem; font-size: 0.82rem; color: var(--warning-color);">&#9888; Inline frames are disabled. The profile will be produced faster but may lose precision.</div>
                     <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
                         Retrieves the jemalloc heap profile with the selected output format. Works with both global and per-query profiling.
                     </p>
@@ -2680,7 +2708,8 @@ SETTINGS jemalloc_enable_profiler = 1,
             }
 
             // Generate the flame graph SVG with full viewport width
-            const svg = generateFlameGraphSVG(collapsedData, window.innerWidth);
+            const useCount = document.getElementById('profile-collapsed-use-count').checked;
+            const svg = generateFlameGraphSVG(collapsedData, window.innerWidth, useCount ? 'allocations' : 'bytes');
 
             // Download the SVG file
             const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -2694,14 +2723,13 @@ SETTINGS jemalloc_enable_profiler = 1,
             URL.revokeObjectURL(url);
         }
 
-        function generateFlameGraphSVG(collapsedData, imagewidth = 1200) {
+        function generateFlameGraphSVG(collapsedData, imagewidth = 1200, countname = 'bytes') {
             // Configuration
             const fonttype = "Verdana";
             const frameheight = 16;
             const fontsize = 12;
             const fontwidth = 0.59;
             const minwidth = 0.1;
-            const countname = "bytes";
             const nametype = "Function:";
             const xpad = 10;
             const framepad = 1;
