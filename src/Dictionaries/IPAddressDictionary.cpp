@@ -1049,6 +1049,13 @@ static auto keyViewGetter()
 {
     return [](const Columns & columns, const std::vector<DictionaryAttribute> & dictonary_key_attributes)
     {
+        const auto & key_attribute = dictonary_key_attributes.front();
+        if (!isString(key_attribute.type))
+            throw Exception(ErrorCodes::BAD_ARGUMENTS,
+                "Key attribute '{}' of ip_trie dictionary must be of type String, got {}",
+                key_attribute.name,
+                key_attribute.type->getName());
+
         auto column = ColumnString::create();
         const auto & key_ip_column = assert_cast<const KeyColumnType &>(*columns.front());
         const auto & key_mask_column = assert_cast<const ColumnVector<UInt8> &>(*columns.back());
@@ -1065,7 +1072,7 @@ static auto keyViewGetter()
             column->insertData(buffer, str_len);
         }
         return ColumnsWithTypeAndName{
-            ColumnWithTypeAndName(std::move(column), std::make_shared<DataTypeString>(), dictonary_key_attributes.front().name)};
+            ColumnWithTypeAndName(std::move(column), std::make_shared<DataTypeString>(), key_attribute.name)};
     };
 }
 
