@@ -738,6 +738,7 @@ TEST(TarArchiveReaderAndWriterTest, EmptyFileWithKnownSize)
     /// when data is actually written. The important thing is that finalizing the empty
     /// file's buffer does not trigger any undefined behavior (MSan).
     auto reader = createArchiveReader(archive_path);
+    ASSERT_FALSE(reader->fileExists("empty.txt"));
     ASSERT_TRUE(reader->fileExists("non_empty.txt"));
     {
         auto in = reader->readFile("non_empty.txt", /*throw_on_not_found=*/true);
