@@ -1,7 +1,6 @@
 #include <type_traits>
 
 #include <base/range.h>
-#include <Common/logger_useful.h>
 
 #include <Formats/JSONExtractTree.h>
 #include <Formats/FormatFactory.h>
@@ -17,6 +16,7 @@
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnTuple.h>
 #include <Columns/ColumnObject.h>
+#include <Columns/ColumnNullable.h>
 
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeEnum.h>
@@ -27,19 +27,19 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypesNumber.h>
-#include <DataTypes/NestedUtils.h>
+#include <DataTypes/DataTypeObject.h>
 
 #include <Functions/IFunction.h>
 #include <Functions/FunctionFactory.h>
 #include <Common/JSONParsers/DummyJSONParser.h>
 #include <Common/JSONParsers/SimdJSONParser.h>
 #include <Common/JSONParsers/RapidJSONParser.h>
-#include <Common/JSONParsers/ColumnObjectParser.h>
 #include <Functions/FunctionHelpers.h>
 #include <Common/FunctionDocumentation.h>
 
 #include <Interpreters/Context.h>
-#include <IO/WriteBufferFromVector.h>
+#include <Interpreters/castColumn.h>
+#include <IO/WriteBufferFromString.h>
 #include "config.h"
 
 
@@ -92,7 +92,8 @@ public:
     class Executor
     {
     public:
-        static ColumnPtr run(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count, const FormatSettings & format_settings)
+        static ColumnPtr run(const ColumnsWithTypeAndName & arguments, const DataTypePtr & result_type, size_t input_rows_count,
+                            const FormatSettings & format_settings)
         {
             MutableColumnPtr to{result_type->createColumn()};
             to->reserve(input_rows_count);
@@ -105,14 +106,14 @@ public:
 
             if (!isString(first_column.type) && !is_object_input)
                 throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                                "The first argument of function {} should be a string containing JSON or JSON object, illegal type: "
+                                "The first argument of function {} should be a string containing JSON or a JSON object, illegal type: "
                                 "{}", String(Name::name), first_column.type->getName());
 
-            /// DIRECT PARSING: Use ColumnObjectParser for ColumnObject inputs.
+            /// For JSON/Object type input: use subcolumn extraction (constant string keys only).
             if (is_object_input)
                 return runForObjectColumn<Name, Impl>(arguments, result_type, input_rows_count, format_settings);
 
-            /// String input: use existing parser pipeline.
+            /// String input: parse JSON and extract values.
             const ColumnPtr & arg_json = first_column.column;
             const auto * col_json_const = typeid_cast<const ColumnConst *>(arg_json.get());
             const auto * col_json_string
@@ -181,7 +182,12 @@ public:
         }
 
     private:
-        /// Helper to process ColumnObject directly with ColumnObjectParser.
+        /// Helper to process ColumnObject directly using subcolumns.
+        /// Only supports constant string path keys (no indexes or non-const keys).
+        /// - Extract literal subcolumn (json.path) for scalar values
+        /// - Extract subobject subcolumn (json.^`path`) for nested objects
+        /// - Merge them row-by-row, preferring literal over subobject
+        /// - Cast the result to the function's return type
         template <typename TName, template <typename> typename TImpl>
         static ColumnPtr runForObjectColumn(
             const ColumnsWithTypeAndName & arguments,
@@ -189,10 +195,9 @@ public:
             size_t input_rows_count,
             const FormatSettings & format_settings)
         {
-            MutableColumnPtr to{result_type->createColumn()};
-            to->reserve(input_rows_count);
-
             const auto & first_column = arguments[0];
+            const auto & data_type_object = assert_cast<const DataTypeObject &>(*first_column.type);
+
             const auto * col_const = typeid_cast<const ColumnConst *>(first_column.column.get());
             const auto * col_object = typeid_cast<const ColumnObject *>(
                 col_const ? col_const->getDataColumnPtr().get() : first_column.column.get());
@@ -200,64 +205,157 @@ public:
             if (!col_object)
                 throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Invalid column type for Object parsing");
 
-            size_t num_index_arguments = TImpl<ColumnObjectParser>::getNumberOfIndexArguments(arguments);
-            std::vector<Move> moves = prepareMoves(TName::name, arguments, 1, num_index_arguments);
+            /// Determine number of path arguments (parser type doesn't matter for this).
+            size_t num_index_arguments = TImpl<DummyJSONParser>::getNumberOfIndexArguments(arguments);
 
-            TImpl<ColumnObjectParser> impl;
-            if constexpr (Preparable<TImpl<ColumnObjectParser>>)
-                impl.prepare(TName::name, arguments, result_type);
-
-            using Element = typename ColumnObjectParser::Element;
-
-            /// Build a dotted path from consecutive ConstKey moves for direct flat-key lookup.
-            /// ColumnObject stores nested keys in flat form (e.g. "x.y.z") so step-by-step
-            /// navigation via performMoves would fail. Instead, join all keys into one path.
-            bool all_const_keys = true;
-            String flat_path;
-            for (const auto & move : moves)
+            /// Build a dotted path from constant string key arguments only.
+            /// During constant folding (scalar queries without tables), arguments may not be
+            /// wrapped in ColumnConst even if they're effectively constant (single-row columns).
+            String path;
+            for (size_t i = 1; i <= num_index_arguments; ++i)
             {
-                if (move.type != MoveType::ConstKey)
+                const auto & arg = arguments[i];
+                if (!isString(arg.type) || !arg.column)
+                    throw Exception(
+                        ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+                        "Function {} with JSON type input supports only constant string path arguments",
+                        String(TName::name));
+
+                String key;
+                if (const auto * col_const_arg = typeid_cast<const ColumnConst *>(arg.column.get()))
+                    key = col_const_arg->getValue<String>();
+                else if (input_rows_count <= 1 && arg.column->size() >= 1)
                 {
-                    all_const_keys = false;
-                    break;
-                }
-                if (!flat_path.empty())
-                    flat_path += '.';
-                flat_path += move.key;
-            }
-
-            /// Extract last key segment for functions like JSONKey that need it.
-            std::string_view last_key;
-            if (all_const_keys && !moves.empty())
-                last_key = moves.back().key;
-
-            String error;
-            for (size_t i = 0; i < input_rows_count; ++i)
-            {
-                Element document = col_const ? Element(*col_object, 0) : Element(*col_object, i);
-
-                bool added_to_column = false;
-                Element element;
-
-                if (all_const_keys)
-                {
-                    if (flat_path.empty())
-                        added_to_column = impl.insertResultToColumn(*to, document, last_key, format_settings, error);
-                    else if (document.getObject().find(flat_path, element))
-                        added_to_column = impl.insertResultToColumn(*to, element, last_key, format_settings, error);
+                    /// Constant folding: single-row column that isn't wrapped in ColumnConst.
+                    key = (*arg.column)[0].safeGet<String>();
                 }
                 else
                 {
-                    std::string_view row_last_key;
-                    if (performMoves<ColumnObjectParser, case_insensitive>(arguments, i, document, moves, element, row_last_key))
-                        added_to_column = impl.insertResultToColumn(*to, element, row_last_key, format_settings, error);
+                    throw Exception(
+                        ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
+                        "Function {} with JSON type input supports only constant string path arguments",
+                        String(TName::name));
                 }
 
-                if (!added_to_column)
-                    to->insertDefault();
+                if (!path.empty())
+                    path += '.';
+                path += key;
             }
 
-            return to;
+            auto insertManyDefaults = [&]()
+            {
+                MutableColumnPtr to{result_type->createColumn()};
+                to->insertManyDefaults(input_rows_count);
+                return to;
+            };
+
+            /// Expand ColumnConst to full column if needed.
+            ColumnPtr object_column = col_const ? col_const->convertToFullColumn() : first_column.column;
+
+            /// Root case (no path specified) return defaults for most functions.
+            if (path.empty())
+                insertManyDefaults();
+
+            /// Extract literal subcolumn (json.path returns the scalar value at that path).
+            auto literal_type = data_type_object.tryGetSubcolumnType(path);
+            ColumnPtr literal_subcolumn;
+            if (literal_type)
+                literal_subcolumn = data_type_object.getSubcolumn(path, object_column);
+
+            /// Extract subobject subcolumn (json.^`path` returns nested object at that path).
+            String sub_object_name = "^`" + path + "`";
+            auto sub_object_type = data_type_object.tryGetSubcolumnType(sub_object_name);
+            ColumnPtr sub_object_subcolumn;
+            if (sub_object_type)
+                sub_object_subcolumn = data_type_object.getSubcolumn(sub_object_name, object_column);
+
+            /// If neither subcolumn exists, the path is absent thus return defaults.
+            if (!literal_subcolumn && !sub_object_subcolumn)
+                insertManyDefaults();
+
+            /// Merge literal and subobject subcolumns (same logic as `getObjectElement' in tupleElement.cpp):
+            /// For each row: prefer literal (scalar) value, if absent, use subobject (nested JSON).
+            ColumnPtr merged;
+            DataTypePtr merged_type;
+
+            if (!sub_object_subcolumn
+                || sub_object_subcolumn->getNumberOfDefaultRows() == sub_object_subcolumn->size())
+            {
+                /// No nested subobject at this path just use the literal subcolumn.
+                merged = literal_subcolumn;
+                merged_type = literal_type;
+            }
+            else if (!literal_subcolumn
+                     || literal_subcolumn->getNumberOfDefaultRows() == literal_subcolumn->size())
+            {
+                /// No literal value at this path just use the subobject subcolumn.
+                merged = sub_object_subcolumn;
+                merged_type = sub_object_type;
+            }
+            else
+            {
+                /// Both exist: merge row-by-row.
+                auto casted_sub_object = castColumn({sub_object_subcolumn, sub_object_type, ""}, literal_type);
+                auto result_col = literal_type->createColumn();
+                for (size_t i = 0; i < input_rows_count; ++i)
+                {
+                    if (!literal_subcolumn->isDefaultAt(i))
+                        result_col->insertFrom(*literal_subcolumn, i);
+                    else if (!sub_object_subcolumn->isDefaultAt(i))
+                        result_col->insertFrom(*casted_sub_object, i);
+                    else
+                        result_col->insertDefault();
+                }
+                merged = std::move(result_col);
+                merged_type = literal_type;
+            }
+
+            /// For JSONExtractRaw: serialize each value as a JSON string
+            /// using ISerialization::serializeTextJSON.
+            constexpr bool is_extract_raw = std::string_view(TName::name) == std::string_view("JSONExtractRaw")
+                        || std::string_view(TName::name) == std::string_view("JSONExtractRawCaseInsensitive");
+
+            if constexpr (is_extract_raw)
+            {
+                auto result_col = ColumnString::create();
+                auto serialization = merged_type->getDefaultSerialization();
+                for (size_t i = 0; i < input_rows_count; ++i)
+                {
+                    if (merged->isDefaultAt(i))
+                        result_col->insertDefault();
+                    else
+                    {
+                        WriteBufferFromOwnString buf;
+                        serialization->serializeTextJSON(*merged, i, buf, format_settings);
+                        result_col->insert(buf.str());
+                    }
+                }
+                return result_col;
+            }
+            else
+            {
+                /// Cast merged column to the function's return type.
+                /// Use accurateCastOrNull to get NULL for failed casts then
+                /// replace NULLs with defaults (JSONExtract functions return non-nullable types).
+                auto nullable_type = makeNullable(result_type);
+                auto casted = castColumnAccurateOrNull({merged, merged_type, ""}, nullable_type);
+
+                if (const auto * nullable_col = typeid_cast<const ColumnNullable *>(casted.get()))
+                {
+                    const auto & null_map = nullable_col->getNullMapData();
+                    const auto & nested = nullable_col->getNestedColumn();
+                    auto result_col = result_type->createColumn();
+                    for (size_t i = 0; i < input_rows_count; ++i)
+                    {
+                        if (null_map[i])
+                            result_col->insertDefault();
+                        else
+                            result_col->insertFrom(nested, i);
+                    }
+                    return result_col;
+                }
+                return casted;
+            }
         }
     };
 

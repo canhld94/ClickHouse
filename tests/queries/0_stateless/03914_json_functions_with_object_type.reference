@@ -10,59 +10,38 @@ Test 3: JSONExtractUInt
 1	30	30
 2	25	25
 3	35	35
-Test 4: JSONExtractRaw (array access)
+Test 4: JSONExtractRaw
 1	[85,90,95]	[85,90,95]
 2	[75,80,88]	[75,80,88]
 3	[92,88,90]	[92,88,90]
-Test 5: JSONExtractInt (nested array)
-1	85	85
-2	75	75
-3	92	92
-Test 6: JSONHas
-1	1	1	0	0
-2	1	1	0	0
-3	1	1	0	0
-Test 7: JSONLength
-1	3	3	3	3
-2	3	3	3	3
-3	3	3	3	3
-Test 8: JSONType
-1	Object	Object	String	String	Array	Array
-2	Object	Object	String	String	Array	Array
-3	Object	Object	String	String	Array	Array
-Test 9: JSONExtract (generic with type)
+Test 5: JSONExtract (generic with type)
 1	30	30
 2	25	25
 3	35	35
-Test 10: isValidJSON
-1	1	1
-2	1	1
-3	1	1
-Test 11: Nested path (dotted path optimization)
+Test 6: JSONExtractFloat
+3.14159
+Test 7: JSONExtractBool
+1
+Test 8: Nested path extraction
 42
 99
-Test 12: Missing path returns default
+Test 9: Missing path returns default
 0	
-0	
-0	
-Test 13: Shared data path (max_dynamic_paths overflow)
-3	5
-30	50
-Test 14: ColumnConst JSON object
+Test 10: ColumnConst JSON object
 777
-Test 15: JSONExtractFloat on Object
-3.14159
-Test 16: Fallback path (non-const key)
-30
-25
-35
-Test 17: FunctionToSubcolumnsPass basic
+Test 11: JSONExtractRaw with nested object
+"Hello"
+{"b":"World"}
+Test 14: Date type extraction as String
+2020-01-01
+Test 15: Index-based access should error
+Test 16: Non-const keys should error
+Test 12: FunctionToSubcolumnsPass optimization
 42
 hello
 3.14
 1
 42
-42
-Test 18: FunctionToSubcolumnsPass nested path
+Test 13: FunctionToSubcolumnsPass nested path
 100
 All tests completed

@@ -12,7 +12,6 @@
 #else
 #include <Common/JSONParsers/DummyJSONParser.h>
 #endif
-#include <Common/JSONParsers/ColumnObjectParser.h>
 
 #include <Columns/ColumnArray.h>
 #include <Columns/ColumnDynamic.h>
@@ -2495,12 +2494,5 @@ template bool tryGetNumericValueFromJSONElement<DummyJSONParser, Float64>(Float6
 template bool tryGetNumericValueFromJSONElement<DummyJSONParser, Int64>(Int64 & value, const DummyJSONParser::Element & element, bool convert_bool_to_number, bool allow_type_conversion, String & error);
 template bool tryGetNumericValueFromJSONElement<DummyJSONParser, UInt64>(UInt64 & value, const DummyJSONParser::Element & element, bool convert_bool_to_number, bool allow_type_conversion, String & error);
 #endif
-
-// Explicit template instantiations for ColumnObjectParser
-template void jsonElementToString<ColumnObjectParser>(const ColumnObjectParser::Element & element, WriteBuffer & buf, const FormatSettings & format_settings);
-template std::unique_ptr<JSONExtractTreeNode<ColumnObjectParser>> buildJSONExtractTree<ColumnObjectParser>(const DataTypePtr & type, const char * source_for_exception_message);
-template bool tryGetNumericValueFromJSONElement<ColumnObjectParser, Float64>(Float64 & value, const ColumnObjectParser::Element & element, bool convert_bool_to_number, bool allow_type_conversion, String & error);
-template bool tryGetNumericValueFromJSONElement<ColumnObjectParser, Int64>(Int64 & value, const ColumnObjectParser::Element & element, bool convert_bool_to_number, bool allow_type_conversion, String & error);
-template bool tryGetNumericValueFromJSONElement<ColumnObjectParser, UInt64>(UInt64 & value, const ColumnObjectParser::Element & element, bool convert_bool_to_number, bool allow_type_conversion, String & error);
 
 }
