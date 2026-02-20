@@ -369,7 +369,7 @@ void StatementGenerator::generateLiteralValue(RandomGenerator & rg, const bool c
         }
         this->depth--;
     }
-    else if (nopt < 20 && (this->next_type_mask & allow_map) != 0)
+    else if (nopt < 20 && complex && (this->next_type_mask & allow_map) != 0)
     {
         /// Generate a few map key/value pairs
         const uint32_t nvalues = std::min(this->fc.max_width - this->width, rg.randomInt<uint32_t>(0, 4));
