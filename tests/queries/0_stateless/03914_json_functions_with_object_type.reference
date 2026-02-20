@@ -34,12 +34,6 @@ Test 11: JSONExtractRaw with nested object
 {"b":"World"}
 Test 12: Date type extraction as String
 2020-01-01
-Test 13: FunctionToSubcolumnsPass optimization
+Test 15: Type hint path with conflicting subobject
 42
-hello
-3.14
-1
-42
-Test 14: FunctionToSubcolumnsPass nested path
-100
 All tests completed

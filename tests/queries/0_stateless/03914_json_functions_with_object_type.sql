@@ -122,31 +122,8 @@ INSERT INTO json_date VALUES ('{"date": "2020-01-01"}');
 SELECT JSONExtract(data, 'date', 'String') FROM json_date;
 DROP TABLE json_date;
 
--- ==========================================================================
--- Part 5: FunctionToSubcolumnsPass optimization tests
--- Verify that JSONExtract* functions read subcolumns directly from storage.
--- ==========================================================================
-
-SELECT 'Test 13: FunctionToSubcolumnsPass optimization';
-DROP TABLE IF EXISTS t_json_subcolumns;
-CREATE TABLE t_json_subcolumns (id UInt64, data JSON) ENGINE = MergeTree ORDER BY id;
-INSERT INTO t_json_subcolumns VALUES (1, '{"a": 42, "b": "hello", "c": 3.14, "d": true}');
-
-SET optimize_functions_to_subcolumns = 1;
-
-SELECT JSONExtractInt(data, 'a') FROM t_json_subcolumns;
-SELECT JSONExtractString(data, 'b') FROM t_json_subcolumns;
-SELECT JSONExtractFloat(data, 'c') FROM t_json_subcolumns;
-SELECT JSONExtractBool(data, 'd') FROM t_json_subcolumns;
-SELECT JSONExtract(data, 'a', 'Int64') FROM t_json_subcolumns;
-
-SELECT 'Test 14: FunctionToSubcolumnsPass nested path';
-DROP TABLE IF EXISTS t_json_nested;
-CREATE TABLE t_json_nested (data JSON) ENGINE = MergeTree ORDER BY tuple();
-INSERT INTO t_json_nested VALUES ('{"nested": {"x": 100}}');
-SELECT JSONExtractInt(data, 'nested', 'x') FROM t_json_nested;
-
-DROP TABLE t_json_nested;
-DROP TABLE t_json_subcolumns;
+-- Type hint with subobject: castColumn on subobject to typed literal type must not fail.
+SELECT 'Test 15: Type hint path with conflicting subobject';
+SELECT JSONExtract('{"a" : 42, "a.b" : 42}'::JSON(a UInt32), 'a', 'String');
 
 SELECT 'All tests completed';

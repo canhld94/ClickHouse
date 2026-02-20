@@ -223,7 +223,9 @@ public:
 
                 String key;
                 if (const auto * col_const_arg = typeid_cast<const ColumnConst *>(arg.column.get()))
+                {
                     key = col_const_arg->getValue<String>();
+                }
                 else if (input_rows_count <= 1 && !arg.column->empty())
                 {
                     /// Constant folding: single-row column that isn't wrapped in ColumnConst.
@@ -242,119 +244,92 @@ public:
                 path += key;
             }
 
-            auto insertManyDefaults = [&]()
-            {
-                MutableColumnPtr to{result_type->createColumn()};
-                to->insertManyDefaults(input_rows_count);
-                return to;
-            };
-
             /// Expand ColumnConst to full column if needed.
             ColumnPtr object_column = col_const ? col_const->convertToFullColumn() : first_column.column;
 
             /// Root case (no path specified) return defaults for most functions.
             if (path.empty())
-                insertManyDefaults();
+                return result_type->createColumnConstWithDefaultValue(input_rows_count)->convertToFullColumnIfConst();
 
             /// Extract literal subcolumn (json.path returns the scalar value at that path).
-            auto literal_type = data_type_object.tryGetSubcolumnType(path);
-            ColumnPtr literal_subcolumn;
-            if (literal_type)
-                literal_subcolumn = data_type_object.getSubcolumn(path, object_column);
+            auto literal_type = data_type_object.getSubcolumnType(path);
+            auto literal_subcolumn = data_type_object.getSubcolumn(path, object_column);
 
-            /// Extract subobject subcolumn (json.^`path` returns nested object at that path).
-            String sub_object_name = "^`" + path + "`";
-            auto sub_object_type = data_type_object.tryGetSubcolumnType(sub_object_name);
-            ColumnPtr sub_object_subcolumn;
-            if (sub_object_type)
-                sub_object_subcolumn = data_type_object.getSubcolumn(sub_object_name, object_column);
-
-            /// If neither subcolumn exists, the path is absent thus return defaults.
-            if (!literal_subcolumn && !sub_object_subcolumn)
-                insertManyDefaults();
-
-            /// Merge literal and subobject subcolumns (same logic as `getObjectElement' in tupleElement.cpp):
-            /// For each row: prefer literal (scalar) value, if absent, use subobject (nested JSON).
             ColumnPtr merged;
             DataTypePtr merged_type;
 
-            if (!sub_object_subcolumn
-                || sub_object_subcolumn->getNumberOfDefaultRows() == sub_object_subcolumn->size())
+            /// When the path has a type hint (literal_type is not Dynamic), the subobject may not be convertible to that type.
+            /// For typed paths we skip the subobject merge and use only the literal subcolumn.
+            if (literal_type && !isDynamic(literal_type))
             {
-                /// No nested subobject at this path just use the literal subcolumn.
                 merged = literal_subcolumn;
                 merged_type = literal_type;
             }
-            else if (!literal_subcolumn
-                     || literal_subcolumn->getNumberOfDefaultRows() == literal_subcolumn->size())
-            {
-                /// No literal value at this path just use the subobject subcolumn.
-                merged = sub_object_subcolumn;
-                merged_type = sub_object_type;
-            }
             else
             {
-                /// Both exist: merge row-by-row.
-                auto casted_sub_object = castColumn({sub_object_subcolumn, sub_object_type, ""}, literal_type);
-                auto result_col = literal_type->createColumn();
-                for (size_t i = 0; i < input_rows_count; ++i)
+                /// Extract subobject subcolumn (json.^`path` returns nested object at that path).
+                String sub_object_name = "^`" + path + "`";
+                auto sub_object_type = data_type_object.getSubcolumnType(sub_object_name);
+                ColumnPtr sub_object_subcolumn = data_type_object.getSubcolumn(sub_object_name, object_column);
+
+                /// If neither subcolumn exists, the path is absent thus return defaults.
+                if (!literal_subcolumn && !sub_object_subcolumn)
+                    return result_type->createColumnConstWithDefaultValue(input_rows_count)->convertToFullColumnIfConst();
+
+                /// Merge literal and subobject subcolumns (same logic as `getObjectElement' in tupleElement.cpp):
+                /// For each row: prefer literal (scalar) value, if absent, use subobject (nested JSON).
+                if (sub_object_subcolumn->getNumberOfDefaultRows() == sub_object_subcolumn->size())
                 {
-                    if (!literal_subcolumn->isDefaultAt(i))
-                        result_col->insertFrom(*literal_subcolumn, i);
-                    else if (!sub_object_subcolumn->isDefaultAt(i))
-                        result_col->insertFrom(*casted_sub_object, i);
-                    else
-                        result_col->insertDefault();
+                    /// No nested subobject at this path (only literal exists).
+                    merged = literal_subcolumn;
+                    merged_type = literal_type;
                 }
-                merged = std::move(result_col);
-                merged_type = literal_type;
+                else
+                {
+                    /// Both exist: merge row-by-row.
+                    auto casted_sub_object = castColumn({sub_object_subcolumn, sub_object_type, ""}, literal_type);
+                    auto result_col = literal_type->createColumn();
+                    for (size_t i = 0; i < input_rows_count; ++i)
+                    {
+                        if (!literal_subcolumn->isDefaultAt(i))
+                            result_col->insertFrom(*literal_subcolumn, i);
+                        else if (!sub_object_subcolumn->isDefaultAt(i))
+                            result_col->insertFrom(*casted_sub_object, i);
+                        else
+                            result_col->insertDefault();
+                    }
+                    merged = std::move(result_col);
+                    merged_type = literal_type;
+                }
             }
 
             /// For JSONExtractRaw: serialize each value as a JSON string
-            /// using ISerialization::serializeTextJSON.
             constexpr bool is_extract_raw = std::string_view(TName::name) == std::string_view("JSONExtractRaw")
                         || std::string_view(TName::name) == std::string_view("JSONExtractRawCaseInsensitive");
 
             if constexpr (is_extract_raw)
             {
-                auto result_col = ColumnString::create();
+                auto raw_col = ColumnString::create();
                 auto serialization = merged_type->getDefaultSerialization();
                 for (size_t i = 0; i < input_rows_count; ++i)
                 {
                     if (merged->isDefaultAt(i))
-                        result_col->insertDefault();
+                    {
+                        raw_col->insertDefault();
+                    }
                     else
                     {
                         WriteBufferFromOwnString buf;
                         serialization->serializeTextJSON(*merged, i, buf, format_settings);
-                        result_col->insert(buf.str());
+                        raw_col->insert(buf.str());
                     }
                 }
-                return result_col;
+                return raw_col;
             }
             else
             {
-                /// Cast merged column to the function's return type.
-                /// Use accurateCastOrNull to get NULL for failed casts then
-                /// replace NULLs with defaults (JSONExtract functions return non-nullable types).
-                auto nullable_type = makeNullable(result_type);
-                auto casted = castColumnAccurateOrNull({merged, merged_type, ""}, nullable_type);
-
-                if (const auto * nullable_col = typeid_cast<const ColumnNullable *>(casted.get()))
-                {
-                    const auto & null_map = nullable_col->getNullMapData();
-                    const auto & nested = nullable_col->getNestedColumn();
-                    auto result_col = result_type->createColumn();
-                    for (size_t i = 0; i < input_rows_count; ++i)
-                    {
-                        if (null_map[i])
-                            result_col->insertDefault();
-                        else
-                            result_col->insertFrom(nested, i);
-                    }
-                    return result_col;
-                }
-                return casted;
+                auto casted = castColumnAccurateOrNull({merged, merged_type, ""}, result_type);
+                return result_type->isNullable() ? casted : removeNullable(casted);
             }
         }
     };

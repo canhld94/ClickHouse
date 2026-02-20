@@ -241,72 +241,6 @@ void optimizeTupleOrVariantElement(QueryTreeNodePtr & node, FunctionNode & funct
     node = std::make_shared<ColumnNode>(column, ctx.column_source);
 }
 
-/// Rewrites JSONExtract*(json_col, 'a', 'b', ...) to read the literal subcolumn (json_col.a.b)
-/// directly from storage, providing I/O optimization by avoiding a full JSON column read.
-/// The second pass adds a CAST to the function's result type (e.g. Int64).
-///
-/// We only read the literal subcolumn here (not the subobject subcolumn) because the typed
-/// extraction functions (JSONExtractInt/String/Float/Bool) return the default value (0, "", etc.)
-/// for paths that contain nested objects: which is exactly what happens when the literal
-/// subcolumn is NULL and gets cast to the target type. JSONExtractRaw is NOT registered
-/// for this optimization because it needs the subobject subcolumn for nested object serialization;
-/// its full literal+subobject merge happens at runtime in runForObjectColumn(..).
-///
-/// @tparam has_trailing_type_arg TRUE for JSONExtract(col, path..., 'TypeName') where the last
-///                               argument is a type name and must be excluded from the path.
-///                               FALSE for JSONExtractInt[UInt|Float|Bool|String] where all
-///                               arguments after the column are path keys.
-template <bool has_trailing_type_arg = false>
-void optimizeJSONExtractToSubcolumn(QueryTreeNodePtr & node, FunctionNode & function_node, ColumnContext & ctx)
-{
-    auto & args = function_node.getArguments().getNodes();
-
-    constexpr size_t min_args = has_trailing_type_arg ? 3 : 2;
-    if (args.size() < min_args)
-        return;
-
-    /// Build a dotted path from consecutive constant string arguments.
-    const size_t path_end = has_trailing_type_arg ? args.size() - 1 : args.size();
-    String path;
-    for (size_t i = 1; i < path_end; ++i)
-    {
-        const auto * const_node = args[i]->as<ConstantNode>();
-        if (!const_node || const_node->getValue().getType() != Field::Types::String)
-            return;
-        const auto & key = const_node->getValue().safeGet<String>();
-        if (!path.empty())
-            path += ".";
-        path += key;
-    }
-    if (path.empty())
-        return;
-
-    const auto & data_type_object = assert_cast<const DataTypeObject &>(*ctx.column.type);
-
-    /// Check that the literal subcolumn exists in the type.
-    auto literal_type = data_type_object.tryGetSubcolumnType(path);
-    if (!literal_type)
-        return;
-
-    auto * table_node = ctx.column_source->as<TableNode>();
-    if (!table_node)
-        return;
-    const auto & storage_snapshot = table_node->getStorageSnapshot();
-
-    /// Check that the literal subcolumn is available in the storage.
-    String literal_col_name = ctx.column.name + "." + path;
-    if (sourceHasColumn(ctx.column_source, literal_col_name))
-        return;
-    if (!storage_snapshot->tryGetColumn(
-            GetColumnsOptions(GetColumnsOptions::All).withSubcolumns(), literal_col_name).has_value())
-        return;
-
-    /// Replace the function call with a direct literal subcolumn read.
-    /// The second pass will add a CAST to the function's result type.
-    NameAndTypePair literal_column{literal_col_name, literal_type};
-    node = std::make_shared<ColumnNode>(literal_column, ctx.column_source);
-}
-
 void optimizeDistinctJSONPaths(QueryTreeNodePtr & node, FunctionNode &, ColumnContext & ctx)
 {
     /// Replace distinctJSONPaths(json) to arraySort(groupArrayDistinct(arrayJoin(json.__special_subcolumn_name_for_distinct_paths_calculation)))
@@ -460,24 +394,6 @@ std::map<std::pair<TypeIndex, String>, NodeToSubcolumnTransformer> node_transfor
     },
     {
         {TypeIndex::Object, "distinctJSONPaths"}, optimizeDistinctJSONPaths,
-    },
-    {
-        {TypeIndex::Object, "JSONExtractInt"}, optimizeJSONExtractToSubcolumn<>,
-    },
-    {
-        {TypeIndex::Object, "JSONExtractUInt"}, optimizeJSONExtractToSubcolumn<>,
-    },
-    {
-        {TypeIndex::Object, "JSONExtractFloat"}, optimizeJSONExtractToSubcolumn<>,
-    },
-    {
-        {TypeIndex::Object, "JSONExtractBool"}, optimizeJSONExtractToSubcolumn<>,
-    },
-    {
-        {TypeIndex::Object, "JSONExtractString"}, optimizeJSONExtractToSubcolumn<>,
-    },
-    {
-        {TypeIndex::Object, "JSONExtract"}, optimizeJSONExtractToSubcolumn<true>,
     },
 };
 
