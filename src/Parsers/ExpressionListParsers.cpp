@@ -1290,8 +1290,11 @@ public:
             if (!is_tuple && elements.size() == 1)
             {
                 // Special case for (('a', 'b')) = tuple(('a', 'b'))
+                // But not when the literal has an alias like (('a', 'b') AS x),
+                // because in that case the outer parens are just grouping needed
+                // for correct alias association, not a tuple constructor.
                 if (auto * literal = elements[0]->as<ASTLiteral>())
-                    if (literal->value.getType() == Field::Types::Tuple)
+                    if (literal->value.getType() == Field::Types::Tuple && literal->alias.empty())
                         is_tuple = true;
 
                 // Special case for f(x, (y) -> z) = f(x, tuple(y) -> z)
