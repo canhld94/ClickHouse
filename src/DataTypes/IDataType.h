@@ -20,9 +20,6 @@ using DataTypeCustomDescPtr = std::unique_ptr<DataTypeCustomDesc>;
 class IDataTypeCustomName;
 using DataTypeCustomNamePtr = std::unique_ptr<const IDataTypeCustomName>;
 
-
-
-
 class ReadBuffer;
 class WriteBuffer;
 
