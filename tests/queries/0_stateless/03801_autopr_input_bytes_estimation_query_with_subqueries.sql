@@ -14,12 +14,12 @@ SET use_query_condition_cache=0;
 create table t(a UInt64) engine=MergeTree order by a;
 insert into t select number from numbers_mt(1e6);
 
-SELECT a % 10000 FROM t FORMAT Null SETTINGS log_comment='query_0';
+SELECT a % 10000 FROM t FORMAT Null SETTINGS log_comment='03801_autopr_input_bytes_estimation_query_with_subqueries_query_0';
 
 -- `CounterID` is part of the PK
-SELECT EventTime, CounterID, URL, Referer FROM test.hits WHERE CounterID IN (SELECT a % 10000 FROM t) FORMAT Null SETTINGS log_comment='query_1';
+SELECT EventTime, CounterID, URL, Referer FROM test.hits WHERE CounterID IN (SELECT a % 10000 FROM t) FORMAT Null SETTINGS log_comment='03801_autopr_input_bytes_estimation_query_with_subqueries_query_1';
 -- `WatchID` is not
-SELECT EventTime, CounterID, URL, Referer FROM test.hits WHERE WatchID IN (SELECT a % 10000 FROM t) FORMAT Null SETTINGS log_comment='query_1';
+SELECT EventTime, CounterID, URL, Referer FROM test.hits WHERE WatchID IN (SELECT a % 10000 FROM t) FORMAT Null SETTINGS log_comment='03801_autopr_input_bytes_estimation_query_with_subqueries_query_2';
 
 SET enable_parallel_replicas=0, automatic_parallel_replicas_mode=0;
 
@@ -33,7 +33,7 @@ WITH (
     SELECT
         ProfileEvents['ReadCompressedBytes']
     FROM system.query_log
-    WHERE (event_date >= yesterday()) AND (event_time >= NOW() - INTERVAL '15 MINUTES') AND (current_database = currentDatabase()) AND (log_comment LIKE 'query_0') AND (type = 'QueryFinish')
+    WHERE (event_date >= yesterday()) AND (event_time >= NOW() - INTERVAL '15 MINUTES') AND (current_database = currentDatabase()) AND (log_comment = '03801_autopr_input_bytes_estimation_query_with_subqueries_query_0') AND (type = 'QueryFinish')
     ORDER BY event_time_microseconds
 ) AS compressed_bytes_subquery
 SELECT format('{} {} {}', log_comment, compressed_bytes, statistics_input_bytes)
@@ -43,7 +43,7 @@ FROM (
         ProfileEvents['ReadCompressedBytes'] - compressed_bytes_subquery AS compressed_bytes,
         ProfileEvents['RuntimeDataflowStatisticsInputBytes']::Int64 statistics_input_bytes
     FROM system.query_log
-    WHERE (event_date >= yesterday()) AND (event_time >= NOW() - INTERVAL '15 MINUTES') AND (current_database = currentDatabase()) AND (log_comment LIKE 'query_1') AND (type = 'QueryFinish')
+    WHERE (event_date >= yesterday()) AND (event_time >= NOW() - INTERVAL '15 MINUTES') AND (current_database = currentDatabase()) AND (match(log_comment, '03801_autopr_input_bytes_estimation_query_with_subqueries_query_[12]')) AND (type = 'QueryFinish')
     ORDER BY event_time_microseconds
 )
 WHERE greatest(compressed_bytes, statistics_input_bytes) / least(compressed_bytes, statistics_input_bytes) > 2;
