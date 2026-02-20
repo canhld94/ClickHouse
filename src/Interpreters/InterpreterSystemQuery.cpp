@@ -85,6 +85,7 @@
 
 #if USE_JEMALLOC
 #include <Common/Jemalloc.h>
+#include <Common/ErrnoException.h>
 #endif
 
 #include "config.h"
