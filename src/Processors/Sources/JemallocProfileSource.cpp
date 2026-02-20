@@ -2,9 +2,12 @@
 
 #if USE_JEMALLOC
 
+#    include <list>
+#    include <mutex>
 #    include <ranges>
 #    include <unordered_set>
 #    include <Columns/ColumnString.h>
+#    include <Core/Defines.h>
 #    include <DataTypes/DataTypeString.h>
 #    include <IO/ReadBufferFromFile.h>
 #    include <IO/ReadHelpers.h>
@@ -15,12 +18,96 @@
 #    include <QueryPipeline/QueryPipeline.h>
 #    include <base/hex.h>
 #    include <Common/FramePointers.h>
+#    include <Common/MemoryTrackerSwitcher.h>
 #    include <Common/StackTrace.h>
 #    include <Common/StringUtils.h>
 #    include <Common/getExecutablePath.h>
 
 namespace DB
 {
+
+namespace
+{
+
+/// Parse a hex address (optionally prefixed with 0x/0X) from the beginning of src,
+/// advance src past the consumed characters, and return the parsed value.
+/// Returns std::nullopt if no hex digit was found.
+std::optional<UInt64> parseHexAddress(std::string_view & src)
+{
+    if (src.size() >= 2 && src[0] == '0' && (src[1] == 'x' || src[1] == 'X'))
+        src.remove_prefix(2);
+
+    if (src.empty())
+        return std::nullopt;
+
+    UInt64 address = 0;
+    size_t processed = 0;
+
+    for (size_t i = 0; i < src.size() && processed < 16; ++i)
+    {
+        char c = src[i];
+        if (isHexDigit(c))
+        {
+            address = (address << 4) | unhex(c);
+            ++processed;
+        }
+        else
+            break;
+    }
+
+    if (processed == 0)
+        return std::nullopt;
+
+    src.remove_prefix(processed);
+    return address;
+}
+
+/// Simple LRU cache: evicts the least-recently-used entry when the capacity is exceeded.
+struct SymbolizationLRUCache
+{
+    using Value = std::vector<std::string>;
+    using List = std::list<std::pair<UInt64, Value>>;
+
+    explicit SymbolizationLRUCache(size_t max_size_) : max_size(max_size_) {}
+
+    /// Returns a copy of the cached value on hit (moves the entry to the front), or nullopt on miss.
+    std::optional<Value> get(UInt64 key)
+    {
+        auto it = index.find(key);
+        if (it == index.end())
+            return std::nullopt;
+        lru.splice(lru.begin(), lru, it->second);
+        return it->second->second;
+    }
+
+    void put(UInt64 key, Value value)
+    {
+        MemoryTrackerSwitcher switcher(&total_memory_tracker);
+        auto it = index.find(key);
+        if (it != index.end())
+        {
+            it->second->second = std::move(value);
+            lru.splice(lru.begin(), lru, it->second);
+            return;
+        }
+        lru.emplace_front(key, std::move(value));
+        index.emplace(key, lru.begin());
+        if (lru.size() > max_size)
+        {
+            index.erase(lru.back().first);
+            lru.pop_back();
+        }
+    }
+
+    size_t max_size;
+    List lru;
+    std::unordered_map<UInt64, List::iterator> index;
+};
+
+std::mutex symbolization_cache_mutex;
+SymbolizationLRUCache symbolization_cache(/*max_size=*/ 100'000);
+
+}
 
 JemallocProfileSource::JemallocProfileSource(
     const std::string & filename_,
@@ -134,17 +221,30 @@ Chunk JemallocProfileSource::generateSymbolized()
 
                 UInt64 address = addresses[current_address_index++];
 
-                FramePointers fp;
-                fp[0] = reinterpret_cast<void *>(address);
-
                 std::vector<std::string> symbols;
-                auto symbolize_callback = [&](const StackTrace::Frame & frame)
                 {
-                    symbols.push_back(frame.symbol.value_or("??"));
-                };
+                    std::lock_guard lock(symbolization_cache_mutex);
+                    if (auto cached = symbolization_cache.get(address))
+                        symbols = std::move(*cached);
+                }
 
-                bool resolve_inlines = symbolize_with_inline;
-                StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
+                if (symbols.empty())
+                {
+                    FramePointers fp;
+                    fp[0] = reinterpret_cast<void *>(address);
+
+                    auto symbolize_callback = [&](const StackTrace::Frame & frame)
+                    {
+                        symbols.push_back(frame.symbol.value_or("??"));
+                    };
+
+                    bool resolve_inlines = symbolize_with_inline;
+                    StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
+                    {
+                        std::lock_guard lock(symbolization_cache_mutex);
+                        symbolization_cache.put(address, symbols);
+                    }
+                }
 
                 std::string symbol_line;
                 WriteBufferFromString out(symbol_line);
@@ -235,37 +335,6 @@ void JemallocProfileSource::collectAddresses()
 {
     ReadBufferFromFile in(filename);
 
-    /// Helper to parse hex address from string_view and advance it
-    auto parse_hex = [](std::string_view & src) -> std::optional<UInt64>
-    {
-        if (src.size() >= 2 && src[0] == '0' && (src[1] == 'x' || src[1] == 'X'))
-            src.remove_prefix(2);
-
-        if (src.empty())
-            return std::nullopt;
-
-        UInt64 address = 0;
-        size_t processed = 0;
-
-        for (size_t i = 0; i < src.size() && processed < 16; ++i)
-        {
-            char c = src[i];
-            if (isHexDigit(c))
-            {
-                address = (address << 4) | unhex(c);
-                ++processed;
-            }
-            else
-                break;
-        }
-
-        if (processed == 0)
-            return std::nullopt;
-
-        src.remove_prefix(processed);
-        return address;
-    };
-
     std::unordered_set<UInt64> unique_addresses;
     std::string line;
 
@@ -298,7 +367,7 @@ void JemallocProfileSource::collectAddresses()
                 if (line_addresses.empty())
                     break;
 
-                auto address = parse_hex(line_addresses);
+                auto address = parseHexAddress(line_addresses);
                 if (!address.has_value())
                     break;
 
@@ -318,36 +387,6 @@ Chunk JemallocProfileSource::generateCollapsed()
     if (collapsed_lines.empty())
     {
         ReadBufferFromFile in(filename);
-
-        auto parse_hex = [](std::string_view & src) -> std::optional<UInt64>
-        {
-            if (src.size() >= 2 && src[0] == '0' && (src[1] == 'x' || src[1] == 'X'))
-                src.remove_prefix(2);
-
-            if (src.empty())
-                return std::nullopt;
-
-            UInt64 address = 0;
-            size_t processed = 0;
-
-            for (size_t i = 0; i < src.size() && processed < 16; ++i)
-            {
-                char c = src[i];
-                if (isHexDigit(c))
-                {
-                    address = (address << 4) | unhex(c);
-                    ++processed;
-                }
-                else
-                    break;
-            }
-
-            if (processed == 0)
-                return std::nullopt;
-
-            src.remove_prefix(processed);
-            return address;
-        };
 
         std::unordered_map<std::string, UInt64> stack_to_bytes;
         std::string line;
@@ -380,7 +419,7 @@ Chunk JemallocProfileSource::generateCollapsed()
                     if (line_addresses.empty())
                         break;
 
-                    auto address = parse_hex(line_addresses);
+                    auto address = parseHexAddress(line_addresses);
                     if (!address.has_value())
                         break;
 
@@ -425,17 +464,19 @@ Chunk JemallocProfileSource::generateCollapsed()
                                 return {};
                             }
 
-                            /// Check cache first
-                            auto cache_it = symbolization_cache.find(address);
-                            if (cache_it != symbolization_cache.end())
+                            std::vector<std::string> addr_symbols;
                             {
-                                /// Use cached symbols
-                                for (const auto & symbol : cache_it->second)
+                                std::lock_guard lock(symbolization_cache_mutex);
+                                if (auto cached = symbolization_cache.get(address))
+                                    addr_symbols = std::move(*cached);
+                            }
+                            if (!addr_symbols.empty())
+                            {
+                                for (const auto & symbol : addr_symbols)
                                     all_symbols.push_back(symbol);
                             }
                             else
                             {
-                                /// Symbolize and cache
                                 FramePointers fp;
                                 fp[0] = reinterpret_cast<void *>(address);
 
@@ -449,13 +490,15 @@ Chunk JemallocProfileSource::generateCollapsed()
                                 StackTrace::forEachFrame(fp, 0, 1, symbolize_callback, /* fatal= */ resolve_inlines);
 
                                 /// Store in cache (in reverse order for easier reuse)
-                                std::vector<std::string> cached_symbols;
                                 for (const auto & symbol : std::ranges::reverse_view(frame_symbols))
                                 {
-                                    cached_symbols.push_back(symbol);
+                                    addr_symbols.push_back(symbol);
                                     all_symbols.push_back(symbol);
                                 }
-                                symbolization_cache[address] = std::move(cached_symbols);
+                                {
+                                    std::lock_guard lock(symbolization_cache_mutex);
+                                    symbolization_cache.put(address, addr_symbols);
+                                }
                             }
                         }
 
@@ -519,7 +562,7 @@ void symbolizeJemallocHeapProfile(
     auto source = std::make_shared<JemallocProfileSource>(
         input_filename,
         std::make_shared<const Block>(std::move(header)),
-        65536,
+        DEFAULT_BLOCK_SIZE,
         format,
         symbolize_with_inline);
 
