@@ -636,8 +636,9 @@ void TableSnapshot::initOrUpdateSnapshot() const
     if (kernel_snapshot_state)
         return;
 
-    LOG_TEST(log, "Initializing snapshot {}", StackTrace().toString());
     ProfileEvents::increment(ProfileEvents::DeltaLakeSnapshotInitializations);
+
+    LOG_TEST(log, "Initializing snapshot");
 
     kernel_snapshot_state = std::make_shared<KernelSnapshotState>(*helper, snapshot_version_to_read);
 

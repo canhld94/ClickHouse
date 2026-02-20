@@ -214,10 +214,13 @@ void StorageObjectStorageCluster::updateExternalDynamicMetadataIfExists(ContextP
     if (!configuration->isDataLakeConfiguration())
         return;
 
+    /// Always force an update to pick up the latest snapshot version.
+    /// Using if_not_updated_before=true would leave latest_snapshot_version
+    /// stale from the first query and silently omit new files.
     configuration->update(
         object_storage,
         query_context,
-        /* if_not_updated_before */ true);
+        /* if_not_updated_before */ false);
 
     auto state = configuration->getTableStateSnapshot(query_context);
     if (!state)

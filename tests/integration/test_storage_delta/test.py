@@ -4619,3 +4619,63 @@ def test_snapshot_consistency(started_cluster):
         f"AND message LIKE '%Using snapshot version 1 from storage metadata snapshot for prepareReadingFromFormat%'"
     )
     assert int(log_check_prepare_v1) > 0, "Expected to find log message about using snapshot version 1 from metadata snapshot for prepareReadingFromFormat"
+
+
+def test_snapshot_initialized_once_per_query(started_cluster):
+    """Test that DeltaLake table snapshot is initialized exactly once per SELECT query.
+
+    Verifies via the `DeltaLakeSnapshotInitializations` profile event that a single
+    SELECT query loads the snapshot from object storage only once, regardless of
+    how many files/threads are involved in the query. Two cases are tested:
+    - `SELECT count()` which can be served from metadata without reading data files
+    - `SELECT sum()` which reads actual data files
+    """
+    instance = started_cluster.instances["node1"]
+    spark = started_cluster.spark_session
+    minio_client = started_cluster.minio_client
+    bucket = started_cluster.minio_bucket
+    TABLE_NAME = randomize_table_name("test_snapshot_init_once")
+
+    write_delta_from_df(
+        spark, generate_data(spark, 0, 100), f"/{TABLE_NAME}", mode="overwrite"
+    )
+    upload_directory(minio_client, bucket, f"/{TABLE_NAME}", "")
+    create_delta_table(instance, "s3", TABLE_NAME, started_cluster)
+
+    def check_initializations_count(query, expected_result, query_id):
+        result = instance.query(query, query_id=query_id, settings={"max_threads": 4})
+        assert int(result.strip()) == expected_result
+        instance.query("SYSTEM FLUSH LOGS")
+        initializations = int(instance.query(
+            f"SELECT ProfileEvents['DeltaLakeSnapshotInitializations'] "
+            f"FROM system.query_log WHERE query_id = '{query_id}' AND type = 'QueryFinish'"
+        ).strip())
+        assert initializations == 1, (
+            f"Query '{query}': expected snapshot to be initialized exactly once, got {initializations}"
+        )
+
+    check_initializations_count(
+        f"SELECT count() FROM {TABLE_NAME}",
+        expected_result=100,
+        query_id=f"snapshot_init_count_{TABLE_NAME}",
+    )
+    check_initializations_count(
+        f"SELECT sum(a) FROM {TABLE_NAME}",
+        expected_result=4950,
+        query_id=f"snapshot_init_sum_{TABLE_NAME}",
+    )
+
+    cluster_table_function = (
+        f"deltaLakeCluster(cluster, 'http://{started_cluster.minio_ip}:{started_cluster.minio_port}/{bucket}/{TABLE_NAME}/', "
+        f"'minio', '{minio_secret_key}')"
+    )
+    check_initializations_count(
+        f"SELECT count() FROM {cluster_table_function}",
+        expected_result=100,
+        query_id=f"snapshot_init_cluster_count_{TABLE_NAME}",
+    )
+    check_initializations_count(
+        f"SELECT sum(a) FROM {cluster_table_function}",
+        expected_result=4950,
+        query_id=f"snapshot_init_cluster_sum_{TABLE_NAME}",
+    )

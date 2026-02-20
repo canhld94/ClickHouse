@@ -58,6 +58,8 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"allow_insert_into_iceberg", false, true, "Insert into iceberg was moved to Beta"},
             {"output_format_arrow_date_as_uint16", true, false, "Write Date as Arrow DATE32 instead of plain UInt16 by default."},
             {"opentelemetry_start_keeper_trace_probability", "auto", "auto", "New setting"},
+            {"delta_lake_reload_schema_for_consistency", false, false, "New setting to control whether DeltaLake reloads schema before each query for consistency."},
+            {"iceberg_reload_schema_for_consistency", true, true, "New setting to control whether Iceberg reloads schema before each query for consistency."},
         });
         addSettingsChanges(settings_changes_history, "26.1",
         {

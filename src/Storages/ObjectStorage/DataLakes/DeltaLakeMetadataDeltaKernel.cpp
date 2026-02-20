@@ -328,7 +328,9 @@ ObjectIterator DeltaLakeMetadataDeltaKernel::iterate(
     {
         /// Fall back to reading from settings if no version is stored in metadata.
         snapshot_version = getSnapshotVersion(context->getSettingsRef());
-        //LOG_TEST(log, "Using snapshot version {} from settings (no version in metadata)", snapshot_version);
+        LOG_TEST(
+            log, "Using snapshot version {} from settings (no version in metadata)",
+            snapshot_version.has_value() ? toString(snapshot_version.value()) : "Latest");
     }
 
     return getTableSnapshot(snapshot_version)->iterate(filter_dag, callback, list_batch_size, context);
@@ -488,7 +490,9 @@ ReadFromFormatInfo DeltaLakeMetadataDeltaKernel::prepareReadingFromFormat(
     {
         /// Fall back to reading from settings if no version is stored in metadata.
         snapshot_version = getSnapshotVersion(context->getSettingsRef());
-        //LOG_TEST(log, "Using snapshot version {} from settings for prepareReadingFromFormat (no version in metadata)", snapshot_version);
+        LOG_TEST(
+            log, "Using snapshot version {} from settings (no version in metadata)",
+            snapshot_version.has_value() ? toString(snapshot_version.value()) : "Latest");
     }
 
     auto snapshot = getTableSnapshot(snapshot_version);
