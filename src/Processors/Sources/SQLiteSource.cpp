@@ -19,6 +19,8 @@
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>
 
+#include <Common/logger_useful.h>
+
 
 namespace DB
 {
@@ -66,6 +68,13 @@ Chunk SQLiteSource::generate()
     while (true)
     {
         int status = sqlite3_step(compiled_statement.get());
+
+        if (status == SQLITE_INTERRUPT)
+        {
+            LOG_DEBUG(getLogger("SQLiteSource"), "SQLite query was interrupted");
+            compiled_statement.reset();
+            break;
+        }
 
         if (status == SQLITE_BUSY)
         {
@@ -122,6 +131,22 @@ Chunk SQLiteSource::generate()
     }
 
     return Chunk(std::move(columns), num_rows);
+}
+
+void SQLiteSource::onCancel() noexcept
+{
+    try
+    {
+        if (sqlite_db)
+        {
+            sqlite3_interrupt(sqlite_db.get());
+            LOG_DEBUG(getLogger("SQLiteSource"), "SQLite query interrupted");
+        }
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+    }
 }
 
 void SQLiteSource::insertValue(IColumn & column, ExternalResultDescription::ValueType type, int idx, const IDataType & data_type)
