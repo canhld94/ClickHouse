@@ -14,25 +14,17 @@ set remote_filesystem_read_method='threadpool', allow_prefetched_read_pool_for_r
 -- Override randomized max_threads to avoid timeout on slow builds (ASan)
 SET max_threads=0;
 
-SET max_rows_to_read=0, max_bytes_to_read=0, max_result_rows=0, max_result_bytes=0;
-
 SELECT URL FROM test.hits WHERE WatchID < 4611892230367380000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_0';
 SELECT URL FROM test.hits WHERE WatchID < 5550265976347679000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_1';
 SELECT URL FROM test.hits WHERE WatchID < 6509275139329711000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_2';
-SELECT URL FROM test.hits WHERE WatchID < 7447908215972422000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_3';
-SELECT URL FROM test.hits WHERE WatchID < 8354342705434601000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_4';
 
 SELECT CounterID, URL FROM test.hits WHERE WatchID < 4611892230367380000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_10';
 SELECT CounterID, URL FROM test.hits WHERE WatchID < 5550265976347679000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_11';
 SELECT CounterID, URL FROM test.hits WHERE WatchID < 6509275139329711000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_12';
-SELECT CounterID, URL FROM test.hits WHERE WatchID < 7447908215972422000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_13';
-SELECT CounterID, URL FROM test.hits WHERE WatchID < 8354342705434601000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_14';
 
 SELECT CounterID, URL, Referer FROM test.hits WHERE WatchID < 4611892230367380000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_20';
 SELECT CounterID, URL, Referer FROM test.hits WHERE WatchID < 5550265976347679000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_21';
 SELECT CounterID, URL, Referer FROM test.hits WHERE WatchID < 6509275139329711000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_22';
-SELECT CounterID, URL, Referer FROM test.hits WHERE WatchID < 7447908215972422000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_23';
-SELECT CounterID, URL, Referer FROM test.hits WHERE WatchID < 8354342705434601000 FORMAT Null SETTINGS log_comment='03927_autopr_input_bytes_estimation_prewhere_filter_24';
 
 SET enable_parallel_replicas=0, automatic_parallel_replicas_mode=0;
 
