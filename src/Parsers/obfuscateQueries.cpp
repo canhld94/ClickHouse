@@ -85,6 +85,10 @@ const std::unordered_set<std::string> & getObfuscateKeywords()
             "ASYNCHRONOUS", "MODELS", "PAGE", "CONDITION", "QUEUE", "VIEWS", "FUZZER", "VIRTUAL",
             "REDUCE", "BLOCKING", "RECONNECT", "ZOOKEEPER", "INSTRUMENT", "READY", "UNREADY",
             "TRANSACTIONS", "DELTA", "KERNEL", "TRACING", "SNAPSHOT", "CACHE", "SCHEMA",
+            "STOP", "RESTART", "SHUTDOWN", "LISTEN", "REPLICA", "CANCEL", "CATALOG", "WAIT",
+            "LOADING", "ENABLE", "DISABLE", "NOTIFY", "QUERIES", "SIMILARITY", "VECTOR",
+            "POSTINGS", "HEADER", "METADATA", "ALLOCATE", "FREE", "LOAD", "UNLOAD", "UNKNOWN",
+            "CLIENT", "MODEL",
             /// Dictionary layout/source keywords
             "FLAT", "HASHED", "IP_TRIE", "REGEXP_TREE", "DIRECT", "CLICKHOUSE", "EXECUTABLE",
             "LIBRARY",
