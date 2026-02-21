@@ -4318,15 +4318,15 @@ CONV_FN(CreateDictionary, create_dictionary)
         ret += "IF NOT EXISTS ";
     }
     ExprSchemaTableToString(ret, create_dictionary.est());
-    if (create_dictionary.has_cluster())
-    {
-        ClusterToString(ret, true, create_dictionary.cluster());
-    }
     if (create_dictionary.has_uuid())
     {
         ret += " UUID '";
         ret += create_dictionary.uuid();
         ret += "'";
+    }
+    if (create_dictionary.has_cluster())
+    {
+        ClusterToString(ret, true, create_dictionary.cluster());
     }
     ret += " (";
     DictionaryColumnToString(ret, create_dictionary.col());
