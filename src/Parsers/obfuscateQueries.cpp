@@ -74,6 +74,31 @@ const std::unordered_set<std::string> & getObfuscateKeywords()
                 instance.insert(token);
         }
 
+        /// Additional words used in SYSTEM commands, dictionary definitions, special SQL
+        /// constructs, and substitution syntax that are not registered as standalone keywords.
+        const std::vector<std::string> additional_keywords =
+        {
+            /// SYSTEM command words
+            "FLUSH", "LOGS", "UNCOMPRESSED", "RELOAD", "FETCHES", "MOVES", "SENDS", "REPLICATION",
+            "DISTRIBUTED", "COMPILED", "DNS", "MARK", "MMAP", "COVERAGE", "FAILPOINT", "JEMALLOC",
+            "PURGE", "PULLING", "REPLICAS", "PREWARM", "QUEUES", "CONFIG", "USERS", "EMBEDDED",
+            "ASYNCHRONOUS", "MODELS", "PAGE", "CONDITION", "QUEUE", "VIEWS", "FUZZER", "VIRTUAL",
+            "REDUCE", "BLOCKING", "RECONNECT", "ZOOKEEPER", "INSTRUMENT", "READY", "UNREADY",
+            "TRANSACTIONS", "DELTA", "KERNEL", "TRACING", "SNAPSHOT", "CACHE", "SCHEMA",
+            /// Dictionary layout/source keywords
+            "FLAT", "HASHED", "IP_TRIE", "REGEXP_TREE", "DIRECT", "CLICKHOUSE", "EXECUTABLE",
+            "LIBRARY",
+            /// Special SQL functions/types parsed by special rules
+            "EXTRACT", "TRIM", "DECIMAL",
+            /// Multi-word data type constituents not registered as standalone keywords
+            "NATIONAL", "LARGE", "OBJECT", "NCHAR", "BINARY",
+            /// Substitution syntax type (uppercase because keyword lookup uses toUpper)
+            "IDENTIFIER",
+        };
+
+        for (const auto & kw : additional_keywords)
+            instance.insert(kw);
+
         return instance;
     };
 
@@ -752,6 +777,76 @@ void obfuscateLiteral(
     const char * src_pos = src.data();
     const char * src_end = src_pos + src.size();
 
+    /// Preserve hex (0x/0X) and binary (0b/0B) number prefixes and structure.
+    if (src_pos + 2 <= src_end
+        && src_pos[0] == '0'
+        && (src_pos[1] == 'x' || src_pos[1] == 'X' || src_pos[1] == 'b' || src_pos[1] == 'B'))
+    {
+        bool is_hex = (src_pos[1] == 'x' || src_pos[1] == 'X');
+        result.write(src_pos[0]);
+        result.write(src_pos[1]);
+        src_pos += 2;
+
+        auto obfuscate_hex_digits = [&]()
+        {
+            while (src_pos < src_end && isHexDigit(*src_pos))
+            {
+                hash_func.update(*src_pos);
+                pcg64 rng(hash_func.get64());
+                static constexpr char hex_digits[] = "0123456789ABCDEF";
+                result.write(hex_digits[rng() % 16]);
+                ++src_pos;
+            }
+        };
+
+        if (is_hex)
+        {
+            /// Integer part hex digits.
+            obfuscate_hex_digits();
+
+            /// Fractional part: .hexdigits
+            if (src_pos < src_end && *src_pos == '.')
+            {
+                result.write('.');
+                ++src_pos;
+                obfuscate_hex_digits();
+            }
+
+            /// Binary exponent: p/P followed by optional sign and decimal digits.
+            if (src_pos < src_end && (*src_pos == 'p' || *src_pos == 'P'))
+            {
+                result.write(*src_pos);
+                ++src_pos;
+
+                if (src_pos < src_end && (*src_pos == '+' || *src_pos == '-'))
+                {
+                    result.write(*src_pos);
+                    ++src_pos;
+                }
+
+                /// Decimal exponent digits — keep structure but obfuscate values.
+                while (src_pos < src_end && isNumericASCII(*src_pos))
+                {
+                    hash_func.update(*src_pos);
+                    pcg64 rng(hash_func.get64());
+                    result.write('0' + rng() % 10);
+                    ++src_pos;
+                }
+            }
+        }
+        else
+        {
+            /// Binary literal digits.
+            while (src_pos < src_end && (*src_pos == '0' || *src_pos == '1'))
+            {
+                hash_func.update(*src_pos);
+                pcg64 rng(hash_func.get64());
+                result.write('0' + rng() % 2);
+                ++src_pos;
+            }
+        }
+    }
+
     while (src_pos < src_end)
     {
         /// Date
@@ -993,9 +1088,44 @@ void obfuscateQueries(
         {
             assert(token.size() >= 2);
 
-            result.write(*token.begin);
-            obfuscateLiteral({token.begin + 1, token.size() - 2}, result, hash_func, known_identifier_func);
-            result.write(token.end[-1]);
+            /// Hex string literals like x'ABCD' or binary string literals like b'1010'.
+            if (token.size() >= 3
+                && (*token.begin == 'x' || *token.begin == 'X' || *token.begin == 'b' || *token.begin == 'B')
+                && token.begin[1] == '\'')
+            {
+                bool is_hex = (*token.begin == 'x' || *token.begin == 'X');
+                result.write(*token.begin);   /// x or b prefix
+                result.write('\'');            /// opening quote
+
+                /// Obfuscate content while preserving hex/binary validity.
+                const char * content_begin = token.begin + 2;
+                const char * content_end = token.end - 1;
+
+                SipHash content_hash = hash_func;
+                for (const char * p = content_begin; p < content_end; ++p)
+                {
+                    content_hash.update(*p);
+                    pcg64 rng(content_hash.get64());
+
+                    if (is_hex)
+                    {
+                        static constexpr char hex_digits[] = "0123456789ABCDEF";
+                        result.write(hex_digits[rng() % 16]);
+                    }
+                    else
+                    {
+                        result.write('0' + rng() % 2);
+                    }
+                }
+
+                result.write('\'');            /// closing quote
+            }
+            else
+            {
+                result.write(*token.begin);
+                obfuscateLiteral({token.begin + 1, token.size() - 2}, result, hash_func, known_identifier_func);
+                result.write(token.end[-1]);
+            }
         }
         else if (token.type == TokenType::Comment)
         {
