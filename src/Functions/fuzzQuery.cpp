@@ -184,6 +184,7 @@ REGISTER_FUNCTION(fuzzQuery)
                 {"basic",
                  "SET allow_fuzz_query_functions = 1; SELECT fuzzQuery('SELECT 1');",
                  ""}},
+            .introduced_in = {26, 2},
             .category = FunctionDocumentation::Category::Other});
 }
 
