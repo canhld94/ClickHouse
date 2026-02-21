@@ -1,5 +1,7 @@
 -- Tags: no-fasttest
 
+-- Suppress error-level log messages from fuzzed queries that fail expectedly.
+SET send_logs_level = 'fatal';
 SET ast_fuzzer_runs = 3;
 
 SELECT 1;
