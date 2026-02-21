@@ -1041,6 +1041,18 @@ void obfuscateQueries(
     SipHash hash_func,
     KnownIdentifierFunc known_identifier_func)
 {
+    /// State machine for preserving settings values after `=`.
+    enum class SettingsState : uint8_t { None, ExpectName, AfterName, ExpectValue, AfterValue };
+    SettingsState settings_state = SettingsState::None;
+
+    /// INSERT context tracking: data after VALUES or FORMAT <name> should be fully obfuscated
+    /// (no keyword/known-identifier preservation, since it is user data, not SQL).
+    bool in_insert_context = false;
+    bool in_insert_data = false;
+    bool expect_format_name = false;
+
+    auto always_false_func = [](std::string_view) { return false; };
+
     Lexer lexer(src.data(), src.data() + src.size());
     while (true)
     {
@@ -1050,9 +1062,159 @@ void obfuscateQueries(
         if (token.isEnd())
             break;
 
+        /// Whitespace is always written as-is; comments are always skipped.
+        /// Neither affects the state machine.
+        if (token.type == TokenType::Whitespace)
+        {
+            result.write(token.begin, token.size());
+            continue;
+        }
+        if (token.type == TokenType::Comment)
+            continue;
+
+        /// Semicolons always reset all state.
+        if (token.type == TokenType::Semicolon)
+        {
+            settings_state = SettingsState::None;
+            in_insert_context = false;
+            in_insert_data = false;
+            expect_format_name = false;
+            result.write(token.begin, token.size());
+            continue;
+        }
+
+        /// ---- INSERT data mode: everything is user data, obfuscate uniformly. ----
+        if (in_insert_data)
+        {
+            if (token.type == TokenType::BareWord)
+            {
+                /// Always obfuscate bare words in data context (no keyword preservation).
+                obfuscateIdentifier(whole_token, result, obfuscate_map, used_nouns, hash_func);
+            }
+            else if (token.type == TokenType::Number)
+            {
+                obfuscateLiteral(whole_token, result, hash_func, always_false_func);
+            }
+            else if (token.type == TokenType::StringLiteral)
+            {
+                assert(token.size() >= 2);
+                result.write(*token.begin);
+                obfuscateLiteral({token.begin + 1, token.size() - 2}, result, hash_func, always_false_func);
+                result.write(token.end[-1]);
+            }
+            else if (token.type == TokenType::QuotedIdentifier)
+            {
+                assert(token.size() >= 2);
+                result.write(*token.begin);
+                if (token.size() > 32)
+                    writeIntText(sipHash64(token.begin + 1, token.size() - 2), result);
+                else
+                    obfuscateIdentifier({token.begin + 1, token.size() - 2}, result, obfuscate_map, used_nouns, hash_func);
+                result.write(token.end[-1]);
+            }
+            else
+            {
+                result.write(token.begin, token.size());
+            }
+            continue;
+        }
+
+        /// ---- FORMAT name after INSERT ... FORMAT: preserve the format name, then enter data mode. ----
+        if (expect_format_name && token.type == TokenType::BareWord)
+        {
+            expect_format_name = false;
+            in_insert_data = true;
+            result.write(token.begin, token.size());
+            continue;
+        }
+        expect_format_name = false;
+
+        /// ---- Settings state machine: preserve values of settings. ----
+        if (settings_state == SettingsState::ExpectValue)
+        {
+            /// Write the value token as-is (number, string, bare word, etc.).
+            settings_state = SettingsState::AfterValue;
+            result.write(token.begin, token.size());
+            continue;
+        }
+        if (settings_state == SettingsState::AfterValue)
+        {
+            if (token.type == TokenType::Comma)
+            {
+                settings_state = SettingsState::ExpectName;
+                result.write(token.begin, token.size());
+                continue;
+            }
+            settings_state = SettingsState::None;
+            /// Fall through to normal processing for this token.
+        }
+        if (settings_state == SettingsState::AfterName)
+        {
+            if (token.type == TokenType::Equals)
+            {
+                settings_state = SettingsState::ExpectValue;
+                result.write(token.begin, token.size());
+                continue;
+            }
+            if (token.type == TokenType::Comma)
+            {
+                settings_state = SettingsState::ExpectName;
+                result.write(token.begin, token.size());
+                continue;
+            }
+            settings_state = SettingsState::None;
+            /// Fall through.
+        }
+        if (settings_state == SettingsState::ExpectName && token.type == TokenType::BareWord)
+        {
+            auto upper = Poco::toUpper(toString(whole_token));
+            if (getObfuscateKeywords().contains(upper))
+            {
+                /// This is a keyword, not a setting name — leave settings context.
+                settings_state = SettingsState::None;
+                /// Fall through to normal processing.
+            }
+            else
+            {
+                settings_state = SettingsState::AfterName;
+                /// Fall through to normal BareWord processing (the name will be preserved
+                /// if it is a known identifier, or obfuscated otherwise — both are fine).
+            }
+        }
+
+        /// ---- Normal token processing. ----
+
         if (token.type == TokenType::BareWord)
         {
             auto whole_token_uppercase = Poco::toUpper(toString(whole_token));
+
+            /// Track INSERT context.
+            if (whole_token_uppercase == "INSERT")
+            {
+                in_insert_context = true;
+            }
+            else if (in_insert_context && whole_token_uppercase == "VALUES")
+            {
+                in_insert_data = true;
+                result.write(token.begin, token.size());
+                continue;
+            }
+            else if (in_insert_context && whole_token_uppercase == "FORMAT")
+            {
+                expect_format_name = true;
+                result.write(token.begin, token.size());
+                continue;
+            }
+            else if (in_insert_context && (whole_token_uppercase == "SELECT" || whole_token_uppercase == "WITH"))
+            {
+                in_insert_context = false;
+            }
+
+            /// Track SETTINGS/SET context.
+            if (whole_token_uppercase == "SET" || whole_token_uppercase == "SETTINGS")
+            {
+                settings_state = SettingsState::ExpectName;
+            }
 
             if (getObfuscateKeywords().contains(whole_token_uppercase) || known_identifier_func(whole_token))
             {
@@ -1126,10 +1288,6 @@ void obfuscateQueries(
                 obfuscateLiteral({token.begin + 1, token.size() - 2}, result, hash_func, known_identifier_func);
                 result.write(token.end[-1]);
             }
-        }
-        else if (token.type == TokenType::Comment)
-        {
-            /// Skip comments - they may contain confidential info.
         }
         else
         {
