@@ -45,3 +45,14 @@ SELECT count() FROM t_nullable_tuple WHERE isNotNull(tup.s);
 SELECT 'OK';
 
 DROP TABLE t_nullable_tuple;
+
+-- Simplified reproducer from https://github.com/ClickHouse/ClickHouse/pull/97582#issuecomment-3939227260
+DROP TABLE IF EXISTS t0;
+CREATE TABLE t0 (c0 Nullable(Tuple(c1 Nullable(Int32)))) ENGINE = MergeTree ORDER BY tuple();
+INSERT INTO t0 VALUES ((1,));
+
+SELECT count()
+FROM t0
+WHERE c0.c1 IS NULL AND c0 IS NULL;
+
+DROP TABLE t0;
