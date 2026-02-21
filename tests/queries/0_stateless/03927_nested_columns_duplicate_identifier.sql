@@ -41,3 +41,24 @@ SELECT
 FROM test_otel_nested;
 
 DROP TABLE test_otel_nested;
+
+-- Simplified case from https://github.com/ClickHouse/ClickHouse/pull/97442#issuecomment-2893227498
+-- Map column with ALIAS subcolumns referenced in a VIEW
+CREATE TABLE test_otel_map
+(
+    attribute Map(LowCardinality(String), String),
+    `attribute.names` Array(LowCardinality(String)) ALIAS mapKeys(attribute),
+    `attribute.values` Array(String) ALIAS mapValues(attribute)
+) ENGINE = Memory;
+
+INSERT INTO test_otel_map VALUES ({'db.statement': 'SELECT 1', 'key2': 'val2'});
+
+CREATE VIEW test_zipkin_map AS
+SELECT
+    attribute.values[indexOf(attribute.names, 'db.statement')] AS stmt
+FROM test_otel_map;
+
+SELECT * FROM test_zipkin_map;
+
+DROP VIEW test_zipkin_map;
+DROP TABLE test_otel_map;
