@@ -8,6 +8,7 @@
 #include <Analyzer/Utils.h>
 #include <Common/OptimizedRegularExpression.h>
 #include <Core/Settings.h>
+#include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeString.h>
 #include <Functions/FunctionFactory.h>
 #include <Interpreters/Context.h>
@@ -35,7 +36,7 @@ public:
             return;
 
         auto * function_node = node->as<FunctionNode>();
-        if (!function_node || !function_node->isOrdinaryFunction() || !isString(function_node->getResultType()))
+        if (!function_node || !function_node->isOrdinaryFunction() || !isString(removeNullable(function_node->getResultType())))
             return;
 
         /// If a regular expression without alternatives starts with ^ or ends with an unescaped $, rewrite
