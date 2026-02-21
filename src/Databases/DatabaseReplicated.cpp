@@ -1003,8 +1003,6 @@ void DatabaseReplicated::restoreDatabaseNodesInKeeper(const ZooKeeperPtr & zooke
 
     add_ops(buildDatabaseNodesInZooKeeper());
 
-    UInt64 tables_digest = 0;
-
     for (auto existing_tables_it = getTablesIterator(local_context, {}, /*skip_not_loaded=*/false); existing_tables_it->isValid();
          existing_tables_it->next())
     {
@@ -1014,15 +1012,20 @@ void DatabaseReplicated::restoreDatabaseNodesInKeeper(const ZooKeeperPtr & zooke
         const String statement = getObjectDefinitionFromCreateQuery(getCreateTableQuery(table_name, local_context));
         const String table_metadata_zk_path = zookeeper_path + "/metadata/" + escapeForFileName(table_name);
         add_ops({zkutil::makeCreateRequest(table_metadata_zk_path, statement, zkutil::CreateMode::Persistent)});
-
-        tables_digest += DB::getMetadataHash(table_name, statement);
     }
 
+    /// Compute the digest atomically from the current tables map, using the same method
+    /// as checkDigestValid (readMetadataFile). Computing it outside the lock from the
+    /// iterator above would race with concurrent DDL operations modifying the tables map.
     {
         std::lock_guard lock{metadata_mutex};
-        tables_metadata_digest = tables_digest;
-        if (!checkDigestValid(local_context))
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "Digest does not match");
+        UInt64 digest = 0;
+        {
+            std::lock_guard tables_lock{mutex};
+            for (const auto & table : tables)
+                digest += getMetadataHash(table.first);
+        }
+        tables_metadata_digest = digest;
     }
     Coordination::Responses responses;
     auto code = zookeeper->tryMulti(ops, responses);
