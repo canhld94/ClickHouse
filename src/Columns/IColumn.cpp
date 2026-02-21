@@ -51,7 +51,7 @@ void throwCannotPopBack(size_t n, const std::string & column_name, size_t column
     throw Exception(ErrorCodes::LOGICAL_ERROR, "Cannot pop {} rows from {}: there are only {} rows", n, column_name, column_size);
 }
 
-void throwColumnConvertNotSupported(const char * type_name, const char * as_type)
+void throwColumnConvertNotSupported(std::string_view type_name, const char * as_type)
 {
     throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Cannot get the value of {} as {}", type_name, as_type);
 }

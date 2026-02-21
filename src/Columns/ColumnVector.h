@@ -219,7 +219,7 @@ public:
         if constexpr (is_arithmetic_v<T>)
             return UInt64(data[n]);
         else
-            throwColumnConvertNotSupported(TypeName<T>.data(), "UInt");
+            throwColumnConvertNotSupported(TypeName<T>, "UInt");
     }
 
     /// Out of range conversion is permitted.
@@ -228,7 +228,7 @@ public:
         if constexpr (is_arithmetic_v<T>)
             return Int64(data[n]);
         else
-            throwColumnConvertNotSupported(TypeName<T>.data(), "Int");
+            throwColumnConvertNotSupported(TypeName<T>, "Int");
     }
 
     bool getBool(size_t n) const override
@@ -236,7 +236,7 @@ public:
         if constexpr (is_arithmetic_v<T>)
             return bool(data[n]);
         else
-            throwColumnConvertNotSupported(TypeName<T>.data(), "bool");
+            throwColumnConvertNotSupported(TypeName<T>, "bool");
     }
 
     void insert(const Field & x) override
