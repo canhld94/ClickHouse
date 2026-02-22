@@ -63,7 +63,6 @@
 #include <Interpreters/TransactionLog.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/DatabaseCatalog.h>
-#include <Common/CurrentMetrics.h>
 #include <Common/ProfileEvents.h>
 #include <Parsers/ASTSystemQuery.h>
 #include <QueryPipeline/printPipeline.h>
@@ -110,11 +109,6 @@ namespace ProfileEvents
     extern const Event InsertQueryTimeMicroseconds;
     extern const Event OtherQueryTimeMicroseconds;
     extern const Event ASTFuzzerQueries;
-}
-
-namespace CurrentMetrics
-{
-    extern const Metric ASTFuzzerAccumulatedFragments;
 }
 
 namespace DB
@@ -2009,7 +2003,6 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
             auto [fuzzer, lock] = getGlobalASTFuzzer();
             fuzzed_ast = base_ast->clone();
             fuzzer->fuzzMain(fuzzed_ast);
-            CurrentMetrics::set(CurrentMetrics::ASTFuzzerAccumulatedFragments, fuzzer->getAccumulatedStateSize());
         }
 
         WriteBufferFromOwnString fuzzed_query_buf;

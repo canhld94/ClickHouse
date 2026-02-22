@@ -1,5 +1,4 @@
 #include <Columns/ColumnString.h>
-#include <Common/CurrentMetrics.h>
 #include <Common/QueryFuzzer.h>
 #include <Core/Settings.h>
 #include <DataTypes/DataTypeString.h>
@@ -11,11 +10,6 @@
 #include <Parsers/IAST.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/parseQuery.h>
-
-namespace CurrentMetrics
-{
-    extern const Metric ASTFuzzerAccumulatedFragments;
-}
 
 namespace DB
 {
@@ -105,7 +99,6 @@ public:
                     auto [fuzzer, lock] = getGlobalASTFuzzer();
                     fuzzed_ast = ast->clone();
                     fuzzer->fuzzMain(fuzzed_ast);
-                    CurrentMetrics::set(CurrentMetrics::ASTFuzzerAccumulatedFragments, fuzzer->getAccumulatedStateSize());
                 }
 
                 WriteBufferFromOwnString buf;
@@ -141,7 +134,6 @@ private:
                 auto [fuzzer, lock] = getGlobalASTFuzzer();
                 fuzzed_ast = ast->clone();
                 fuzzer->fuzzMain(fuzzed_ast);
-                CurrentMetrics::set(CurrentMetrics::ASTFuzzerAccumulatedFragments, fuzzer->getAccumulatedStateSize());
             }
 
             WriteBufferFromOwnString buf;
