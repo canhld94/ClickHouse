@@ -4937,7 +4937,7 @@ private:
 
     template <typename FloatType>
     static ColumnPtr convertArrayToQBit(
-        ColumnsWithTypeAndName & arguments, const DataTypePtr &, const ColumnNullable * /* nullable_source */, size_t n, size_t size)
+        ColumnsWithTypeAndName & arguments, const DataTypePtr &, const ColumnNullable * nullable_source, size_t n, size_t size)
     {
         using Word = std::conditional_t<sizeof(FloatType) == 2, UInt16, std::conditional_t<sizeof(FloatType) == 4, UInt32, UInt64>>;
 
@@ -4954,15 +4954,19 @@ private:
         const size_t bytes_per_fixedstring = DataTypeQBit::bitsToBytes(n);
         const size_t padded_dimension = bytes_per_fixedstring * 8;
 
-        /// Verify array size matches expected QBit size
+        /// Use the null map to skip NULL rows — their nested arrays may have default (empty) values
+        /// that don't match the expected dimension, but the result will be masked by NULL anyway.
+        const NullMap * null_map = nullable_source ? &nullable_source->getNullMapData() : nullptr;
+
+        /// Verify array size matches expected QBit size (skip NULL rows)
         size_t prev_offset = 0;
-        for (auto off : offsets)
+        for (size_t row = 0; row < arrays_count; ++row)
         {
-            size_t array_size = off - prev_offset;
-            if (array_size != n)
+            size_t array_size = offsets[row] - prev_offset;
+            if (!(null_map && (*null_map)[row]) && array_size != n)
                 throw Exception(
                     ErrorCodes::SIZES_OF_ARRAYS_DONT_MATCH, "Array arguments must have size {} for QBit conversion, got {}", n, array_size);
-            prev_offset = off;
+            prev_offset = offsets[row];
         }
 
         /// Handle empty input column
@@ -4986,8 +4990,19 @@ private:
         }
 
         prev_offset = 0;
-        for (auto off : offsets)
+        for (size_t row = 0; row < arrays_count; ++row)
         {
+            auto off = offsets[row];
+
+            /// For NULL rows, insert default (zero) values — the result will be masked by NULL.
+            if (null_map && (*null_map)[row])
+            {
+                for (size_t j = 0; j < size; ++j)
+                    assert_cast<ColumnFixedString &>(*tuple_columns[j]).insertDefault();
+                prev_offset = off;
+                continue;
+            }
+
             /// Insert default values for each FixedString column and keep pointers to them
             std::vector<char *> row_ptrs(size);
             for (size_t j = 0; j < size; ++j)
@@ -5032,7 +5047,7 @@ private:
                 element_size](
                    ColumnsWithTypeAndName & arguments,
                    const DataTypePtr & result_type,
-                   const ColumnNullable * /* nullable_source */,
+                   const ColumnNullable * nullable_source,
                    size_t /* input_rows_count */) -> ColumnPtr
         {
             const auto & col_array = assert_cast<const ColumnArray &>(*arguments.front().column);
@@ -5045,7 +5060,9 @@ private:
             auto converted_array = ColumnArray::create(converted_nested, col_array.getOffsetsPtr());
             ColumnsWithTypeAndName converted_arguments{{std::move(converted_array), std::make_shared<DataTypeArray>(to_nested_type), ""}};
 
-            return convertArrayToQBit<T>(converted_arguments, result_type, nullptr, dimension, element_size);
+            /// Pass nullable_source so that convertArrayToQBit can use the null map
+            /// to skip NULL rows (whose nested arrays may have default/empty values).
+            return convertArrayToQBit<T>(converted_arguments, result_type, nullable_source, dimension, element_size);
         };
     }
 

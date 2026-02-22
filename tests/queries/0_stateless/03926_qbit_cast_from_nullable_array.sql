@@ -27,3 +27,18 @@ SELECT CAST(
     ([1.5, 2.5]::Array(Float64), 'abc'),
     'Tuple(QBit(Float64, 2), String)'
 );
+
+-- NULL element inside Array should return NULL, not throw SIZES_OF_ARRAYS_DONT_MATCH
+SELECT CAST(
+    [NULL::Nullable(Tuple(Array(Float64), String))],
+    'Array(Nullable(Tuple(QBit(BFloat16, 3), String)))'
+);
+
+-- Mix of non-NULL and NULL rows
+SELECT
+    CAST(v, 'Array(Nullable(Tuple(QBit(BFloat16, 3), String)))') AS converted
+FROM VALUES(
+    'v Array(Nullable(Tuple(Array(Float64), String)))',
+    [([1.0, 2.0, 3.0], 'hello')],
+    [NULL]
+);
