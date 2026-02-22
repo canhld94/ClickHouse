@@ -65,6 +65,18 @@ check_access "SELECT * FROM mergeTreeTextIndex(currentDatabase(), t_merge_tree_i
 check_access "SELECT * FROM mergeTreeTextIndex(currentDatabase(), t_merge_tree_index, idx_b)"
 check_access "SELECT * FROM mergeTreeTextIndex(currentDatabase(), t_merge_tree_index, idx_ab)"
 
+## Row policy tests
+$CLICKHOUSE_CLIENT -q "GRANT SELECT ON $CLICKHOUSE_DATABASE.t_merge_tree_index TO $user_name;"
+
+# Row policy on column `a`: idx_a and idx_ab denied, idx_b allowed
+$CLICKHOUSE_CLIENT -q "CREATE ROW POLICY p1_03917 ON $CLICKHOUSE_DATABASE.t_merge_tree_index FOR SELECT USING a = 'hello' TO $user_name;"
+
+check_access "SELECT * FROM mergeTreeTextIndex(currentDatabase(), t_merge_tree_index, idx_a)"
+check_access "SELECT * FROM mergeTreeTextIndex(currentDatabase(), t_merge_tree_index, idx_b)"
+check_access "SELECT * FROM mergeTreeTextIndex(currentDatabase(), t_merge_tree_index, idx_ab)"
+
+$CLICKHOUSE_CLIENT -q "DROP ROW POLICY p1_03917 ON $CLICKHOUSE_DATABASE.t_merge_tree_index;"
+
 $CLICKHOUSE_CLIENT -q "
     DROP TABLE IF EXISTS t_merge_tree_index;
     DROP USER IF EXISTS $user_name;
