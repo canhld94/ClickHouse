@@ -76,6 +76,10 @@ class KeeperException(Exception):
 
 
 class KeeperClient(object):
+    # In tests-mode, the keeper-client writes this separator to stdout after
+    # each command so we can detect where one command's output ends.
+    # Four BEL (0x07) characters were chosen because they never appear in
+    # normal command output.
     SEPARATOR = b"\a\a\a\a\n"
 
     def __init__(
