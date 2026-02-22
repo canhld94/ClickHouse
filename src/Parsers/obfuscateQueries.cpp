@@ -1199,9 +1199,9 @@ void obfuscateQueries(
             }
             else if (in_insert_context && whole_token_uppercase == "VALUES")
             {
-                in_insert_data = true;
-                result.write(token.begin, token.size());
-                continue;
+                /// VALUES (...) contains SQL expressions parsed by the parser, not raw data.
+                /// Do not enter data mode here — keep normal SQL processing for the parenthesized content.
+                in_insert_context = false;
             }
             else if (in_insert_context && whole_token_uppercase == "FORMAT")
             {
