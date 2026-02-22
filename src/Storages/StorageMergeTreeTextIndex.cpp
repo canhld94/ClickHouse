@@ -435,7 +435,7 @@ void StorageMergeTreeTextIndex::read(
     /// reading from the text index would expose tokens derived from those columnsand violate the row policy.
     auto row_policy_filter = context->getRowPolicyFilter(source_storage_id.getDatabaseName(), source_storage_id.getTableName(), RowPolicyFilterType::SELECT_FILTER);
 
-    if (row_policy_filter && !row_policy_filter->empty())
+    if (row_policy_filter && !row_policy_filter->isAlwaysTrue())
     {
         RequiredSourceColumnsVisitor::Data columns_context;
         RequiredSourceColumnsVisitor(columns_context).visit(row_policy_filter->expression);
