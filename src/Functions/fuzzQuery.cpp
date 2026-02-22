@@ -95,7 +95,7 @@ public:
             for (size_t i = 0; i < input_rows_count; ++i)
             {
                 const char * begin = reinterpret_cast<const char *>(data.data());
-                const char * end = begin + data.size() - 1;
+                const char * end = begin + data.size();
 
                 ParserQuery parser(end, false, implicit_select);
                 ASTPtr ast = parseQuery(parser, begin, end, /*query_description*/ {}, max_query_size, max_parser_depth, max_parser_backtracks);
@@ -131,7 +131,7 @@ private:
         for (size_t i = 0; i < input_rows_count; ++i)
         {
             const char * begin = reinterpret_cast<const char *>(&data[prev_offset]);
-            const char * end = begin + offsets[i] - prev_offset - 1;
+            const char * end = begin + offsets[i] - prev_offset;
 
             ParserQuery parser(end, false, implicit_select);
             ASTPtr ast = parseQuery(parser, begin, end, /*query_description*/ {}, max_query_size, max_parser_depth, max_parser_backtracks);
