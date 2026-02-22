@@ -1050,6 +1050,7 @@ void obfuscateQueries(
     /// State machine for preserving settings values after `=`.
     enum class SettingsState : uint8_t { None, ExpectName, AfterName, ExpectValue, AfterValue };
     SettingsState settings_state = SettingsState::None;
+    bool settings_is_param = false; /// True when current setting name starts with `param_` (query parameter, not a real setting).
 
     /// INSERT context tracking: data after VALUES or FORMAT <name> should be fully obfuscated
     /// (no keyword/known-identifier preservation, since it is user data, not SQL).
@@ -1080,7 +1081,12 @@ void obfuscateQueries(
             continue;
         }
         if (token.type == TokenType::Comment)
+        {
+            /// Replace comments with a space to avoid merging adjacent tokens
+            /// (e.g. ORDER/* ... */BY must not become ORDERBY).
+            result.write(' ');
             continue;
+        }
 
         /// Semicolons always reset all state.
         if (token.type == TokenType::Semicolon)
@@ -1155,10 +1161,14 @@ void obfuscateQueries(
         /// ---- Settings state machine: preserve values of settings. ----
         if (settings_state == SettingsState::ExpectValue)
         {
-            /// Write the value token as-is (number, string, bare word, etc.).
             settings_state = SettingsState::AfterValue;
-            result.write(token.begin, token.size());
-            continue;
+            if (!settings_is_param)
+            {
+                /// Write the value token as-is (number, string, bare word, etc.).
+                result.write(token.begin, token.size());
+                continue;
+            }
+            /// For `param_*` query parameters, fall through to normal obfuscation.
         }
         if (settings_state == SettingsState::AfterValue)
         {
@@ -1200,6 +1210,7 @@ void obfuscateQueries(
             else
             {
                 settings_state = SettingsState::AfterName;
+                settings_is_param = whole_token.starts_with("param_");
                 /// Fall through to normal BareWord processing (the name will be preserved
                 /// if it is a known identifier, or obfuscated otherwise — both are fine).
             }
