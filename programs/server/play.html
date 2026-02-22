@@ -2157,7 +2157,7 @@ databases_toggle.addEventListener('click', e => {
 });
 
 document.getElementById('menu').addEventListener('click', e => {
-    if (!e.target.closest('#github-icon') && !e.target.closest('#databases-toggle') && !e.target.closest('#databases')) {
+    if (!e.target.closest('#github-icon') && !e.target.closest('#databases-toggle') && !e.target.closest('button')) {
         toggleDatabases();
     }
 });
