@@ -272,8 +272,12 @@ bool ReplicatedMergeTreeZooKeeperMergePredicate::isMutationFinished(
         if (partition_ids_hint && !partition_ids_hint->contains(partition_id))
         {
             /// The partition was in the hint initially but was removed by `getCommittingBlocks`
-            /// because it no longer exists in ZooKeeper (e.g. it was dropped or cleaned up).
+            /// because it no longer exists in ZooKeeper (e.g. it was forgotten via `FORGET PARTITION`).
             /// If there's no block_numbers directory for this partition, there can be no committing blocks.
+            /// But if the partition still has parts, it's a bug — the block_numbers node should exist.
+            if (prev_virtual_parts && prev_virtual_parts->hasPartitionId(partition_id))
+                throw Exception(ErrorCodes::LOGICAL_ERROR, "Committing blocks were not loaded for non-empty partition {}, it's a bug", partition_id);
+
             checked_partitions_cache.insert(partition_id);
             continue;
         }
