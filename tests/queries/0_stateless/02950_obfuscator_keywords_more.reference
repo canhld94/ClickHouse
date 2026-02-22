@@ -6,3 +6,5 @@ INSERT INTO placebo FORMAT CSV
 1,cicada
 INSERT INTO placebo SELECT 1
 SELECT 1 FORMAT Pretty
+SELECT inf, nan, -inf, -nan
+SELECT INTERVAL '2 years'

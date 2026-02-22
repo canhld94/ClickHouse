@@ -14,3 +14,5 @@ echo "INSERT INTO t VALUES (1, 'hello')" | $obf
 printf "INSERT INTO t FORMAT CSV\n1,hello\n" | $obf
 echo "INSERT INTO t SELECT 1" | $obf
 echo "SELECT 1 FORMAT Pretty" | $obf
+echo "SELECT inf, nan, -inf, -nan" | $obf
+echo "SELECT INTERVAL '2 years'" | $obf

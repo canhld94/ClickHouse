@@ -96,6 +96,8 @@ const std::unordered_set<std::string> & getObfuscateKeywords()
             "EXTRACT", "TRIM", "DECIMAL",
             /// Multi-word data type constituents not registered as standalone keywords
             "NATIONAL", "LARGE", "OBJECT", "NCHAR", "BINARY",
+            /// Special numeric literals
+            "INF", "NAN",
             /// Substitution syntax type (uppercase because keyword lookup uses toUpper)
             "IDENTIFIER",
         };
@@ -1055,6 +1057,10 @@ void obfuscateQueries(
     bool in_insert_data = false;
     bool expect_format_name = false;
 
+    /// After INTERVAL keyword, preserve the next string literal as-is
+    /// (it contains interval units like '2 years' that must stay valid).
+    bool after_interval = false;
+
     auto always_false_func = [](std::string_view) { return false; };
 
     Lexer lexer(src.data(), src.data() + src.size());
@@ -1083,6 +1089,7 @@ void obfuscateQueries(
             in_insert_context = false;
             in_insert_data = false;
             expect_format_name = false;
+            after_interval = false;
             result.write(token.begin, token.size());
             continue;
         }
@@ -1132,6 +1139,18 @@ void obfuscateQueries(
             continue;
         }
         expect_format_name = false;
+
+        /// ---- INTERVAL string literal: preserve as-is (contains units like '2 years'). ----
+        if (after_interval)
+        {
+            after_interval = false;
+            if (token.type == TokenType::StringLiteral)
+            {
+                result.write(token.begin, token.size());
+                continue;
+            }
+            /// Not a string literal — fall through to normal processing.
+        }
 
         /// ---- Settings state machine: preserve values of settings. ----
         if (settings_state == SettingsState::ExpectValue)
@@ -1218,6 +1237,12 @@ void obfuscateQueries(
             if (whole_token_uppercase == "SET" || whole_token_uppercase == "SETTINGS")
             {
                 settings_state = SettingsState::ExpectName;
+            }
+
+            /// INTERVAL may be followed by a string literal like '2 years'.
+            if (whole_token_uppercase == "INTERVAL")
+            {
+                after_interval = true;
             }
 
             if (getObfuscateKeywords().contains(whole_token_uppercase) || known_identifier_func(whole_token))
