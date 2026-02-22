@@ -853,10 +853,55 @@ void obfuscateLiteral(
         }
     }
 
+    /// Helper: check if a range contains only hex digits.
+    auto isHexRange = [](const char * begin, const char * end) -> bool
+    {
+        for (const char * p = begin; p < end; ++p)
+            if (!isHexDigit(*p))
+                return false;
+        return begin < end;
+    };
+
     while (src_pos < src_end)
     {
+        /// UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (8-4-4-4-12 hex digits with dashes).
+        if (src_pos + 36 <= src_end
+            && isHexRange(src_pos, src_pos + 8)
+            && src_pos[8] == '-'
+            && isHexRange(src_pos + 9, src_pos + 13)
+            && src_pos[13] == '-'
+            && isHexRange(src_pos + 14, src_pos + 18)
+            && src_pos[18] == '-'
+            && isHexRange(src_pos + 19, src_pos + 23)
+            && src_pos[23] == '-'
+            && isHexRange(src_pos + 24, src_pos + 36))
+        {
+            /// Obfuscate each hex digit while preserving dashes and case.
+            SipHash hash_func_uuid = hash_func;
+            hash_func_uuid.update(src_pos, 36);
+            pcg64 rng(hash_func_uuid.get64());
+
+            for (size_t i = 0; i < 36; ++i)
+            {
+                if (src_pos[i] == '-')
+                {
+                    result.write('-');
+                }
+                else
+                {
+                    auto random = rng();
+                    if (src_pos[i] >= 'A' && src_pos[i] <= 'F')
+                        result.write("ABCDEF"[random % 6]);
+                    else if (src_pos[i] >= 'a' && src_pos[i] <= 'f')
+                        result.write("abcdef"[random % 6]);
+                    else
+                        result.write("0123456789"[random % 10]);
+                }
+            }
+            src_pos += 36;
+        }
         /// Date
-        if (src_pos + strlen("0000-00-00") <= src_end
+        else if (src_pos + strlen("0000-00-00") <= src_end
             && isNumericASCII(src_pos[0])
             && isNumericASCII(src_pos[1])
             && isNumericASCII(src_pos[2])
@@ -918,29 +963,101 @@ void obfuscateLiteral(
         }
         else if (isNumericASCII(src_pos[0]))
         {
-            /// Number
-            if (src_pos[0] == '0' || src_pos[0] == '1')
+            /// Try to match IPv4: N.N.N.N where each octet is 1-3 digits, value 0-255.
+            bool matched_ipv4 = false;
             {
-                /// Keep zero and one as is.
-                result.write(src_pos[0]);
-                ++src_pos;
+                const char * p = src_pos;
+                uint32_t octets[4] = {};
+                bool is_ipv4 = true;
+
+                for (int i = 0; i < 4 && is_ipv4; ++i)
+                {
+                    const char * octet_start = p;
+                    uint32_t val = 0;
+
+                    while (p < src_end && isNumericASCII(*p) && (p - octet_start) < 3)
+                    {
+                        val = val * 10 + (*p - '0');
+                        ++p;
+                    }
+
+                    if (p == octet_start || val > 255)
+                    {
+                        is_ipv4 = false;
+                        break;
+                    }
+
+                    octets[i] = val;
+
+                    if (i < 3)
+                    {
+                        if (p < src_end && *p == '.')
+                            ++p;
+                        else
+                            is_ipv4 = false;
+                    }
+                }
+
+                /// Must not be followed by more digits or dots (to avoid matching version numbers, etc).
+                if (is_ipv4 && p < src_end && (isNumericASCII(*p) || *p == '.'))
+                    is_ipv4 = false;
+
+                if (is_ipv4)
+                {
+                    matched_ipv4 = true;
+
+                    SipHash hash_func_ip = hash_func;
+                    hash_func_ip.update(src_pos, p - src_pos);
+                    pcg64 rng(hash_func_ip.get64());
+
+                    for (int i = 0; i < 4; ++i)
+                    {
+                        if (i > 0)
+                            result.write('.');
+
+                        /// Obfuscate each octet while keeping it in valid range 0-255.
+                        /// Preserve 0, 1, and 255 as-is (common special values).
+                        uint32_t val = octets[i];
+                        if (val == 0 || val == 1 || val == 255)
+                        {
+                            writeIntText(val, result);
+                        }
+                        else
+                        {
+                            uint32_t obfuscated = 2 + rng() % 254; /// 2..255
+                            writeIntText(obfuscated, result);
+                        }
+                    }
+                    src_pos = p;
+                }
             }
-            else
+
+            if (!matched_ipv4)
             {
-                ReadBufferFromMemory in(src_pos, src_end - src_pos);
-                uint64_t num;
-                readIntText(num, in);
-                SipHash hash_func_num = hash_func;
-                hash_func_num.update(src_pos, in.count());
-                src_pos += in.count();
+                /// Number
+                if (src_pos[0] == '0' || src_pos[0] == '1')
+                {
+                    /// Keep zero and one as is.
+                    result.write(src_pos[0]);
+                    ++src_pos;
+                }
+                else
+                {
+                    ReadBufferFromMemory in(src_pos, src_end - src_pos);
+                    uint64_t num;
+                    readIntText(num, in);
+                    SipHash hash_func_num = hash_func;
+                    hash_func_num.update(src_pos, in.count());
+                    src_pos += in.count();
 
-                /// Obfuscate number but keep it within same power of two range.
+                    /// Obfuscate number but keep it within same power of two range.
 
-                uint64_t obfuscated = hash_func_num.get64();
-                uint64_t log2 = bitScanReverse(num);
+                    uint64_t obfuscated = hash_func_num.get64();
+                    uint64_t log2 = bitScanReverse(num);
 
-                obfuscated = (1ULL << log2) + obfuscated % (1ULL << log2);
-                writeIntText(obfuscated, result);
+                    obfuscated = (1ULL << log2) + obfuscated % (1ULL << log2);
+                    writeIntText(obfuscated, result);
+                }
             }
         }
         else if (src_pos + 1 < src_end

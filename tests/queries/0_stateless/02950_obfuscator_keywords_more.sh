@@ -16,3 +16,5 @@ echo "INSERT INTO t SELECT 1" | $obf
 echo "SELECT 1 FORMAT Pretty" | $obf
 echo "SELECT inf, nan, -inf, -nan" | $obf
 echo "SELECT INTERVAL '2 years'" | $obf
+echo "SELECT '192.168.1.100'" | $obf
+echo "SELECT '550e8400-e29b-41d4-a716-446655440000'" | $obf
