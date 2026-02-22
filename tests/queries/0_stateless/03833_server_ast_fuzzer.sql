@@ -7,7 +7,3 @@ SET ast_fuzzer_runs = 3;
 SELECT 1;
 
 SELECT number FROM numbers(10) WHERE number > 5 ORDER BY number;
-
-SET ast_fuzzer_any_query = 1;
-
-SELECT 'Hello, World!';

@@ -63,6 +63,7 @@
 #include <Interpreters/TransactionLog.h>
 #include <Interpreters/executeQuery.h>
 #include <Interpreters/DatabaseCatalog.h>
+#include <Common/CurrentMetrics.h>
 #include <Common/ProfileEvents.h>
 #include <Parsers/ASTSystemQuery.h>
 #include <QueryPipeline/printPipeline.h>
@@ -108,6 +109,12 @@ namespace ProfileEvents
     extern const Event SelectQueryTimeMicroseconds;
     extern const Event InsertQueryTimeMicroseconds;
     extern const Event OtherQueryTimeMicroseconds;
+    extern const Event ASTFuzzerQueries;
+}
+
+namespace CurrentMetrics
+{
+    extern const Metric ASTFuzzerAccumulatedFragments;
 }
 
 namespace DB
@@ -1979,16 +1986,13 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
     if (!any_query && !isReadOnlyQuery(ast))
         return;
 
-    size_t num_runs = 0;
-    if (ast_fuzzer_runs_value >= 1.0)
+    size_t num_runs = static_cast<size_t>(ast_fuzzer_runs_value);
+    double fractional = ast_fuzzer_runs_value - static_cast<double>(num_runs);
+    if (fractional > 0)
     {
-        num_runs = static_cast<size_t>(ast_fuzzer_runs_value);
-    }
-    else
-    {
-        std::bernoulli_distribution dist(ast_fuzzer_runs_value);
+        std::bernoulli_distribution dist(fractional);
         if (dist(thread_local_rng))
-            num_runs = 1;
+            ++num_runs;
     }
 
     if (num_runs == 0)
@@ -2005,6 +2009,7 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
             auto [fuzzer, lock] = getGlobalASTFuzzer();
             fuzzed_ast = base_ast->clone();
             fuzzer->fuzzMain(fuzzed_ast);
+            CurrentMetrics::set(CurrentMetrics::ASTFuzzerAccumulatedFragments, fuzzer->getAccumulatedStateSize());
         }
 
         WriteBufferFromOwnString fuzzed_query_buf;
@@ -2017,6 +2022,7 @@ static void executeASTFuzzerQueries(const ASTPtr & ast, const ContextMutablePtr 
             continue;
         }
 
+        ProfileEvents::increment(ProfileEvents::ASTFuzzerQueries);
         LOG_TRACE(logger, "Fuzzed query: {}", fuzzed_query);
 
         try

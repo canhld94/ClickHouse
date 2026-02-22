@@ -1,4 +1,5 @@
 #include <Columns/ColumnString.h>
+#include <Common/CurrentMetrics.h>
 #include <Common/QueryFuzzer.h>
 #include <Core/Settings.h>
 #include <DataTypes/DataTypeString.h>
@@ -10,6 +11,11 @@
 #include <Parsers/IAST.h>
 #include <Parsers/ParserQuery.h>
 #include <Parsers/parseQuery.h>
+
+namespace CurrentMetrics
+{
+    extern const Metric ASTFuzzerAccumulatedFragments;
+}
 
 namespace DB
 {
@@ -75,7 +81,7 @@ public:
             auto col_res = ColumnString::create();
             fuzzVector(
                 col_query_string->getChars(), col_query_string->getOffsets(),
-                col_res->getChars(), col_res->getOffsets(),
+                *col_res,
                 input_rows_count);
             return col_res;
         }
@@ -85,12 +91,11 @@ public:
             auto col_res = ColumnString::create();
 
             const ColumnString::Chars & data = assert_cast<const ColumnString &>(col_query_const->getDataColumn()).getChars();
-            ColumnString::Offsets single_offset{data.size()};
 
             for (size_t i = 0; i < input_rows_count; ++i)
             {
                 const char * begin = reinterpret_cast<const char *>(data.data());
-                const char * end = begin + data.size();
+                const char * end = begin + data.size() - 1;
 
                 ParserQuery parser(end, false, implicit_select);
                 ASTPtr ast = parseQuery(parser, begin, end, /*query_description*/ {}, max_query_size, max_parser_depth, max_parser_backtracks);
@@ -100,6 +105,7 @@ public:
                     auto [fuzzer, lock] = getGlobalASTFuzzer();
                     fuzzed_ast = ast->clone();
                     fuzzer->fuzzMain(fuzzed_ast);
+                    CurrentMetrics::set(CurrentMetrics::ASTFuzzerAccumulatedFragments, fuzzer->getAccumulatedStateSize());
                 }
 
                 WriteBufferFromOwnString buf;
@@ -117,20 +123,15 @@ private:
     void fuzzVector(
         const ColumnString::Chars & data,
         const ColumnString::Offsets & offsets,
-        ColumnString::Chars & res_data,
-        ColumnString::Offsets & res_offsets,
+        ColumnString & col_res,
         size_t input_rows_count) const
     {
-        res_offsets.resize(input_rows_count);
-        res_data.resize(data.size());
-
         size_t prev_offset = 0;
-        size_t res_data_size = 0;
 
         for (size_t i = 0; i < input_rows_count; ++i)
         {
             const char * begin = reinterpret_cast<const char *>(&data[prev_offset]);
-            const char * end = begin + offsets[i] - prev_offset;
+            const char * end = begin + offsets[i] - prev_offset - 1;
 
             ParserQuery parser(end, false, implicit_select);
             ASTPtr ast = parseQuery(parser, begin, end, /*query_description*/ {}, max_query_size, max_parser_depth, max_parser_backtracks);
@@ -140,24 +141,14 @@ private:
                 auto [fuzzer, lock] = getGlobalASTFuzzer();
                 fuzzed_ast = ast->clone();
                 fuzzer->fuzzMain(fuzzed_ast);
+                CurrentMetrics::set(CurrentMetrics::ASTFuzzerAccumulatedFragments, fuzzer->getAccumulatedStateSize());
             }
 
             WriteBufferFromOwnString buf;
             fuzzed_ast->format(buf, IAST::FormatSettings(/*one_line=*/true));
-            auto formatted = buf.stringView();
-
-            const size_t res_data_new_size = res_data_size + formatted.size() + 1;
-            if (res_data_new_size > res_data.size())
-                res_data.resize(2 * res_data_new_size);
-
-            memcpy(&res_data[res_data_size], formatted.data(), formatted.size());
-            res_data_size += formatted.size() + 1;
-            res_data[res_data_size - 1] = '\0';
-            res_offsets[i] = res_data_size;
+            col_res.insertData(buf.str().data(), buf.str().size());
             prev_offset = offsets[i];
         }
-
-        res_data.resize(res_data_size);
     }
 
     size_t max_query_size;
