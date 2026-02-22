@@ -362,8 +362,8 @@ void KeeperClient::runInteractiveInputStream()
         if (!processQueryText(input, /*is_interactive=*/true))
             break;
 
-        cout << "\a\a\a\a" << std::endl;
         cerr << std::flush;
+        cout << "\a\a\a\a" << std::endl;
     }
 }
 

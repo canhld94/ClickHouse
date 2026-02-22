@@ -153,10 +153,19 @@ class KeeperClient(object):
             if not events:
                 raise TimeoutError(f"Keeper client returned no output")
 
+            # Process stderr events before stdout to ensure errors are
+            # collected before checking the stdout separator.
             for fd_num, event in events:
                 if event & (select.EPOLLIN | select.EPOLLPRI):
                     file = self._fd_nums[fd_num]
+                    if file == self.proc.stderr:
+                        error += self.proc.stderr.readline()
+                elif not (event & select.EPOLLHUP):
+                    raise ValueError(f"Failed to read from pipe. Flag {event}")
 
+            for fd_num, event in events:
+                if event & (select.EPOLLIN | select.EPOLLPRI):
+                    file = self._fd_nums[fd_num]
                     if file == self.proc.stdout:
                         while True:
                             chunk = file.readline()
@@ -168,12 +177,6 @@ class KeeperClient(object):
                                 return output.getvalue().strip().decode()
 
                             output.write(chunk)
-
-                    elif file == self.proc.stderr:
-                        error += self.proc.stderr.readline()
-
-                else:
-                    raise ValueError(f"Failed to read from pipe. Flag {event}")
 
     def cd(self, path: str, timeout: float = 60.0):
         self.execute_query(f"cd '{path}'", timeout)
