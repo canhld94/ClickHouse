@@ -33,7 +33,7 @@ Int64 wasmExportServerVer(WasmCompartment *)
     return static_cast<UInt64>(VERSION_INTEGER);
 }
 
-[[noreturn]] void wasmExportTerminate(WasmCompartment * compartment, WasmPtr wasm_ptr, WasmSizeT size)
+[[noreturn]] void wasmExportThrow(WasmCompartment * compartment, WasmPtr wasm_ptr, WasmSizeT size)
 {
     const auto * host_ptr = compartment->getMemory(wasm_ptr, size);
     std::string_view data(reinterpret_cast<const char *>(host_ptr), size);
@@ -119,7 +119,7 @@ WasmHostFunction getHostFunction(std::string_view function_name)
 {
     static const std::array exported_functions{
         makeHostFunction("clickhouse_server_version", wasmExportServerVer),
-        makeHostFunction("clickhouse_terminate", wasmExportTerminate),
+        makeHostFunction("clickhouse_throw", wasmExportThrow),
         makeHostFunction("clickhouse_log", wasmExportLog),
         makeHostFunction("clickhouse_random", wasmExportRandom),
     };

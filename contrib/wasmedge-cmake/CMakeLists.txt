@@ -18,12 +18,6 @@ endif()
 set (SOURCE_DIR "${ClickHouse_SOURCE_DIR}/contrib/wasmedge")
 set (CURRENT_DIR_BINARY "${ClickHouse_BINARY_DIR}/contrib/wasmedge")
 
-# if (TARGET ch_contrib::llvm)
-#     SET(WASMEDGE_USE_LLVM 1)
-# else()
-#     SET(WASMEDGE_USE_LLVM 0)
-# endif()
-
 SET(WASMEDGE_USE_LLVM 0)
 
 file (GLOB_RECURSE SRCS
@@ -37,9 +31,6 @@ file (GLOB_RECURSE SRCS
     ${SOURCE_DIR}/lib/system/*.cpp
     ${SOURCE_DIR}/lib/validator/*.cpp
     ${SOURCE_DIR}/lib/vm/*.cpp
-    # ${SOURCE_DIR}/lib/aot/*.cpp
-    # ${SOURCE_DIR}/lib/driver/*.cpp
-    # ${SOURCE_DIR}/lib/wasi_nn_rpc/*.cpp
 )
 
 if (WASMEDGE_USE_LLVM)

@@ -55,7 +55,7 @@ Available Engine Implementations:
 This example demonstrates the complete workflow of creating a WebAssembly UDF by implementing the [Collatz conjecture](https://en.wikipedia.org/wiki/Collatz_conjecture) calculator.
 
 We'll write the code in WebAssembly Text format (WAT), which is a human-readable representation of WebAssembly, so no any programming language is required at this stage.
-Clickhouse requires the module to be in binary format, so we'll use the transpiler to convert WAT to WASM.
+ClickHouse requires the module to be in binary format, so we'll use the transpiler to convert WAT to WASM.
 To perform this conversion you may use `wat2wasm` from the [WebAssembly Binary Toolkit (WABT)](https://github.com/WebAssembly/wabt) or `parse` command from the [wasm-tools](https://github.com/bytecodealliance/wasm-tools).
 
 ```bash
@@ -214,7 +214,7 @@ Can be created as:
 CREATE FUNCTION my_func ARGUMENTS (Int32, UInt64, Float32) RETURNS Float64 ...
 ```
 
-WebAssembly does not distinguish between signed and unsigned arguments, but rather uses different istructions to interpret the values. Thus, size of the argument should match exactly, while signedness is determined by the operations inside the function.
+WebAssembly does not distinguish between signed and unsigned arguments, but rather uses different instructions to interpret the values. Thus, size of the argument should match exactly, while signedness is determined by the operations inside the function.
 
 
 ### ABI UNSTABLE_V0_1

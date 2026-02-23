@@ -401,8 +401,6 @@ String toString(WasmAbiVersion abi_type)
             return "PLAIN";
         case WasmAbiVersion::UnstableV01:
             return "UNSTABLE_V0_1";
-        // case WasmAbiVersion::V1:
-        //     return "V1";
     }
     throw Exception(
         ErrorCodes::LOGICAL_ERROR, "Unknown WebAssembly ABI version: {}", std::to_underlying(abi_type));
@@ -661,9 +659,9 @@ UserDefinedWebAssemblyFunctionFactory & UserDefinedWebAssemblyFunctionFactory::i
 
 struct WebAssemblyFunctionSettingsConstraits : public IHints<>
 {
-    struct SettingDeffinition
+    struct SettingDefinition
     {
-        explicit SettingDeffinition(std::function<void(std::string_view, const Field &)> check_, Field default_value_)
+        explicit SettingDefinition(std::function<void(std::string_view, const Field &)> check_, Field default_value_)
             : default_value(std::move(default_value_)), check(std::move(check_))
         {
             chassert(check);
@@ -675,9 +673,9 @@ struct WebAssemblyFunctionSettingsConstraits : public IHints<>
 
     struct SettingUInt64Range
     {
-        SettingDeffinition withDefault(UInt64 default_value) const
+        SettingDefinition withDefault(UInt64 default_value) const
         {
-            return SettingDeffinition(
+            return SettingDefinition(
                 [min_ = this->min, max_ = this->max](std::string_view name, const Field & value) // NOLINT
                 {
                     if (value.getType() != Field::Types::UInt64)
@@ -698,9 +696,9 @@ struct WebAssemblyFunctionSettingsConstraits : public IHints<>
 
     struct SettingStringFromSet
     {
-        SettingDeffinition withDefault(String default_value) const
+        SettingDefinition withDefault(String default_value) const
         {
-            return SettingDeffinition(
+            return SettingDefinition(
                 [values_ = this->values](std::string_view name, const Field & value) // NOLINT
                 {
                     if (value.getType() != Field::Types::String)
@@ -718,7 +716,7 @@ struct WebAssemblyFunctionSettingsConstraits : public IHints<>
         std::unordered_set<String> values;
     };
 
-    const std::unordered_map<String, SettingDeffinition> settings_def = {
+    const std::unordered_map<String, SettingDefinition> settings_def = {
         /// Fuel limit for a single instance
         {"max_fuel", SettingUInt64Range{}.withDefault(100'000)},
         /// Memory limit for a single instance
