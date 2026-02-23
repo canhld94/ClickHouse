@@ -165,7 +165,7 @@ LANGUAGE WASM
 FROM 'module_name' [:: 'source_function_name']
 ARGUMENTS ( [name type[, ...]] | [type[, ...]] )
 RETURNS return_type
-[ABI PLAIN | ABI UNSTABLE_V0_1]
+[ABI PLAIN | ABI BUFFERED_V1]
 [SHA256_HASH 'hex']
 [SETTINGS key = value[, ...]];
 ```
@@ -177,7 +177,7 @@ RETURNS return_type
 - `ARGUMENTS`: List of argument names and types (names optional and used for serialization formats that support named fields)
 - `ABI`: Application Binary Interface version
   - `PLAIN`: Direct type mapping, row-by-row processing
-  - `UNSTABLE_V0_1`: Block-based processing with serialization
+  - `BUFFERED_V1`: Block-based processing with serialization
 - `SHA256_HASH`: Expected module hash for verification (auto-filled if omitted), can be used to ensure the correct WASM module loaded across different replicas.
 - `SETTINGS`: Per-function settings
     - `max_fuel` UInt64 — Instruction fuel per instance. Default: `100000`.
@@ -191,7 +191,7 @@ RETURNS return_type
 To interact with ClickHouse, WebAssembly modules must adhere to one of the supported ABIs (Application Binary Interfaces).
 
 - `PLAIN`: Direct type mapping (primitive types `Int32`, `UInt32`, `Int64`, `UInt64`, `Float32`, `Float64` only)
-- `UNSTABLE_V0_1`: Complex types with serialization (default)
+- `BUFFERED_V1`: Complex types with serialization (default)
 
 ### ABI PLAIN
 
@@ -217,7 +217,7 @@ CREATE FUNCTION my_func ARGUMENTS (Int32, UInt64, Float32) RETURNS Float64 ...
 WebAssembly does not distinguish between signed and unsigned arguments, but rather uses different instructions to interpret the values. Thus, size of the argument should match exactly, while signedness is determined by the operations inside the function.
 
 
-### ABI UNSTABLE_V0_1
+### ABI BUFFERED_V1
 
 :::note
 This ABI is experimental and subject to change in future releases.

@@ -248,11 +248,11 @@ private:
     WasmCompartment * compartment;
 };
 
-class UserDefinedWebAssemblyFunctionV01 : public UserDefinedWebAssemblyFunction
+class UserDefinedWebAssemblyFunctionBufferedV1 : public UserDefinedWebAssemblyFunction
 {
 public:
     template <typename... Args>
-    explicit UserDefinedWebAssemblyFunctionV01(Args &&... args) : UserDefinedWebAssemblyFunction(std::forward<Args>(args)...)
+    explicit UserDefinedWebAssemblyFunctionBufferedV1(Args &&... args) : UserDefinedWebAssemblyFunction(std::forward<Args>(args)...)
     {
         checkSignature();
     }
@@ -385,8 +385,8 @@ std::unique_ptr<UserDefinedWebAssemblyFunction> UserDefinedWebAssemblyFunction::
         case WasmAbiVersion::Plain:
             return std::make_unique<UserDefinedWebAssemblyFunctionSimple>(
                 wasm_module_, function_name_, argument_names_, arguments_, result_type_, std::move(function_settings));
-        case WasmAbiVersion::UnstableV01:
-            return std::make_unique<UserDefinedWebAssemblyFunctionV01>(
+        case WasmAbiVersion::BufferedV1:
+            return std::make_unique<UserDefinedWebAssemblyFunctionBufferedV1>(
                 wasm_module_, function_name_, argument_names_, arguments_, result_type_, std::move(function_settings));
     }
     throw Exception(
@@ -399,8 +399,8 @@ String toString(WasmAbiVersion abi_type)
     {
         case WasmAbiVersion::Plain:
             return "PLAIN";
-        case WasmAbiVersion::UnstableV01:
-            return "UNSTABLE_V0_1";
+        case WasmAbiVersion::BufferedV1:
+            return "BUFFERED_V1";
     }
     throw Exception(
         ErrorCodes::LOGICAL_ERROR, "Unknown WebAssembly ABI version: {}", std::to_underlying(abi_type));
@@ -408,7 +408,7 @@ String toString(WasmAbiVersion abi_type)
 
 WasmAbiVersion getWasmAbiFromString(const String & str)
 {
-    for (auto abi_type : {WasmAbiVersion::Plain, WasmAbiVersion::UnstableV01})
+    for (auto abi_type : {WasmAbiVersion::Plain, WasmAbiVersion::BufferedV1})
         if (Poco::toUpper(str) == toString(abi_type))
             return abi_type;
 

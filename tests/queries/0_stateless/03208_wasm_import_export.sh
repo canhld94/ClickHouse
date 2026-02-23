@@ -89,7 +89,7 @@ load_wasm_module export_incorrect_malloc
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
-CREATE FUNCTION export_incorrect_malloc LANGUAGE WASM ABI UNSTABLE_V0_1 FROM 'export_incorrect_malloc' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32; -- { serverError BAD_ARGUMENTS }
+CREATE FUNCTION export_incorrect_malloc LANGUAGE WASM ABI BUFFERED_V1 FROM 'export_incorrect_malloc' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32; -- { serverError BAD_ARGUMENTS }
 DELETE FROM system.webassembly_modules WHERE name = 'export_incorrect_malloc';
 
 EOF
@@ -98,7 +98,7 @@ load_wasm_module export_faulty_malloc
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
-CREATE FUNCTION export_faulty_malloc LANGUAGE WASM ABI UNSTABLE_V0_1 FROM 'export_faulty_malloc' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32;
+CREATE FUNCTION export_faulty_malloc LANGUAGE WASM ABI BUFFERED_V1 FROM 'export_faulty_malloc' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32;
 SELECT export_faulty_malloc(1 :: UInt32); -- { serverError WASM_ERROR }
 
 EOF
