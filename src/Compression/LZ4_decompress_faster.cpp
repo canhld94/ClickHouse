@@ -620,8 +620,10 @@ bool decompress(
     if (source_size == 0 || dest_size == 0)
         return true;
 
-    /// Don't run timer if the block is too small.
-    if (dest_size >= 32768)
+    /// When a specific method is forced, always use it regardless of block size.
+    /// The size threshold below only applies to the adaptive bandit algorithm
+    /// where timing very small blocks would add too much noise.
+    if (statistics.choose_method >= 0 || dest_size >= 32768)
     {
         size_t variant_size = 3;
         size_t best_variant = statistics.select(variant_size);
