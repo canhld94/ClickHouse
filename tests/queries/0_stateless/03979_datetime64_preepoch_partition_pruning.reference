@@ -1,0 +1,10 @@
+DateTime64: without filter
+p1	a
+DateTime64: with pre-epoch filter
+p1	a
+DateTime64: with epoch filter
+p1	a
+Date32: without filter
+a
+Date32: with pre-epoch filter
+a

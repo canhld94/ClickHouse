@@ -1115,16 +1115,29 @@ bool applyFunctionChainToColumn(
 
 bool KeyCondition::isFunctionReallyMonotonic(const IFunctionBase & func, const IDataType & arg_type) const
 {
+    const IDataType * type = &arg_type;
+    if (const auto * lowcard_type = typeid_cast<const DataTypeLowCardinality *>(type))
+        type = lowcard_type->getDictionaryType().get();
+    if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(type))
+        type = nullable_type->getNestedType().get();
+
     if (date_time_overflow_behavior_ignore && func.getName() == "toDateTime")
     {
-        const IDataType * type = &arg_type;
-        if (const auto * lowcard_type = typeid_cast<const DataTypeLowCardinality *>(type))
-            type = lowcard_type->getDictionaryType().get();
-        if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(type))
-            type = nullable_type->getNestedType().get();
-
         /// toDateTime(date) may overflow, breaking monotonicity.
         if (isDateOrDate32(type))
+            return false;
+    }
+
+    if (func.getName() == "toDate")
+    {
+        /// toDate() truncates to UInt16, so negative inputs (DateTime64, Date32) overflow
+        const auto & arg_types = func.getArgumentTypes();
+        const IDataType * input_type = !arg_types.empty() ? arg_types[0].get() : type;
+        if (const auto * lc = typeid_cast<const DataTypeLowCardinality *>(input_type))
+            input_type = lc->getDictionaryType().get();
+        if (const auto * nt = typeid_cast<const DataTypeNullable *>(input_type))
+            input_type = nt->getNestedType().get();
+        if (isDateTime64(input_type) || isDate32(input_type))
             return false;
     }
 
