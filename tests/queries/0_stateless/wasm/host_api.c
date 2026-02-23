@@ -4,6 +4,7 @@
 extern uint64_t clickhouse_server_version();
 extern void clickhouse_log(const char * message, uint32_t length);
 extern void clickhouse_throw(const char * message, uint32_t length);
+extern void clickhouse_random(void * data, uint32_t size);
 
 uint32_t int_to_str(uint64_t n, char * buf) {
     uint32_t len = 0;
@@ -41,5 +42,12 @@ uint32_t test_func(uint32_t terminate) {
     return 0;
 }
 
-
-
+uint32_t test_random(uint32_t) {
+    uint8_t buf[16];
+    clickhouse_random(buf, sizeof(buf));
+    uint32_t sum = 0;
+    for (uint32_t i = 0; i < sizeof(buf); i++) {
+        sum += buf[i];
+    }
+    return sum;
+}

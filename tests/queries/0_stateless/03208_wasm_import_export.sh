@@ -12,6 +12,7 @@ ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
 DROP FUNCTION IF EXISTS test_host_api;
 DROP FUNCTION IF EXISTS test_func;
+DROP FUNCTION IF EXISTS test_random;
 DROP FUNCTION IF EXISTS export_faulty_malloc;
 DROP FUNCTION IF EXISTS export_incorrect_malloc;
 
@@ -26,6 +27,9 @@ EOF
 load_wasm_module host_api test_host_api
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
+
+CREATE FUNCTION test_random LANGUAGE WASM ABI PLAIN FROM 'test_host_api' ARGUMENTS (UInt32) RETURNS UInt32;
+SELECT test_random(1 :: UInt32) != test_random(2 :: UInt32);
 
 CREATE FUNCTION test_host_api LANGUAGE WASM ABI PLAIN FROM 'test_host_api' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32;
 
