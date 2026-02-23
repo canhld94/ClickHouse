@@ -15,6 +15,8 @@ CREATE TABLE text_idx_tf
 )
 ENGINE = MergeTree ORDER BY id;
 
+SYSTEM STOP MERGES text_idx_tf;
+
 -- Insert two separate parts so we can test part_name filtering.
 INSERT INTO text_idx_tf SELECT number, concatWithSeparator(' ', 'apple', 'banana') FROM numbers(500);
 INSERT INTO text_idx_tf SELECT 500 + number, concatWithSeparator(' ', 'cherry', 'date') FROM numbers(500);
@@ -80,6 +82,8 @@ CREATE TABLE text_idx_tf
 )
 ENGINE = MergeTree ORDER BY id;
 
+SYSTEM STOP MERGES text_idx_tf;
+
 -- Insert 26 rows, each with a single-letter token.
 INSERT INTO text_idx_tf SELECT number, char(97 + number) FROM numbers(26);
 
@@ -115,6 +119,8 @@ CREATE TABLE text_idx_tf
     INDEX idx_s (s) TYPE text(tokenizer = splitByNonAlpha, dictionary_block_size = 8, posting_list_block_size = 1024)
 )
 ENGINE = MergeTree ORDER BY id;
+
+SYSTEM STOP MERGES text_idx_tf;
 
 -- Insert 100000 rows with several token patterns.
 -- Tokens: 'common' appears in every row, 'rare' in 1 row,
@@ -173,6 +179,8 @@ CREATE TABLE text_idx_tf
     INDEX idx_s (s) TYPE text(tokenizer = splitByNonAlpha, dictionary_block_size = 1)
 )
 ENGINE = MergeTree ORDER BY id;
+
+SYSTEM STOP MERGES text_idx_tf;
 
 -- Three separate inserts = three parts.
 INSERT INTO text_idx_tf SELECT number, 'alpha beta gamma' FROM numbers(100);
