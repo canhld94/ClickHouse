@@ -228,7 +228,7 @@ namespace
             {
                 /// SELECT timeSeriesGroupToTags(group) AS tags,
                 ///        <start_time> AS timestamp,
-                ///        values[1]::scalar_data_type AS value
+                ///        assumeNotNull(values[1])::scalar_data_type AS value
                 /// FROM <vector_grid>
                 /// WHERE isNotNull(values[1])
 
@@ -236,9 +236,12 @@ namespace
                 tags = makeASTFunction("timeSeriesGroupToTags", make_intrusive<ASTIdentifier>(ColumnNames::Group));
                 tags->setAlias(ColumnNames::Tags);
 
-                /// values[1] AS value
+                /// assumeNotNull(values[1]) AS value
                 value = timeSeriesScalarASTCast(
-                    makeASTFunction("arrayElement", make_intrusive<ASTIdentifier>(ColumnNames::Values), make_intrusive<ASTLiteral>(1u)),
+                    makeASTFunction(
+                        "assumeNotNull",
+                        makeASTFunction(
+                            "arrayElement", make_intrusive<ASTIdentifier>(ColumnNames::Values), make_intrusive<ASTLiteral>(1u))),
                     context.scalar_data_type);
                 value->setAlias(ColumnNames::Value);
 
