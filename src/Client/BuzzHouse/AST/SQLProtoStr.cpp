@@ -2973,24 +2973,6 @@ CONV_FN(IndexParam, ip)
     }
 }
 
-CONV_FN(CodecParam, cp)
-{
-    ret += CompressionCodec_Name(cp.codec()).substr(5);
-    if (cp.params_size())
-    {
-        ret += "(";
-        for (int i = 0; i < cp.params_size(); i++)
-        {
-            if (i != 0)
-            {
-                ret += ", ";
-            }
-            IndexParamToString(ret, cp.params(i));
-        }
-        ret += ")";
-    }
-}
-
 CONV_FN(DatabaseEngineParam, dep)
 {
     using DatabaseEngineParamType = DatabaseEngineParam::DatabaseEngineParamOneofCase;
@@ -3110,18 +3092,6 @@ CONV_FN(DefaultModifier, def_mod)
     }
 }
 
-CONV_FN(CodecList, cl)
-{
-    ret += "CODEC(";
-    CodecParamToString(ret, cl.codec());
-    for (int i = 0; i < cl.other_codecs_size(); i++)
-    {
-        ret += ", ";
-        CodecParamToString(ret, cl.other_codecs(i));
-    }
-    ret += ")";
-}
-
 CONV_FN(ColumnDef, cdf)
 {
     ColumnPathToString(ret, 0, cdf.col());
@@ -3144,8 +3114,9 @@ CONV_FN(ColumnDef, cdf)
     }
     if (cdf.has_codecs())
     {
-        ret += " ";
-        CodecListToString(ret, cdf.codecs());
+        ret += " CODEC(";
+        ret += cdf.codecs();
+        ret += ")";
     }
     if (cdf.has_stats())
     {
@@ -3397,8 +3368,9 @@ CONV_FN(TTLUpdate, upt)
             TTLDeleteToString(ret, upt.del());
             break;
         case TTLUpdateType::kCodecs:
-            ret += "RECOMPRESS ";
-            CodecListToString(ret, upt.codecs());
+            ret += "RECOMPRESS CODEC(";
+            ret += upt.codecs();
+            ret += ")";
             break;
         case TTLUpdateType::kStorage:
             ret += "TO ";

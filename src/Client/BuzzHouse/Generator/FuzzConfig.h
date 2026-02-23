@@ -71,6 +71,7 @@ const constexpr uint64_t allow_replacing_mergetree
     allow_arrowflight = (UINT64_C(1) << 43), allow_alias = (UINT64_C(1) << 44), allow_kafka = (UINT64_C(1) << 45);
 
 extern const DB::Strings compressionMethods;
+extern const DB::Strings codecs;
 
 using JSONObjectType = JSONParserImpl::Element;
 

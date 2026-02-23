@@ -79,6 +79,7 @@ extern std::vector<SystemTable> systemTables;
 
 extern std::unordered_map<DictionaryLayouts, std::unordered_map<String, CHSetting>> allDictionaryLayoutSettings;
 
+String generateNextCodecString(RandomGenerator & rg);
 void loadFuzzerServerSettings(const FuzzConfig & fc);
 void loadFuzzerTableSettings(const FuzzConfig & fc);
 void loadSystemTables(FuzzConfig & fc);

@@ -51,6 +51,72 @@ static String settingCombinations(RandomGenerator & rg, DB::Strings && choices)
     return "'" + res + "'";
 }
 
+String generateNextCodecString(RandomGenerator & rg)
+{
+    String res;
+    DB::Strings choices;
+
+    if (rg.nextBool())
+    {
+        /// Pick just one
+        choices.emplace_back(rg.pickRandomly(codecs));
+    }
+    else
+    {
+        /// Pick a combination of some or none
+        std::vector<uint32_t> ids;
+        const uint32_t ncodecs = rg.randomInt<uint32_t>(1, std::min(UINT32_C(4), static_cast<uint32_t>(codecs.size())));
+
+        for (size_t i = 0; i < ids.size(); i++)
+        {
+            ids.emplace_back(i);
+        }
+        std::shuffle(ids.begin(), ids.end(), rg.generator);
+        for (uint32_t i = 0; i < ncodecs; i++)
+        {
+            choices.emplace_back(codecs[ids[i]]);
+        }
+    }
+
+    res += "'";
+    for (size_t i = 0; i < choices.size(); i++)
+    {
+        if (i != 0)
+        {
+            res += ",";
+        }
+        res += choices[i];
+        if (choices[i] == "LZ4HC" && rg.nextBool())
+        {
+            res += "(";
+            res += std::to_string(rg.randomInt<uint32_t>(0, 12));
+            res += ")";
+        }
+        else if (choices[i] == "ZSTD" && rg.nextBool())
+        {
+            res += "(";
+            res += std::to_string(rg.randomInt<uint32_t>(1, 22));
+            res += ")";
+        }
+        else if ((choices[i] == "Delta" || choices[i] == "DoubleDelta" || choices[i] == "Gorilla") && rg.nextBool())
+        {
+            res += "(";
+            res += std::to_string(rg.randomInt<uint32_t>(0, 8));
+            res += ")";
+        }
+        else if (choices[i] == "FPC" && rg.nextBool())
+        {
+            res += "(";
+            res += std::to_string(rg.randomInt<uint32_t>(1, 28));
+            res += ",";
+            res += std::to_string(rg.nextBool() ? 4 : 8);
+            res += ")";
+        }
+    }
+    res += "'";
+    return res;
+}
+
 std::unordered_map<String, CHSetting> performanceSettings
     = {{"allow_aggregate_partitions_independently", trueOrFalseSetting},
        {"allow_execute_multiif_columnar", trueOrFalseSetting},

@@ -400,47 +400,6 @@ void StatementGenerator::generateNextStatistics(RandomGenerator & rg, ColumnStat
     ids.clear();
 }
 
-void StatementGenerator::generateNextCodecs(RandomGenerator & rg, CodecList * cl)
-{
-    const uint32_t ncodecs = rg.randomInt<uint32_t>(1, 3);
-    std::uniform_int_distribution<uint32_t> codec_range(1, static_cast<uint32_t>(CompressionCodec_MAX));
-
-    for (uint32_t i = 0; i < ncodecs; i++)
-    {
-        CodecParam * cp = i == 0 ? cl->mutable_codec() : cl->add_other_codecs();
-        const CompressionCodec cc = static_cast<CompressionCodec>(codec_range(rg.generator));
-
-        cp->set_codec(cc);
-        switch (cc)
-        {
-            case COMP_LZ4HC:
-            case COMP_ZSTD:
-                if (rg.nextBool())
-                {
-                    cp->add_params()->set_ival(rg.randomInt<uint32_t>(1, 22));
-                }
-                break;
-            case COMP_Delta:
-            case COMP_DoubleDelta:
-            case COMP_Gorilla:
-                if (rg.nextBool())
-                {
-                    cp->add_params()->set_ival(UINT32_C(1) << rg.randomInt<uint32_t>(0, 3));
-                }
-                break;
-            case COMP_FPC:
-                if (rg.nextBool())
-                {
-                    cp->add_params()->set_ival(rg.randomInt<uint32_t>(1, 28));
-                    cp->add_params()->set_ival(rg.nextBool() ? 4 : 9);
-                }
-                break;
-            default:
-                break;
-        }
-    }
-}
-
 void StatementGenerator::generateTableExpression(
     RandomGenerator & rg, std::optional<SQLRelation> & rel, const bool use_global_agg, const bool pred, Expr * expr)
 {
@@ -556,7 +515,7 @@ void StatementGenerator::generateNextTTL(
 
             if (nopt2 < 16)
             {
-                generateNextCodecs(rg, tupt->mutable_codecs());
+                tupt->set_codecs(generateNextCodecString(rg));
             }
             else if (!fc.disks.empty() && nopt2 < 31)
             {
@@ -1691,7 +1650,7 @@ void StatementGenerator::addTableColumnInternal(
 
             if ((!col.dmod.has_value() || col.dmod.value() != DModifier::DEF_ALIAS) && rg.nextMediumNumber() < 16)
             {
-                generateNextCodecs(rg, cd->mutable_codecs());
+                cd->set_codecs(generateNextCodecString(rg));
             }
             if ((!col.dmod.has_value() || col.dmod.value() != DModifier::DEF_EPHEMERAL) && !csettings.empty() && rg.nextMediumNumber() < 16)
             {

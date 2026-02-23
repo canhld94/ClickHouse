@@ -3275,23 +3275,13 @@ message IndexParam {
     }
 }
 
-message CodecParam {
-    required CompressionCodec codec = 1;
-    repeated IndexParam params = 2;
-}
-
-message CodecList {
-    required CodecParam codec = 1;
-    repeated CodecParam other_codecs = 2;
-}
-
 message ColumnDef {
     required ColumnPath col = 1;
     required TypeName type = 2;
     optional bool nullable = 3;
     optional DefaultModifier defaultv = 4;
     optional string comment = 5;
-    optional CodecList codecs = 6;
+    optional string codecs = 6;
     optional ColumnStatistics stats = 7;
     optional Expr ttl_expr = 8;
     optional bool is_pkey = 9;
@@ -3459,7 +3449,7 @@ message TTLDelete {
 message TTLUpdate {
     oneof ttlupdate_oneof {
         TTLDelete del = 1;
-        CodecList codecs = 2;
+        string codecs = 2;
         Storage storage = 3;
     }
     optional WhereStatement where = 4;
