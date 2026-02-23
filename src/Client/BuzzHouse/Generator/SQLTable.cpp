@@ -2872,6 +2872,11 @@ void StatementGenerator::generateNextCreateDatabase(RandomGenerator & rg, Create
         /// Add server settings
         generateSettingValues(rg, serverSettings, deng->mutable_setting_values());
     }
+    if (rg.nextSmallNumber() < 3)
+    {
+        /// Add general database settings
+        generateSettingValues(rg, allDatabaseSettings, deng->mutable_setting_values());
+    }
     if ((next.isAtomicDatabase() || next.isOrdinaryDatabase()) && !fc.disks.empty() && rg.nextSmallNumber() < 4)
     {
         SettingValues * svs = deng->mutable_setting_values();
