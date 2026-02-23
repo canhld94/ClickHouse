@@ -251,6 +251,10 @@ template <>
     /// MSAN does not recognize the store as initializing the memory
     __msan_unpoison(op, 16);
 
+    /// Note: an ARM NEON path using `vqtbl1q_u8` (Q-register 16-byte table lookup) was tested
+    /// on Graviton 4 but showed no improvement over the scalar fallback (geo mean 1.0000x across
+    /// test.hits columns). The previous `vtbl2_u8` (D-register) path was actively slower.
+
 #else
     /// 4 % n.
     static constexpr UInt8 shift1[] = {0, 1, 2, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
@@ -376,6 +380,11 @@ template <>
     }
 
     match += shifts[offset];
+
+    /// Note: an ARM NEON path using two `vqtbl1q_u8` calls (Q-register 16-byte table lookup)
+    /// was tested on Graviton 4 but showed no improvement over the scalar fallback (geo mean
+    /// 1.0000x across test.hits columns). The previous `vtbl2_u8` (D-register) path was also
+    /// slower due to needing four calls per 32 bytes.
 
 #else
     /** Fallback implementation without SIMD instructions.
