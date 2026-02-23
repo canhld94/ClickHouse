@@ -429,6 +429,16 @@ void StorageObjectStorage::read(
     if (distributed_processing && local_context->getSettingsRef()[Setting::max_streams_for_files_processing_in_cluster_functions])
         num_streams = local_context->getSettingsRef()[Setting::max_streams_for_files_processing_in_cluster_functions];
 
+    /// For data lake we did update in getExternalDynamicMetadata.
+    if (!is_table_function && !configuration->isDataLakeConfiguration())
+    {
+        configuration->update(
+            object_storage,
+            local_context,
+            /* if_not_updated_before */ false);
+    }
+
+
     if (configuration->partition_strategy && configuration->partition_strategy_type != PartitionStrategyFactory::StrategyType::HIVE)
     {
         throw Exception(ErrorCodes::NOT_IMPLEMENTED,
@@ -526,6 +536,15 @@ SinkToStoragePtr StorageObjectStorage::write(
     ContextPtr local_context,
     bool /* async_insert */)
 {
+    /// For data lake we did update in getExternalDynamicMetadata.
+    if (!is_table_function && !configuration->isDataLakeConfiguration())
+    {
+        configuration->update(
+            object_storage,
+            local_context,
+            /* if_not_updated_before */ false);
+    }
+
     const auto sample_block = std::make_shared<const Block>(metadata_snapshot->getSampleBlock());
     const auto & settings = configuration->getQuerySettings(local_context);
 
