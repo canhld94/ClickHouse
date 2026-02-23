@@ -15,3 +15,22 @@ INSERT INTO t_has_lc VALUES (toDateTime(1730611800, 'America/New_York')), (toDat
 SELECT toUnixTimestamp(d) FROM t_has_lc WHERE has([toDateTime(1730611800, 'America/New_York')], d);
 
 DROP TABLE t_has_lc;
+
+
+DROP TABLE IF EXISTS t_nested2;
+CREATE TABLE t_nested2
+(
+    d Array(LowCardinality(DateTime('America/New_York')))
+)
+ENGINE = MergeTree
+ORDER BY CAST(d, 'Array(DateTime(\'America/New_York\'))')
+SETTINGS index_granularity = 1;
+
+INSERT INTO t_nested2 VALUES ([toDateTime(1730611800, 'America/New_York')]);
+
+SELECT toUnixTimestamp(d[1])
+FROM t_nested2
+WHERE d = CAST(
+    [toDateTime(1730611800, 'America/New_York')],
+    'Array(LowCardinality(DateTime(\'America/New_York\')))'
+);
