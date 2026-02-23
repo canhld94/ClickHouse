@@ -4073,6 +4073,14 @@ message DropDatabaseReplica {
     optional Database database = 3;
 }
 
+enum DeltaKernelTraceLevel {
+    ERROR = 1;
+    WARN = 2;
+    INFO = 3;
+    DEBUG = 4;
+    TRACE = 5;
+}
+
 message SystemCommand {
     optional Cluster cluster = 1;
     oneof system_cmd_oneof {
@@ -4162,6 +4170,7 @@ message SystemCommand {
         uint32 unfreeze = 84;
         DropReplica drop_replica = 85;
         DropDatabaseReplica drop_database_replica = 86;
+        DeltaKernelTraceLevel reload_delta_kernel_tracing = 87;
     }
 }
 

@@ -5217,6 +5217,10 @@ CONV_FN(SystemCommand, cmd)
                 DatabaseToString(ret, cmd.drop_database_replica().database());
             }
             break;
+        case CmdType::kReloadDeltaKernelTracing:
+            ret += "RELOAD DELTA KERNEL TRACING ";
+            ret += DeltaKernelTraceLevel_Name(cmd.reload_delta_kernel_tracing());
+            break;
         default:
             ret += "FLUSH LOGS";
     }
