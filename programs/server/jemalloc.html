@@ -424,7 +424,7 @@
             <span class="timestamp" id="timestamp"></span>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <label for="refresh-interval" style="font-size: 0.9rem;" title="Set to 0 to disable auto-refresh">Auto-refresh (s):</label>
-                <input type="number" id="refresh-interval" min="0" value="10" title="Set to 0 to disable auto-refresh" style="width: 60px; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color);" oninput="debouncedUpdateRefreshInterval()" onchange="updateRefreshInterval()">
+                <input type="number" id="refresh-interval" min="0" value="60" title="Set to 0 to disable auto-refresh" style="width: 60px; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-background); color: var(--color);" oninput="debouncedUpdateRefreshInterval()" onchange="updateRefreshInterval()">
             </div>
             <button class="btn btn-primary" onclick="event.preventDefault(); loadStats(true); return false;">Refresh</button>
             <button class="theme-toggle" onclick="toggleTheme()">
@@ -2080,14 +2080,14 @@
                 // Build settings based on selection (values must be lowercase)
                 const outputFormatLower = outputFormat.toLowerCase();
                 const useCount = document.getElementById('profile-collapsed-use-count').checked;
-                let settings = `jemalloc_profile_output_format = '${outputFormatLower}'`;
+                let settings = `jemalloc_profile_text_output_format = '${outputFormatLower}'`;
                 if (outputFormat === 'Symbolized' || outputFormat === 'Collapsed') {
-                    settings += `, jemalloc_profile_symbolize_with_inline = ${symbolizeWithInline ? 1 : 0}`;
+                    settings += `, jemalloc_profile_text_symbolize_with_inline = ${symbolizeWithInline ? 1 : 0}`;
                 }
                 if (outputFormat === 'Collapsed') {
-                    settings += `, jemalloc_profile_collapsed_use_count = ${useCount ? 1 : 0}`;
+                    settings += `, jemalloc_profile_text_collapsed_use_count = ${useCount ? 1 : 0}`;
                 }
-                const query = `SELECT * FROM system.jemalloc_profile SETTINGS ${settings}`;
+                const query = `SELECT * FROM system.jemalloc_profile_text SETTINGS ${settings}`;
                 let url = `${host}?default_format=TabSeparated&query=${encodeURIComponent(query)}`;
                 if (user) {
                     url += `&user=${encodeURIComponent(user)}`;
