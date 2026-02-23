@@ -112,14 +112,11 @@ namespace ErrorCodes
     extern const int CANNOT_PARSE_IPV6;
     extern const int TOO_FEW_ARGUMENTS_FOR_FUNCTION;
     extern const int LOGICAL_ERROR;
-    extern const int TYPE_MISMATCH;
     extern const int CANNOT_CONVERT_TYPE;
     extern const int ILLEGAL_COLUMN;
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
     extern const int ILLEGAL_TYPE_OF_ARGUMENT;
     extern const int NOT_IMPLEMENTED;
-    extern const int CANNOT_INSERT_NULL_IN_ORDINARY_COLUMN;
-    extern const int SIZES_OF_ARRAYS_DONT_MATCH;
     extern const int VALUE_IS_OUT_OF_RANGE_OF_DATA_TYPE;
 }
 
