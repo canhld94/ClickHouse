@@ -69,7 +69,7 @@ String generateNextCodecString(RandomGenerator & rg)
         std::vector<uint32_t> ids;
         const uint32_t ncodecs = rg.randomInt<uint32_t>(1, std::min(UINT32_C(4), static_cast<uint32_t>(codecs.size())));
 
-        for (size_t i = 0; i < ids.size(); i++)
+        for (size_t i = 0; i < ncodecs; i++)
         {
             ids.emplace_back(i);
         }
