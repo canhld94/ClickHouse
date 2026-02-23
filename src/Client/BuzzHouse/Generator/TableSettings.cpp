@@ -676,7 +676,7 @@ static std::unordered_map<String, CHSetting> kafkaTableSettings
 static std::unordered_map<String, CHSetting> mergeTreeColumnSettings
     = {{"min_compress_block_size", highRangeSetting}, {"max_compress_block_size", highRangeSetting}};
 
-const std::unordered_map<String, CHSetting> allDatabaseSettings = {{"lazy_load_tables", trueOrFalseSetting}};
+std::unordered_map<String, CHSetting> allDatabaseSettings = {{"lazy_load_tables", trueOrFalseSetting}};
 
 void loadFuzzerTableSettings(const FuzzConfig & fc)
 {
@@ -691,8 +691,7 @@ void loadFuzzerTableSettings(const FuzzConfig & fc)
     {
         codecsEscpated.insert("'" + codec + "'");
     }
-    const auto & compressSetting
-        = CHSetting([](RandomGenerator & rg, FuzzConfig &) { return generateNextCodecString(rg); }, std::move(codecsEscpated), false);
+    const auto & compressSetting = CHSetting([](RandomGenerator & rg, FuzzConfig &) { return generateNextCodecString(rg); }, codecsEscpated, false);
 
     mergeTreeTableSettings.insert({{"default_compression_codec", compressSetting}});
     mergeTreeTableSettings.insert({{"marks_compression_codec", compressSetting}});

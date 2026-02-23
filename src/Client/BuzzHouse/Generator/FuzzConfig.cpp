@@ -21,7 +21,7 @@ const DB::Strings compressionMethods
     = {"auto", "none", "gz", "gzip", "deflate", "brotli", "br", "xz", "zst", "zstd", "lzma", "lz4", "bz2", "snappy"};
 
 const DB::Strings codecs
-    = {"None"
+    = {"None",
        "LZ4",
        "LZ4HC",
        "ZSTD",
