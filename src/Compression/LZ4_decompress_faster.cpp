@@ -651,6 +651,10 @@ bool decompress(
     /// Timing such small blocks would add too much noise to the bandit's statistics.
     /// Variant 0 is the right default here: it has the lowest per-iteration overhead
     /// and wins the majority of files (57% on test.hits), especially smaller ones.
+    /// Note: the exact threshold value is not performance-sensitive. On test.hits columns
+    /// (AMD 7950X3D), sweeping it from 0 to 32K changes the oracle total by only 0.003%,
+    /// because variant 0 is available in the bandit anyway and would be selected for
+    /// the same files. The threshold is purely a noise-reduction measure.
     return decompressImpl<8>(source, dest, source_size, dest_size);
 }
 
