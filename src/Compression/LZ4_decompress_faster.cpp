@@ -400,100 +400,6 @@ template <>
 
     match += shifts[offset];
 
-#elif defined(__aarch64__) && defined(__ARM_NEON)
-
-    /** ARM NEON version using vtbl2_u8 table lookup instruction.
-      * The logic is identical to SSSE3 version above - see detailed explanation there.
-      * We use the same shuffle mask patterns to replicate short patterns across 32 bytes.
-      */
-
-    /// Shuffle masks for the first 16 output bytes: masks_lo[offset][i] = i % offset.
-    /// This table generates indices for selecting bytes from the source pattern to fill positions 0-15.
-    /// For offset=2: [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1] means alternate between byte[0] and byte[1].
-    /// For offset=3: [0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0] means cycle through bytes[0,1,2].
-    /// For offset=5: [0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0] means repeat the 5-byte pattern.
-    static constexpr UInt8 __attribute__((__aligned__(16))) masks_lo[] =
-    {
-        0,  1,  2,  1,  4,  1,  4,  2,  8,  7,  6,  5,  4,  3,  2,  1, /* offset = 0, not used as mask */
-        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, /* offset = 1 */
-        0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,
-        0,  1,  2,  0,  1,  2,  0,  1,  2,  0,  1,  2,  0,  1,  2,  0,
-        0,  1,  2,  3,  0,  1,  2,  3,  0,  1,  2,  3,  0,  1,  2,  3,
-        0,  1,  2,  3,  4,  0,  1,  2,  3,  4,  0,  1,  2,  3,  4,  0,
-        0,  1,  2,  3,  4,  5,  0,  1,  2,  3,  4,  5,  0,  1,  2,  3,
-        0,  1,  2,  3,  4,  5,  6,  0,  1,  2,  3,  4,  5,  6,  0,  1,
-        0,  1,  2,  3,  4,  5,  6,  7,  0,  1,  2,  3,  4,  5,  6,  7,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  0,  1,  2,  3,  4,  5,  6,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  0,  1,  2,  3,  4,  5,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,  0,  1,  2,  3,  4,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11,  0,  1,  2,  3,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12,  0,  1,  2,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13,  0,  1,
-        0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,  0,
-    };
-
-    /// Shuffle masks for the second 16 output bytes: masks_hi[offset][i] = (16 + i) % offset.
-    /// This table continues the pattern replication for positions 16-31.
-    /// The starting index is (16 % offset) to maintain pattern continuity from masks_lo.
-    /// For offset=2: Still [0,1,0,1,...] because 16%2=0, pattern restarts.
-    /// For offset=3: [1,2,0,1,2,0,...] because 16%3=1, pattern continues from index 1.
-    /// For offset=5: [1,2,3,4,0,1,2,3,4,0,...] because 16%5=1, pattern continues from index 1.
-    /// For offset=9: [7,8,0,1,2,3,4,5,6,7,8,0,...] because 16%9=7, pattern continues from index 7.
-    static constexpr UInt8 __attribute__((__aligned__(16))) masks_hi[] =
-    {
-        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, /* offset = 0, not used as mask */
-        0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, /* offset = 1 */
-        0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,
-        1,  2,  0,  1,  2,  0,  1,  2,  0,  1,  2,  0,  1,  2,  0,  1,
-        0,  1,  2,  3,  0,  1,  2,  3,  0,  1,  2,  3,  0,  1,  2,  3,
-        1,  2,  3,  4,  0,  1,  2,  3,  4,  0,  1,  2,  3,  4,  0,  1,
-        4,  5,  0,  1,  2,  3,  4,  5,  0,  1,  2,  3,  4,  5,  0,  1,
-        2,  3,  4,  5,  6,  0,  1,  2,  3,  4,  5,  6,  0,  1,  2,  3,
-        0,  1,  2,  3,  4,  5,  6,  7,  0,  1,  2,  3,  4,  5,  6,  7,
-        7,  8,  0,  1,  2,  3,  4,  5,  6,  7,  8,  0,  1,  2,  3,  4,
-        6,  7,  8,  9,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  0,  1,
-        5,  6,  7,  8,  9, 10,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
-        4,  5,  6,  7,  8,  9, 10, 11,  0,  1,  2,  3,  4,  5,  6,  7,
-        3,  4,  5,  6,  7,  8,  9, 10, 11, 12,  0,  1,  2,  3,  4,  5,
-        2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13,  0,  1,  2,  3,
-        1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,  0,  1,
-    };
-
-    /// How many bytes to advance the match pointer after copying 32 bytes.
-    /// This equals (32 % offset) when offset divides evenly, or the offset itself otherwise.
-    /// For offset=2: shifts[2]=2 because we copied the 2-byte pattern 16 times, advance by 2.
-    /// For offset=3: shifts[3]=2 because 32%3=2, the pattern repeated 10 full times plus 2 bytes.
-    /// For offset=5: shifts[5]=2 because 32%5=2, the pattern repeated 6 full times plus 2 bytes.
-    /// For offset=16: shifts[16]=16 because we copied exactly 16 bytes twice, advance by 16.
-    /// For offset=17-31: shifts[n] counts down from 15 to 1, representing 32%n for each offset.
-    static constexpr UInt8 shifts[]
-        = {0, 1, 2, 2, 4, 2, 2, 4, 8, 5, 2, 10, 8, 6, 4, 2, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
-
-    if (offset >= 16)
-    {
-        unalignedStore<uint8x16_t>(op,
-            unalignedLoad<uint8x16_t>(match));
-
-        unalignedStore<uint8x16_t>(op + 16,
-            unalignedLoad<uint8x16_t>(match + 16));
-    }
-    else
-    {
-        unalignedStore<uint8x8_t>(op,
-            vtbl2_u8(unalignedLoad<uint8x8x2_t>(match), unalignedLoad<uint8x8_t>(masks_lo + 16 * offset)));
-
-        unalignedStore<uint8x8_t>(op + 8,
-            vtbl2_u8(unalignedLoad<uint8x8x2_t>(match), unalignedLoad<uint8x8_t>(masks_lo + 16 * offset + 8)));
-
-        unalignedStore<uint8x8_t>(op + 16,
-            vtbl2_u8(unalignedLoad<uint8x8x2_t>(match), unalignedLoad<uint8x8_t>(masks_hi + 16 * offset)));
-
-        unalignedStore<uint8x8_t>(op + 24,
-            vtbl2_u8(unalignedLoad<uint8x8x2_t>(match), unalignedLoad<uint8x8_t>(masks_hi + 16 * offset + 8)));
-    }
-
-    match += shifts[offset];
-
 #else
     /** Fallback implementation without SIMD instructions.
       * Copies 32 bytes in four stages: 4 + 4 + 8 + 16 bytes.
@@ -523,7 +429,7 @@ template <>
 
     /// How far to advance match pointer after copying all 32 bytes: equals (32 % offset).
     /// This determines the final position after all four copy stages complete.
-    /// Same values as the SSSE3/NEON shifts table.
+    /// Same values as the SSSE3 shifts table.
     static constexpr UInt8 shift4[]
         = {0, 1, 2, 2, 4, 2, 2, 4, 8, 5, 2, 10, 8, 6, 4, 2, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
