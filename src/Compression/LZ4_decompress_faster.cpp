@@ -38,7 +38,8 @@ ALWAYS_INLINE void copyFromOutput(UInt8 * dst, UInt8 * src)
 template <size_t block_size>
 ALWAYS_INLINE void wildCopyFromInput(UInt8 * __restrict dst, const UInt8 * __restrict src, size_t size)
 {
-    /// Unrolling with clang is doing >10% performance degrade.
+    /// Unrolling with clang is doing >10% performance degrade on x86.
+    /// On ARM (Graviton 4) the pragma has no measurable effect.
     size_t i = 0;
     #pragma nounroll
     do
@@ -54,7 +55,8 @@ ALWAYS_INLINE void wildCopyFromInput(UInt8 * __restrict dst, const UInt8 * __res
 template <size_t block_size>
 ALWAYS_INLINE void wildCopyFromOutput(UInt8 * dst, const UInt8 * src, size_t size)
 {
-    /// Unrolling with clang is doing >10% performance degrade.
+    /// Unrolling with clang is doing >10% performance degrade on x86.
+    /// On ARM (Graviton 4) the pragma has no measurable effect.
     size_t i = 0;
     #pragma nounroll
     do
