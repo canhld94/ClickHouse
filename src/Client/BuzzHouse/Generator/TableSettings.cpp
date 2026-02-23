@@ -676,8 +676,7 @@ static std::unordered_map<String, CHSetting> kafkaTableSettings
 static std::unordered_map<String, CHSetting> mergeTreeColumnSettings
     = {{"min_compress_block_size", highRangeSetting}, {"max_compress_block_size", highRangeSetting}};
 
-const std::unordered_map<String, CHSetting> allDatabaseSettings
-    = {{"lazy_load_tables", trueOrFalseSetting}};
+const std::unordered_map<String, CHSetting> allDatabaseSettings = {{"lazy_load_tables", trueOrFalseSetting}};
 
 void loadFuzzerTableSettings(const FuzzConfig & fc)
 {
