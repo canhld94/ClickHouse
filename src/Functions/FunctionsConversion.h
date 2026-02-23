@@ -1498,15 +1498,18 @@ enum class BehaviourOnErrorFromString : uint8_t
 };
 
 
+/// All helper functions below are extracted from `ConvertImpl::execute` which was marked
+/// NO_SANITIZE_UNDEFINED. The attribute must be preserved on each extracted function to
+/// keep the same UBSan behavior as before the refactoring.
 template <typename FromFieldType, typename ColVecToData, typename ColVecFromData>
-static void convertToBool(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertToBool(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
 {
     for (size_t i = 0; i < input_rows_count; i++)
         vec_to[i] = vec_from[i] != FromFieldType(0);
 }
 
 template <typename ColVecToData, typename ColVecFromData>
-static void convertFromUUIDToUInt128(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertFromUUIDToUInt128(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
 {
     static_assert(
         std::is_same_v<DataTypeUInt128::FieldType, DataTypeUUID::FieldType::UnderlyingType>,
@@ -1520,7 +1523,7 @@ static void convertFromUUIDToUInt128(ColVecToData & vec_to, ColVecFromData & vec
 }
 
 template <typename ColVecToData, typename ColVecFromData>
-static void convertFromUInt128toIPv6(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertFromUInt128toIPv6(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
 {
     static_assert(
         std::is_same_v<DataTypeUInt128::FieldType, DataTypeIPv6::FieldType::UnderlyingType>,
@@ -1534,7 +1537,7 @@ static void convertFromUInt128toIPv6(ColVecToData & vec_to, ColVecFromData & vec
 }
 
 template <typename ColVecToData, typename ColVecFromData>
-static void convertFromIPv6ToUInt128(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertFromIPv6ToUInt128(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
 {
     static_assert(
         std::is_same_v<DataTypeUInt128::FieldType, DataTypeIPv6::FieldType::UnderlyingType>,
@@ -1548,14 +1551,14 @@ static void convertFromIPv6ToUInt128(ColVecToData & vec_to, ColVecFromData & vec
 }
 
 template <typename ToFieldType, typename ColVecToData>
-static void convertDateTimeToZero(ColVecToData & vec_to, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertDateTimeToZero(ColVecToData & vec_to, size_t input_rows_count)
 {
     for (size_t i = 0; i < input_rows_count; i++)
         vec_to[i] = static_cast<ToFieldType>(0);
 }
 
 template <typename ColVecToData, typename ColVecFromData>
-static void convertFromIPv6ToIPv4(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count, const ColumnWithTypeAndName & named_from)
+static void NO_SANITIZE_UNDEFINED convertFromIPv6ToIPv4(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count, const ColumnWithTypeAndName & named_from)
 {
     const uint8_t ip4_cidr[] {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00};
 
@@ -1590,7 +1593,7 @@ static void convertFromIPv6ToIPv4(ColVecToData & vec_to, ColVecFromData & vec_fr
 }
 
 template <typename ColVecToData, typename ColVecFromData>
-static void convertFromIPv4ToIPv6(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertFromIPv4ToIPv6(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
 {
     for (size_t i = 0; i < input_rows_count; i++)
     {
@@ -1617,21 +1620,21 @@ static void convertFromIPv4ToIPv6(ColVecToData & vec_to, ColVecFromData & vec_fr
 }
 
 template <typename ToFieldType, typename ColVecToData, typename ColVecFromData>
-static void convertFromUInt64ToIPv4(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertFromUInt64ToIPv4(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
 {
     for (size_t i = 0; i < input_rows_count; i++)
         vec_to[i] = static_cast<ToFieldType>(static_cast<IPv4::UnderlyingType>(vec_from[i]));
 }
 
 template <typename ToFieldType, typename ColVecToData, typename ColVecFromData>
-static void convertToUnixTimestampFromDate(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
+static void NO_SANITIZE_UNDEFINED convertToUnixTimestampFromDate(ColVecToData & vec_to, ColVecFromData & vec_from, size_t input_rows_count)
 {
     for (size_t i = 0; i < input_rows_count; i++)
         vec_to[i] = static_cast<ToFieldType>(vec_from[i] * DATE_SECONDS_PER_DAY);
 }
 
 template <typename Additions, typename FromDataType, typename ToDataType, typename ColTo, typename ColFrom>
-static ColumnPtr convertDecimal(ColTo && col_to, ColFrom & col_from, size_t input_rows_count)
+static ColumnPtr NO_SANITIZE_UNDEFINED convertDecimal(ColTo && col_to, ColFrom & col_from, size_t input_rows_count)
 {
     const auto & vec_from = col_from->getData();
     auto & vec_to = col_to->getData();
@@ -1685,7 +1688,7 @@ static ColumnPtr convertDecimal(ColTo && col_to, ColFrom & col_from, size_t inpu
 
 
 template <typename Additions, typename FromFieldType, typename ToFieldType, typename ColVecToData, typename ColVecFromData>
-static ColumnPtr convertNumericGeneral(
+static ColumnPtr NO_SANITIZE_UNDEFINED convertNumericGeneral(
     typename ColumnVector<ToFieldType>::MutablePtr && col_to,
     ColVecToData & vec_to,
     ColVecFromData & vec_from,
