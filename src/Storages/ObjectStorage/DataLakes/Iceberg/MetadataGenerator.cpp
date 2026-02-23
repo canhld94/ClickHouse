@@ -339,7 +339,6 @@ void MetadataGenerator::generateModifyColumnMetadata(const String & column_name,
 void MetadataGenerator::generateRenameColumnMetadata(const String & column_name, const String & new_column_name)
 {
     auto current_schema_id = metadata_object->getValue<Int32>(Iceberg::f_current_schema_id);
-    metadata_object->set(Iceberg::f_current_schema_id, current_schema_id + 1);
 
     Poco::JSON::Object::Ptr current_schema;
     auto schemas = metadata_object->getArray(Iceberg::f_schemas);
@@ -357,6 +356,13 @@ void MetadataGenerator::generateRenameColumnMetadata(const String & column_name,
     current_schema = deepCopy(current_schema);
 
     auto schema_fields = current_schema->getArray(Iceberg::f_fields);
+
+    for (UInt32 i = 0; i < schema_fields->size(); ++i)
+    {
+        if (schema_fields->getObject(i)->getValue<String>(Iceberg::f_name) == new_column_name)
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Column {} already exists", new_column_name);
+    }
+
     bool found = false;
     for (UInt32 i = 0; i < schema_fields->size(); ++i)
     {
@@ -372,6 +378,7 @@ void MetadataGenerator::generateRenameColumnMetadata(const String & column_name,
     if (!found)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Not found column {}", column_name);
 
+    metadata_object->set(Iceberg::f_current_schema_id, current_schema_id + 1);
     current_schema->set(Iceberg::f_schema_id, current_schema_id + 1);
     metadata_object->getArray(Iceberg::f_schemas)->add(current_schema);
 }
