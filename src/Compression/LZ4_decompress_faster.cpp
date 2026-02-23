@@ -610,6 +610,24 @@ bool NO_INLINE decompressImpl(const char * const source, char * const dest, size
 
 }
 
+/** Three variants of the decompression loop are instantiated, differing in copy granularity:
+  *   variant 0: `decompressImpl<8>`  — copies 8 bytes at a time
+  *   variant 1: `decompressImpl<16>` — copies 16 bytes at a time
+  *   variant 2: `decompressImpl<32>` — copies 32 bytes at a time
+  *
+  * No single variant is universally fastest. On x86 with SSSE3:
+  * - Variant 0 has the lowest per-iteration overhead (wins most files by count).
+  * - Variant 1 matches the natural 16-byte `pshufb` width (best aggregate throughput).
+  * - Variant 2 amortizes two `pshufb` ops per iteration (wins on large, high-repetition blocks).
+  *
+  * Measured on AMD 7950X3D with test.hits columns (175 files, 10 iterations each, min taken):
+  *   variant 0:  total 1,099M cycles — best for 57% of files
+  *   variant 1:  total   972M cycles — best for 26% of files (best single variant overall)
+  *   variant 2:  total 1,079M cycles — best for 17% of files
+  *   oracle:     total   869M cycles — per-file best, 10.6% faster than always-variant-1
+  *
+  * The adaptive bandit algorithm converges toward the oracle, making all three variants useful.
+  */
 bool decompress(
     const char * const source,
     char * const dest,
@@ -643,6 +661,10 @@ bool decompress(
         return success;
     }
 
+    /// For small blocks (< 32 KiB), skip the bandit and always use variant 0 (8-byte copies).
+    /// Timing such small blocks would add too much noise to the bandit's statistics.
+    /// Variant 0 is the right default here: it has the lowest per-iteration overhead
+    /// and wins the majority of files (57% on test.hits), especially smaller ones.
     return decompressImpl<8>(source, dest, source_size, dest_size);
 }
 
