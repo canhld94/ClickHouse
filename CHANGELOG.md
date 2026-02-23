@@ -355,7 +355,7 @@
 #### Build/Testing/Packaging Improvement
 * ClickHouse can be built with clang-23 (master). [#95578](https://github.com/ClickHouse/ClickHouse/pull/95578) ([Alexey Milovidov](https://github.com/alexey-milovidov)).
 * Fix force `is_local` to false when `bind_host` is configured and replace with integration test. Follow-up for [#74741](https://github.com/ClickHouse/ClickHouse/pull/74741). [#93109](https://github.com/ClickHouse/ClickHouse/pull/93109) [#96018](https://github.com/ClickHouse/ClickHouse/pull/96018) ([Zhigao Hong](https://github.com/zghong)).
-* Stress tests: fix stress and upgrade tests in CI. ignore no-{build} tags. add compatibility randomization. [#94693](https://github.com/ClickHouse/ClickHouse/pull/94693) ([Nikita Fomichev](https://github.com/fm4v)).
+* Stress tests: fix stress and upgrade tests in CI. ignore `no-{build}` tags. add compatibility randomization. [#94693](https://github.com/ClickHouse/ClickHouse/pull/94693) ([Nikita Fomichev](https://github.com/fm4v)).
 * Publish parser_memory_profiler binary from build. Tool can be used to analyze AST memory consumption. [#95826](https://github.com/ClickHouse/ClickHouse/pull/95826) ([Ilya Yatsishin](https://github.com/qoega)).
 * Add `--symbolize` flag for `parser_memory_profiler` tool that produces `.heap.sym` files with resolved symbols in results. [#96477](https://github.com/ClickHouse/ClickHouse/pull/96477) ([Ilya Yatsishin](https://github.com/qoega)).
 * Pin third-party Docker images in integration tests to specific versions. [#96500](https://github.com/ClickHouse/ClickHouse/pull/96500) ([Alexey Milovidov](https://github.com/alexey-milovidov)).
