@@ -232,8 +232,9 @@ void SerializationObject::enumerateStreams(EnumerateStreamsSettings & settings, 
                 /// in prefix serialization.
                 if (settings.data_part_type != MergeTreeDataPartType::Wide || !column_object->getStatistics()
                     || column_object->getStatistics()->source != ColumnObject::Statistics::Source::MERGE
-                    || column_object->getStatistics()->shared_data_paths_statistics.empty())
+                    || !column_object->getStatistics()->shared_data_paths_statistics.empty())
                     num_buckets = settings.object_shared_data_buckets;
+
             }
 
             shared_data_serialization = std::make_shared<SerializationObjectSharedData>(shared_data_serialization_version, dynamic_type, num_buckets);
