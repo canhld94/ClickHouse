@@ -1,3 +1,5 @@
+-- Tags: long
+
 set max_block_size = 100, min_insert_block_size_rows = 0, min_insert_block_size_bytes = 0, max_insert_threads = 8, max_threads = 8;
 
 DROP TABLE IF EXISTS test;
