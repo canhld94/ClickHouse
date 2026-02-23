@@ -85,19 +85,16 @@ public:
             auto col_res = ColumnString::create();
 
             const ColumnString::Chars & data = assert_cast<const ColumnString &>(col_query_const->getDataColumn()).getChars();
+            const char * begin = reinterpret_cast<const char *>(data.data());
+            const char * end = begin + data.size();
+            ParserQuery parser(end, false, implicit_select);
+            ASTPtr ast = parseQuery(parser, begin, end, "fuzzQuery", max_query_size, max_parser_depth, max_parser_backtracks);
 
             for (size_t i = 0; i < input_rows_count; ++i)
             {
-                const char * begin = reinterpret_cast<const char *>(data.data());
-                const char * end = begin + data.size();
-
-                ParserQuery parser(end, false, implicit_select);
-                ASTPtr ast = parseQuery(parser, begin, end, /*query_description*/ {}, max_query_size, max_parser_depth, max_parser_backtracks);
-
-                ASTPtr fuzzed_ast;
+                ASTPtr fuzzed_ast = ast->clone();
                 {
                     auto [fuzzer, lock] = getGlobalASTFuzzer();
-                    fuzzed_ast = ast->clone();
                     fuzzer->fuzzMain(fuzzed_ast);
                 }
 
@@ -120,24 +117,22 @@ private:
         size_t input_rows_count) const
     {
         size_t prev_offset = 0;
-
         for (size_t i = 0; i < input_rows_count; ++i)
         {
             const char * begin = reinterpret_cast<const char *>(&data[prev_offset]);
-            const char * end = begin + offsets[i] - prev_offset;
+            const char * end = reinterpret_cast<const char *>(&data[offsets[i]]);
 
             ParserQuery parser(end, false, implicit_select);
-            ASTPtr ast = parseQuery(parser, begin, end, /*query_description*/ {}, max_query_size, max_parser_depth, max_parser_backtracks);
+            ASTPtr ast = parseQuery(parser, begin, end, "fuzzQuery", max_query_size, max_parser_depth, max_parser_backtracks);
 
             ASTPtr fuzzed_ast;
             {
                 auto [fuzzer, lock] = getGlobalASTFuzzer();
-                fuzzed_ast = ast->clone();
-                fuzzer->fuzzMain(fuzzed_ast);
+                fuzzer->fuzzMain(ast);
             }
 
             WriteBufferFromOwnString buf;
-            fuzzed_ast->format(buf, IAST::FormatSettings(/*one_line=*/true));
+            ast->format(buf, IAST::FormatSettings(/*one_line=*/true));
             col_res.insertData(buf.str().data(), buf.str().size());
             prev_offset = offsets[i];
         }
