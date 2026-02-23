@@ -627,7 +627,7 @@ private:
     void dropDatabase(uint32_t dname, bool all);
 
     void generateNextTablePartition(
-        RandomGenerator & rg, bool allow_parts, bool detached, bool supports_all, const SQLTable & t, PartitionExpr * pexpr);
+        RandomGenerator & rg, uint32_t allow_parts, bool detached, bool supports_all, const SQLTable & t, PartitionExpr * pexpr);
 
     void generateNextBackup(RandomGenerator & rg, BackupRestore * br);
     void generateNextRestore(RandomGenerator & rg, BackupRestore * br);

@@ -929,6 +929,7 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"optimize_const_name_size",
      CHSetting([](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.randomInt<int32_t>(-100, 100)); }, {}, false)},
     {"optimize_count_from_files", trueOrFalseSetting},
+    {"optimize_dry_run_check_part", trueOrFalseSettingNoOracle},
     {"optimize_extract_common_expressions", trueOrFalseSetting},
     {"optimize_min_equality_disjunction_chain_length",
      CHSetting(

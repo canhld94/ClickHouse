@@ -3923,6 +3923,22 @@ CONV_FN(OptimizeTable, ot)
         ret += " ";
         SinglePartitionExprToString(ret, ot.single_partition());
     }
+    if (ot.has_dry_run())
+    {
+        ret += " DRY RUN";
+        if (ot.dry_run().parts_size() > 0)
+        {
+            ret += " PARTS ";
+            for (int i = 0; i < ot.dry_run().parts_size(); i++)
+            {
+                if (i != 0)
+                {
+                    ret += ", ";
+                }
+                PartitionExprToString(ret, ot.dry_run().parts(i));
+            }
+        }
+    }
     if (ot.final())
     {
         ret += " ";
