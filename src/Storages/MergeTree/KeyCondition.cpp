@@ -1128,17 +1128,20 @@ bool KeyCondition::isFunctionReallyMonotonic(const IFunctionBase & func, const I
             return false;
     }
 
-    if (func.getName() == "toDate")
+    if (func.getName() == "toDate" && !isDateTime64(type) && !isDate32(type))
     {
         /// toDate() truncates to UInt16, so negative inputs (DateTime64, Date32) overflow
         const auto & arg_types = func.getArgumentTypes();
-        const IDataType * input_type = !arg_types.empty() ? arg_types[0].get() : type;
-        if (const auto * lc = typeid_cast<const DataTypeLowCardinality *>(input_type))
-            input_type = lc->getDictionaryType().get();
-        if (const auto * nt = typeid_cast<const DataTypeNullable *>(input_type))
-            input_type = nt->getNestedType().get();
-        if (isDateTime64(input_type) || isDate32(input_type))
-            return false;
+        const IDataType * input_type = !arg_types.empty() ? arg_types[0].get() : nullptr;
+        if (input_type)
+        {
+            if (const auto * lc = typeid_cast<const DataTypeLowCardinality *>(input_type))
+                input_type = lc->getDictionaryType().get();
+            if (const auto * nt = typeid_cast<const DataTypeNullable *>(input_type))
+                input_type = nt->getNestedType().get();
+            if (isDateTime64(input_type) || isDate32(input_type))
+                return false;
+        }
     }
 
     return true;
