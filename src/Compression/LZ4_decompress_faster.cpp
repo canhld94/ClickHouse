@@ -16,6 +16,7 @@
 #include <arm_neon.h>
 #endif
 
+
 namespace LZ4
 {
 
@@ -175,6 +176,10 @@ template <>
 
 #elif defined(__aarch64__) && defined(__ARM_NEON)
 
+    /// Single `vtbl1_u8` is a native 8-byte D-register operation on ARM — measured 6% faster
+    /// than the scalar fallback on Graviton 4 (geo mean 0.940x across test.hits columns).
+    /// Unlike `copyOverlap<16>` and `copyOverlap<32>` where NEON `vtbl2_u8` was slower
+    /// than scalar due to needing multiple calls, this single-instruction path is a clear win.
     static constexpr UInt8 __attribute__((__aligned__(8))) masks[] =
     {
         0, 1, 2, 2, 4, 3, 2, 1, /* offset = 0, not used as mask, but for shift amount instead */
