@@ -1121,16 +1121,14 @@ bool KeyCondition::isFunctionReallyMonotonic(const IFunctionBase & func, const I
     if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(type))
         type = nullable_type->getNestedType().get();
 
-    if (date_time_overflow_behavior_ignore && func.getName() == "toDateTime")
-    {
-        /// toDateTime(date) may overflow, breaking monotonicity.
-        if (isDateOrDate32(type))
-            return false;
-    }
+    /// toDateTime(date) may overflow, breaking monotonicity.
+    if (func.getName() == "toDateTime" && isDateOrDate32(type))
+        return false;
 
-    if (func.getName() == "toDate" && !isDateTime64(type) && !isDate32(type))
+    /// signed-to-unsigned overflow: pre-epoch DateTime64/Date32 wraps in Date/DateTime
+    /// any function that returns Date or DateTime from DateTime64 or Date32 can overflow on negative values
+    if (isDate(type) || isDateTime(type))
     {
-        /// toDate() truncates to UInt16, so negative inputs (DateTime64, Date32) overflow
         const auto & arg_types = func.getArgumentTypes();
         const IDataType * input_type = !arg_types.empty() ? arg_types[0].get() : nullptr;
         if (input_type)
