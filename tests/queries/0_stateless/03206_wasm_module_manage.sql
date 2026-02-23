@@ -8,6 +8,7 @@ SET allow_experimental_analyzer = 1;
 DROP TABLE IF EXISTS wasm_data;
 
 CREATE TABLE wasm_data (s String) ENGINE = Memory;
+-- https://github.com/eliben/wasm-wat-samples/blob/125f27fa4bf7fb3c5aab5479136be4596150420a/prime-test/isprime.wat
 INSERT INTO wasm_data SELECT concat(
     'AGFzbQEAAAABBgFgAX8BfwMCAQAHDAEIaXNfcHJpbWUAAApUAVIBAX8gAEECSQRAQQAPCyAAQQJG',
     'BEBBAQ8LIABBAnBBAEYEQEEADwtBAyEBA0ACQCABIABPDQAgACABcEEARgRAQQAPCyABQQJqIQEM',
@@ -139,17 +140,11 @@ DELETE FROM system.webassembly_modules WHERE name = 'wasm_l';
 DELETE FROM system.webassembly_modules WHERE name = 'wasm_h';
 DELETE FROM system.webassembly_modules WHERE name = 'wasm_h2';
 
-INSERT INTO system.webassembly_modules (name, code) SELECT * FROM (
-    SELECT 'wasm_s', base64Decode(concat(
-        'AGFzbQEAAAABCAFgA39/fwF/AwIBAAcOAQphZGRfb3Jfc3ViAAAKFAESACAAIAFqIAAgAWsgAkEA',
-        'ThsL'))
-    UNION ALL
-    SELECT 'wasm_l', base64Decode(concat(
+INSERT INTO system.webassembly_modules (name, code) SELECT 'wasm_l', base64Decode(concat(
         'AGFzbQEAAAABFgNgAAF/YAJ/fwN/f39gAn9/BH9/f38DBgUAAQECAgdQBQ5yZXR1cm5fZGVmYXVs',
         'dAAADnVubmFtZWRfbG9jYWxzAAEObmFtZWRfYnlfaW5kZXgAAgxzb21lX3VubmFtZWQAAwptdWx0',
         'aV9kZWNsAAQKUgUGAQF/IAALDgEBf0EsIQIgACABIAILDwEBf0HYACECIAAgASACCxUBAn9BzQAh',
-        'AkEsIQMgACABIAIgAwsUAQJ/QSEhAkEsIQMgACABIAIgAws='))
-);
+        'AkEsIQMgACABIAIgAwsUAQJ/QSEhAkEsIQMgACABIAIgAws='));
 
 SELECT name FROM system.webassembly_modules WHERE name LIKE 'wasm_%' ORDER BY name;
 
@@ -159,7 +154,6 @@ SELECT * FROM system.functions WHERE name = 'multi_decl';
 
 CREATE FUNCTION return_default LANGUAGE WASM ABI PLAIN FROM 'wasm_l' ARGUMENTS () RETURNS Int32;
 SELECT name, return_default() == 0 FROM system.functions WHERE name = 'return_default';
-
 DROP FUNCTION return_default;
 
 -- module with zeros in the beginning or end of the hash, check that it's not trimmed

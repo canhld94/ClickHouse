@@ -11,7 +11,6 @@ correct	is_prime	1
 is_prime	1
 correct	is_prime	1
 wasm_l
-wasm_s
 return_default	1
 times2	1
 wasm_h	1
