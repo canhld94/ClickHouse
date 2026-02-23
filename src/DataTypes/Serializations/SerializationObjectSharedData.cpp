@@ -12,8 +12,6 @@
 #include <IO/ReadHelpers.h>
 #include <ranges>
 
-#include <Common/logger_useful.h>
-
 namespace DB
 {
 
