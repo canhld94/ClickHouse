@@ -1288,6 +1288,7 @@ void TCPHandler::processInsertQuery(QueryState & state)
             {
                 executor.push(std::move(state.block_for_insert));
 
+                std::lock_guard lock(*callback_mutex);
                 sendLogs(state);
                 sendInsertProfileEvents(state);
             }
