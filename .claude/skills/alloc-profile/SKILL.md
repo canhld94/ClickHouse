@@ -40,13 +40,15 @@ Once the file path is known, pass it to all subsequent steps.
 **Then call TaskOutput for ALL three agents** (also in parallel, single message) before proceeding to Step 3.
 Do NOT start Step 3 until every agent has finished.
 
+**Fallback:** If any agent fails (e.g., reports lacking Bash permission), re-run its Python script directly using the Bash tool in the main context.
+
 ### Agent A — Summary statistics (`subagent_type=Bash`)
 
 Run this Python script to compute summary statistics:
 
 ```python
 python3 - <<'EOF'
-import sys, os
+import sys, os, re
 filepath = "PATH_TO_FILE"  # substituted by skill
 lines = open(filepath).read().splitlines()
 traces = []
@@ -65,6 +67,44 @@ for line in lines:
 total = sum(v for v, _ in traces)
 traces.sort(reverse=True)
 
+# Noise filters — keep in sync with Agent C
+JEMALLOC_PREFIXES = (
+    "prof_backtrace", "prof_alloc_prep", "prof_tctx", "prof_",
+    "imalloc", "ialloc", "irallocx", "imallocx",
+    "arena_malloc", "arena_palloc", "arena_ralloc", "arena_",
+    "tcache_alloc", "tcache_",
+    "large_malloc", "large_palloc",
+    "chunk_alloc", "huge_malloc", "huge_palloc",
+    "je_malloc", "je_calloc", "je_realloc", "je_rallocx", "je_mallocx",
+    "je_posix_memalign", "je_aligned_alloc",
+    "malloc_default", "calloc",
+)
+ALLOC_SUBSTRINGS = (
+    "operator new", "operator new[]",
+    "__libcpp_operator_new",
+    "__libc_malloc", "__libc_calloc", "_int_malloc",
+    "posix_memalign", "aligned_alloc",
+    "do_rallocx", "do_mallocx",
+    "mi_malloc", "mi_calloc",
+    "__cxx_global_var_init", "__cxa_thread_atexit_impl",
+    "DB::Memory<", "Memory::newImpl", "Allocator<false", "Allocator<true",
+    "allocNoTrack",
+    "PODArrayBase::realloc", "PODArrayBase::alloc",
+    "CRYPTO_malloc",
+    "std::__detail::_Hash_node", "std::_Rb_tree",
+    "std::vector<", "std::string::",
+    # STL and PODArray wrappers — noise for leaf analysis
+    "std::__1::",
+    "DB::PODArrayBase",
+)
+
+def is_noise(frame):
+    return (any(frame.startswith(p) for p in JEMALLOC_PREFIXES) or
+            any(s in frame for s in ALLOC_SUBSTRINGS))
+
+def shorten(frame):
+    return re.sub(r'<[^>]{40,}>', '<...>', frame)
+
 print(f"=== SUMMARY ===")
 print(f"File: {filepath}")
 print(f"Total allocated: {total:,} bytes  ({total/1024/1024:.2f} MB)  ({total/1024/1024/1024:.3f} GB)")
@@ -72,56 +112,31 @@ print(f"Unique stack traces: {len(traces)}")
 print()
 print("=== TOP 25 STACK TRACES ===")
 for i, (v, stack) in enumerate(traces[:25], 1):
-    frames = stack.split(';')
-    # Show last 3 meaningful frames
-    tail = ' ← '.join(f for f in reversed(frames[-4:]) if f)
+    frames = [f for f in stack.split(';') if f]
+    meaningful = [f for f in frames if not is_noise(f)]
+    tail_frames = meaningful[-4:] if meaningful else frames[-4:]
+    tail = ' <- '.join(shorten(f) for f in reversed(tail_frames))
     print(f"{i:>3}. {v/1024/1024:>8.2f} MB  ({100*v/total:>5.1f}%)  {tail[:120]}")
 print()
-print("=== FULL STACKS FOR TOP 5 ===")
-for i, (v, stack) in enumerate(traces[:5], 1):
-    frames = stack.split(';')
+print("=== FULL STACKS FOR TOP 10 ===")
+for i, (v, stack) in enumerate(traces[:10], 1):
+    frames = [f for f in stack.split(';') if f]
     print(f"\n--- #{i}: {v/1024/1024:.2f} MB ({100*v/total:.1f}%) ---")
     for depth, frame in enumerate(reversed(frames), 1):
-        if frame:
-            print(f"  [{depth:>2}] {frame}")
+        noise_mark = "  [noise]" if is_noise(frame) else ""
+        print(f"  [{depth:>2}] {shorten(frame)}{noise_mark}")
 EOF
 ```
 
-### Agent B — Component/subsystem aggregation (`subagent_type=Bash`)
+### Agent B — Outermost meaningful frame aggregation (`subagent_type=Bash`)
 
-Run this Python script to group allocations by subsystem:
+Run this Python script to aggregate by the outermost (shallowest) meaningful frame — the operation that initiated the allocation. This answers "why did this allocation happen?" (e.g., loading data parts, executing a query, loading a dictionary), complementing Agent C which answers "what code allocated?":
 
 ```python
 python3 - <<'EOF'
 import sys, re
 from collections import defaultdict
 filepath = "PATH_TO_FILE"  # substituted by skill
-
-SUBSYSTEMS = [
-    # (label, list of frame substrings to match — any frame in the stack)
-    ("SystemLog / system tables",   ["SystemLog", "SystemLogQueue", "SystemLogElement"]),
-    ("MergeTree merges",            ["MergeTreeBackgroundExecutor", "MergePlainMergeTree", "MergedBlockOutputStream", "MergeTask", "MergeTreeDataMerger"]),
-    ("MergeTree writes (INSERTs)",  ["MergeTreeBlockOutputStream", "MergeTreeSink", "MergeTreeDataWriter"]),
-    ("MergeTree reads (SELECTs)",   ["MergeTreeBaseSelectProcessor", "MergeTreeReadPool", "MergeTreeRangeReader", "IMergeTreeSelectAlgorithm"]),
-    ("MergeTree parts / index",     ["MergeTreeData::", "IMergeTreeDataPart", "MergeTreeIndexGranularity"]),
-    ("IO buffers",                  ["WriteBufferFromFile", "ReadBufferFromFile", "CompressedWriteBuffer", "CompressedReadBuffer", "BufferWithOwnMemory"]),
-    ("Memory / PODArray / Arena",   ["DB::Memory<", "PODArrayBase", "ArenaWithFreeLists", "Arena::", "Allocator<"]),
-    ("Query execution / pipeline",  ["executeQuery", "PipelineExecutor", "IProcessor", "ISource", "ISink", "QueryPipeline"]),
-    ("Thread pool",                 ["ThreadPoolImpl", "ThreadFromGlobalPool", "ThreadPool::", "StaticThreadPool"]),
-    ("Caches",                      ["LRUCache", "CacheBase", "FilesystemCache", "UncompressedCache", "MarkCache", "MMappedFileCache"]),
-    ("Compression codecs",          ["CompressionCodec", "ICompressionCodec", "CompressedDataSize"]),
-    ("Dictionaries",                ["IDictionary", "CacheDictionary", "DirectDictionary", "DictionarySource"]),
-    ("ZooKeeper / Keeper",          ["ZooKeeper", "KeeperDispatcher", "KeeperStorage", "zkutil::"]),
-    ("HTTP / server handlers",      ["HTTPHandler", "Poco::Net::HTTPServer", "HTTPServerRequest", "CancellableHTTPRequestHandler"]),
-    ("S3 / object storage",         ["S3::", "S3Client", "ObjectStorage", "S3RequestSender"]),
-    ("String / column memory",      ["ColumnString", "ColumnVector", "IColumn::", "StringRef"]),
-    ("Config / XML parsing",        ["ConfigReloader", "Poco::XML", "ConfigProcessor", "NamePool"]),
-    ("DateLUT / timezones",         ["DateLUT", "DateLUTImpl"]),
-    ("Format / serialization",      ["IOutputFormat", "IInputFormat", "FormatFactory", "ISerialization"]),
-    ("Aggregation / GROUP BY",      ["Aggregator::", "AggregatingTransform", "AggregationMethod"]),
-    ("Joins",                       ["IJoin", "HashJoin", "JoinedTables", "JoinAlgorithm"]),
-    ("Sort / ORDER BY",             ["SortingTransform", "MergeSortingTransform", "SortCursor", "PartialSortingTransform"]),
-]
 
 lines = open(filepath).read().splitlines()
 traces = []
@@ -139,27 +154,56 @@ for line in lines:
 
 total = sum(v for v, _ in traces)
 
-buckets = defaultdict(int)
-for v, stack in traces:
-    matched = False
-    for label, keywords in SUBSYSTEMS:
-        if any(kw in stack for kw in keywords):
-            buckets[label] += v
-            matched = True
-            break
-    if not matched:
-        buckets["(other / unclassified)"] += v
+# Frames to skip when looking for the outermost meaningful frame:
+# thread pool scaffolding, libc entry points, raw addresses, lambda wrappers
+SKIP_OUTER = (
+    "0000", "_start", "__libc_start", "__GI___clone",
+    "start_thread", "clone3",
+    "ThreadPoolImpl", "ThreadFromGlobalPool",
+    "std::__1::__function", "std::__1::__invoke",
+    "decltype", "void std::__1::__function",
+    "std::__1::__packaged_task_function",
+    "DB::ThreadPool", "DB::GlobalThreadPool",
+    "DB::threadFunction",
+    "BaseDaemon", "SignalListener",
+    "Poco::ThreadImpl::runnableEntry",
+    "Poco::PooledThread::run",
+    "main",
+    "DB::Server::run",
+    "Poco::Util::Application::run",
+)
 
-print("=== ALLOCATION BY SUBSYSTEM ===")
-print(f"{'Subsystem':<42} {'MB':>8}  {'%':>6}  {'Bar'}")
-print("-" * 75)
-for label, v in sorted(buckets.items(), key=lambda x: -x[1]):
-    if v == 0:
-        continue
+def is_skip_outer(frame):
+    return any(frame.startswith(p) for p in SKIP_OUTER) or frame.startswith("(")
+
+def shorten(frame):
+    # Collapse long templates, preserve (anonymous namespace), strip args
+    s = re.sub(r'<[^>]{40,}>', '<...>', frame)
+    s = s.replace('(anonymous namespace)', '{anon}')
+    s = re.sub(r'\(.*', '', s)
+    s = s.replace('{anon}', '(anonymous namespace)')
+    return s[:120]
+
+by_outer = defaultdict(int)
+
+for v, stack in traces:
+    frames = [f for f in stack.split(';') if f]
+    outer = None
+    for f in frames:
+        if not f or is_skip_outer(f):
+            continue
+        outer = f
+        break
+    if outer is None:
+        outer = frames[0] if frames else "(unknown)"
+    by_outer[shorten(outer)] += v
+
+print("=== TOP 25 OUTERMOST MEANINGFUL FRAMES (operation that initiated allocation) ===")
+for fn, v in sorted(by_outer.items(), key=lambda x: -x[1])[:25]:
     mb = v / 1024 / 1024
     pct = 100 * v / total
-    bar = "█" * int(pct / 2)
-    print(f"{label:<42} {mb:>8.2f}  {pct:>5.1f}%  {bar}")
+    bar = "\u2588" * int(pct / 2)
+    print(f"  {mb:>10.2f} MB  {pct:>5.1f}%  {bar:<20}  {fn}")
 EOF
 ```
 
@@ -191,8 +235,7 @@ total = sum(v for v, _ in traces)
 
 # Aggregate by last meaningful frame (the allocating function)
 by_leaf = defaultdict(int)
-by_root = defaultdict(int)  # first frame (thread entry point)
-by_caller = defaultdict(int)  # second-to-last frame (the direct caller)
+by_caller = defaultdict(int)  # caller of the leaf
 
 # jemalloc profiling infrastructure — always at the bottom of every stack
 JEMALLOC_PREFIXES = (
@@ -204,20 +247,30 @@ JEMALLOC_PREFIXES = (
     "chunk_alloc", "huge_malloc", "huge_palloc",
     "je_malloc", "je_calloc", "je_realloc", "je_rallocx", "je_mallocx",
     "je_posix_memalign", "je_aligned_alloc",
+    "malloc_default", "calloc",
 )
 # libc / C++ allocator wrappers that add no information
 ALLOC_SUBSTRINGS = (
     "operator new", "operator new[]",
+    "__libcpp_operator_new",
     "__libc_malloc", "__libc_calloc", "_int_malloc",
     "posix_memalign", "aligned_alloc",
     "do_rallocx", "do_mallocx",
     "mi_malloc", "mi_calloc",
+    # C++ static/thread-local initialization wrappers
+    "__cxx_global_var_init", "__cxa_thread_atexit_impl",
     # ClickHouse allocator wrappers — informative only as callers, not as leaf
-    "DB::Memory<", "Allocator<false", "Allocator<true",
+    "DB::Memory<", "Memory::newImpl", "Allocator<false", "Allocator<true",
+    "allocNoTrack",
     "PODArrayBase::realloc", "PODArrayBase::alloc",
+    # Third-party allocators
+    "CRYPTO_malloc",
     # STL internals
     "std::__detail::_Hash_node", "std::_Rb_tree",
     "std::vector<", "std::string::",
+    # STL and PODArray wrappers — noise for leaf analysis
+    "std::__1::",
+    "DB::PODArrayBase",
 )
 
 def is_noise(frame):
@@ -233,22 +286,34 @@ def meaningful_leaf(frames):
             return f
     return frames[-1] if frames else "(unknown)"
 
+def meaningful_caller(frames):
+    """Second non-noise frame from the bottom."""
+    found_leaf = False
+    for f in reversed(frames):
+        if f and not is_noise(f):
+            if found_leaf:
+                return f
+            found_leaf = True
+    return None
+
+def shorten(frame):
+    s = re.sub(r'<[^>]{40,}>', '<...>', frame)
+    s = s.replace('(anonymous namespace)', '{anon}')
+    s = re.sub(r'\(.*', '', s)
+    s = s.replace('{anon}', '(anonymous namespace)')
+    return s[:120]
+
 for v, stack in traces:
     frames = [f for f in stack.split(';') if f]
     leaf = meaningful_leaf(frames)
-    # Truncate long template noise
-    leaf_short = re.sub(r'<[^>]{40,}>', '<...>', leaf)[:100]
-    by_leaf[leaf_short] += v
-    if frames:
-        by_root[frames[0][:80]] += v
-    if len(frames) >= 2:
-        caller_short = re.sub(r'<[^>]{40,}>', '<...>', frames[-2])[:100]
-        by_caller[caller_short] += v
+    by_leaf[shorten(leaf)] += v
+    caller = meaningful_caller(frames)
+    if caller:
+        by_caller[shorten(caller)] += v
 
 print("=== TOP 25 ALLOCATING FUNCTIONS (first non-trivial frame from bottom) ===")
 for label, bucket in [("Leaf (allocator call site)", by_leaf),
-                       ("Caller of allocator", by_caller),
-                       ("Thread entry point (root)", by_root)]:
+                       ("Caller of leaf", by_caller)]:
     print(f"\n--- {label} ---")
     for fn, v in sorted(bucket.items(), key=lambda x: -x[1])[:25]:
         mb = v / 1024 / 1024
@@ -257,21 +322,23 @@ for label, bucket in [("Leaf (allocator call site)", by_leaf),
 EOF
 ```
 
-## Step 3 — Synthesize results
+## Step 3 — Synthesize results and perform subsystem grouping
 
-**MANDATORY: All three agents from Step 2 must have completed (TaskOutput returned) before launching this step.**
+**MANDATORY: All three agents from Step 2 must have completed (TaskOutput returned) before this step.**
 
-**Use Task tool with `subagent_type=general-purpose`** to combine the three agents' outputs and produce a final structured report. The agent should:
+Using the outputs from Agent A (top stacks with full traces), Agent B (outermost frame — the initiating operation), and Agent C (leaf function — the allocating code), **you** (the main LLM) produce a structured report. Agent B gives you the "why" (what operation triggered allocations) and Agent C gives you the "how" (what code did the allocating). Combined with Agent A's full stacks, you can semantically group allocations into subsystems — e.g., `AggregatedDataVariants::init` called from `HashedDictionary::loadData` is "Dictionary Loading", not "Aggregation"; `Arena::addMemoryChunk` inside a merge pipeline is "Merges", not "Arena".
 
-1. Present **summary statistics** (total, trace count)
-2. Present **top allocators table** (top 15 stack traces with readable short description)
-3. Present **subsystem breakdown** with bar chart
-4. Highlight **top 3–5 actionable findings** — e.g.:
+Your report should include:
+
+1. **Summary statistics** (total, trace count)
+2. **Top allocators table** (top 15 stack traces with readable short description)
+3. **Subsystem breakdown with bar chart** — group every top-25 trace (and the leaf function data) into semantic subsystems based on the full call path context. Use categories like: Part Loading, Dictionary Loading, Query Execution, Backup & Restore, Merges & Mutations, File Cache, IO Buffers, Replication, System Logs, etc. Show an ASCII bar chart. Traces that don't fit neatly into a category go into "(other)".
+4. **Top 3–5 actionable findings** — e.g.:
    - Which subsystem unexpectedly dominates
    - Any single allocation that is disproportionately large (>5% of total)
    - Repeated patterns (e.g., many system log types each reserving large buffers)
    - Signs of fragmentation or excessive reallocation (`do_rallocx` / `PODArray::realloc` heavy)
-5. Suggest **follow-up drill-down questions** the user may want to investigate
+5. **Follow-up drill-down questions** the user may want to investigate
 
 ## Step 4 — Offer drill-down options
 
