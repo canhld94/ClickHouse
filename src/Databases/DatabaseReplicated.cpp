@@ -1003,28 +1003,25 @@ void DatabaseReplicated::restoreDatabaseNodesInKeeper(const ZooKeeperPtr & zooke
 
     add_ops(buildDatabaseNodesInZooKeeper());
 
-    for (auto existing_tables_it = getTablesIterator(local_context, {}, /*skip_not_loaded=*/false); existing_tables_it->isValid();
-         existing_tables_it->next())
-    {
-        const String table_name = existing_tables_it->name();
-        LOG_TEST(log, "Restoring metadata in Keeper of table {}", table_name);
-
-        const String statement = getObjectDefinitionFromCreateQuery(getCreateTableQuery(table_name, local_context));
-        const String table_metadata_zk_path = zookeeper_path + "/metadata/" + escapeForFileName(table_name);
-        add_ops({zkutil::makeCreateRequest(table_metadata_zk_path, statement, zkutil::CreateMode::Persistent)});
-    }
-
-    /// Compute the digest atomically from the current tables map, using the same method
-    /// as checkDigestValid (readMetadataFile). Computing it outside the lock from the
-    /// iterator above would race with concurrent DDL operations modifying the tables map.
+    /// Hold metadata_mutex so that the digest and keeper path nodes are consistent:
+    /// both are computed from the same set of tables under the same lock.
     {
         std::lock_guard lock{metadata_mutex};
         UInt64 digest = 0;
+
+        for (auto existing_tables_it = getTablesIterator(local_context, {}, /*skip_not_loaded=*/false); existing_tables_it->isValid();
+             existing_tables_it->next())
         {
-            std::lock_guard tables_lock{mutex};
-            for (const auto & table : tables)
-                digest += getMetadataHash(table.first);
+            const String table_name = existing_tables_it->name();
+            LOG_TEST(log, "Restoring metadata in Keeper of table {}", table_name);
+
+            const String statement = readMetadataFile(table_name);
+            const String table_metadata_zk_path = zookeeper_path + "/metadata/" + escapeForFileName(table_name);
+            add_ops({zkutil::makeCreateRequest(table_metadata_zk_path, statement, zkutil::CreateMode::Persistent)});
+
+            digest += DB::getMetadataHash(table_name, statement);
         }
+
         tables_metadata_digest = digest;
     }
     Coordination::Responses responses;
