@@ -803,7 +803,15 @@ void StatementGenerator::generateFuncCall(RandomGenerator & rg, const bool allow
         /// Most of the times disallow nested aggregates, and window functions inside aggregates
         this->levels[this->current_level].inside_aggregate = rg.nextSmallNumber() < 9;
         this->levels[this->current_level].allow_window_funcs = rg.nextSmallNumber() < 3;
-        if (max_params > 0 && max_params >= min_params)
+        if (agg.fnum == SQLFunc::FUNCestimateCompressionRatio && rg.nextSmallNumber() < 9)
+        {
+            func_call->add_params()->mutable_lit_val()->set_no_quote_str("'" + generateNextCodecString(rg) + "'");
+            if (rg.nextBool())
+            {
+                func_call->add_params()->mutable_lit_val()->set_no_quote_str(rg.pickRandomly(blockSizes));
+            }
+        }
+        else if (max_params > 0 && max_params >= min_params)
         {
             std::uniform_int_distribution<uint32_t> nparams(min_params, max_params);
             const uint32_t nagg_params = nparams(rg.generator);

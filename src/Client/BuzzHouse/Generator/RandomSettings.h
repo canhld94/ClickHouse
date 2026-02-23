@@ -12,6 +12,8 @@
 namespace BuzzHouse
 {
 
+extern const std::unordered_set<String> blockSizes;
+
 const auto trueOrFalse = [](RandomGenerator & rg, FuzzConfig &) { return rg.nextBool() ? "1" : "0"; };
 
 const auto zeroOneTwo = [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.randomInt<uint32_t>(0, 2)); };

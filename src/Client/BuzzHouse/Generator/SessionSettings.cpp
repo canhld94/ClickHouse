@@ -11,6 +11,8 @@ extern const int BUZZHOUSE;
 namespace BuzzHouse
 {
 
+const std::unordered_set<String> blockSizes = {"1", "2", "4", "8", "16", "32", "64", "1024", "2048", "4096", "16384", "1048576"}; /// 1MB
+
 static const auto nastyStrings = [](RandomGenerator & rg, FuzzConfig &) { return "'" + rg.pickRandomly(rg.nasty_strings) + "'"; };
 
 static const auto setSetting = CHSetting(
@@ -1556,8 +1558,7 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
     for (const auto & entry : max_block_sizes)
     {
         performanceSettings.insert({{entry, CHSetting(highRange, {"1024", "2048", "4096", "8192", "16384", "'10M'"}, false)}});
-        serverSettings.insert(
-            {{entry, CHSetting(highRange, {"1", "2", "4", "8", "16", "32", "64", "1024", "2048", "4096", "16384"}, false)}});
+        serverSettings.insert({{entry, CHSetting(highRange, blockSizes, false)}});
     }
     for (const auto & entry : max_columns_values)
     {
