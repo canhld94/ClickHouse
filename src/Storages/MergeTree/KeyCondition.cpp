@@ -1332,7 +1332,7 @@ bool applyDeterministicDagToColumn(
     DataTypePtr & out_type)
 {
     ColumnPtr input_column = in_column->convertToFullIfNeeded();
-    DataTypePtr input_type = removeLowCardinality(in_type);
+    DataTypePtr input_type = recursiveRemoveLowCardinality(in_type);
 
     /// This is the final check for the output column after DAG execution:
     /// - materialize output column (Const/LowCardinality)
@@ -1341,7 +1341,7 @@ bool applyDeterministicDagToColumn(
     auto finalize_output_column_and_type = [&](ColumnPtr & column, DataTypePtr & type) -> bool
     {
         column = column->convertToFullIfNeeded();
-        type = removeLowCardinality(type);
+        type = recursiveRemoveLowCardinality(type);
 
         if (column->isNullable())
         {
@@ -1435,7 +1435,7 @@ bool applyDeterministicDagToColumn(
             if (!cast_arg || cast_arg->type != ActionsDAG::ActionType::INPUT || cast_arg->result_name != input_name)
                 return false;
 
-            const auto cast_result_type = removeLowCardinality(output_node->result_type);
+            const auto cast_result_type = recursiveRemoveLowCardinality(output_node->result_type);
 
             out_column = input_column;
             out_type = input_type;
