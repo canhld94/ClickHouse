@@ -262,7 +262,7 @@ wasmtime::Result<std::monostate, wasmtime::Trap> callHostFunction(
     const auto & func_decl = host_function_ptr->getFunctionDeclaration();
     try
     {
-        auto argument_types = func_decl.getArgumentTypes();
+        const auto & argument_types = func_decl.getArgumentTypes();
         if (argument_types.size() != params.size())
         {
             throw Exception(
