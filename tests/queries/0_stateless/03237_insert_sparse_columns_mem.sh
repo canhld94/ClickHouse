@@ -13,7 +13,9 @@ for i in {1..250}; do
     table_structure+=", c$i String"
 done
 
-MY_CLICKHOUSE_CLIENT="$CLICKHOUSE_CLIENT --enable_parsing_to_custom_serialization 1 --parallel_replicas_for_cluster_engines 0"
+# Redirect server logs to /dev/null to suppress sporadic `ConnectionGroup: Too many active sessions` warnings
+# that appear in stderr when many S3 connections are opened across parallel tests.
+MY_CLICKHOUSE_CLIENT="$CLICKHOUSE_CLIENT --enable_parsing_to_custom_serialization 1 --parallel_replicas_for_cluster_engines 0 --server_logs_file=/dev/null"
 
 $MY_CLICKHOUSE_CLIENT --query "
     DROP TABLE IF EXISTS t_insert_mem;
