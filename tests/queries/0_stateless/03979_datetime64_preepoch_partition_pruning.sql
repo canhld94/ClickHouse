@@ -39,3 +39,38 @@ SELECT 'Date32: with pre-epoch filter';
 SELECT id FROM t_date32_preepoch WHERE id = 'a' AND d >= '1969-12-31';
 
 DROP TABLE t_date32_preepoch;
+
+DROP TABLE IF EXISTS t_dt64_upper;
+
+CREATE TABLE t_dt64_upper (
+    id UInt8,
+    ts DateTime64(0)
+) ENGINE = MergeTree()
+PARTITION BY toDate(ts)
+ORDER BY id;
+
+INSERT INTO t_dt64_upper VALUES (1, '2149-06-07 00:00:00');
+
+SELECT 'DateTime64 upper: data beyond Date max, filter at boundary';
+SELECT id FROM t_dt64_upper WHERE ts >= '2149-06-06 00:00:00';
+
+SELECT 'DateTime64 upper: data beyond Date max, filter also beyond';
+SELECT id FROM t_dt64_upper WHERE ts >= '2149-06-07 00:00:00';
+
+DROP TABLE t_dt64_upper;
+
+DROP TABLE IF EXISTS t_date32_upper;
+
+CREATE TABLE t_date32_upper (
+    id UInt8,
+    d Date32
+) ENGINE = MergeTree()
+PARTITION BY toDate(d)
+ORDER BY id;
+
+INSERT INTO t_date32_upper VALUES (1, '2299-12-31');
+
+SELECT 'Date32 upper: data beyond Date max';
+SELECT id FROM t_date32_upper WHERE d >= '2149-06-06';
+
+DROP TABLE t_date32_upper;

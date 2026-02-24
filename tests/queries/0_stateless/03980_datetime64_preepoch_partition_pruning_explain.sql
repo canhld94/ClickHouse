@@ -23,4 +23,10 @@ EXPLAIN indexes = 1 SELECT id FROM t_dt64_explain WHERE ts >= '1969-12-31 12:00:
 SELECT 'epoch boundary: pruning with correct range';
 EXPLAIN indexes = 1 SELECT id FROM t_dt64_explain WHERE ts >= '1970-01-01 00:00:00';
 
+SELECT 'upper bound: no pruning (beyond Date max, overflow wraps)';
+EXPLAIN indexes = 1 SELECT id FROM t_dt64_explain WHERE ts >= '2149-06-07 00:00:00';
+
+SELECT 'at Date max: no pruning (boundary value, next wraps)';
+EXPLAIN indexes = 1 SELECT id FROM t_dt64_explain WHERE ts >= '2149-06-06 00:00:00';
+
 DROP TABLE t_dt64_explain;

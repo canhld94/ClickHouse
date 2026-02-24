@@ -71,3 +71,47 @@ Expression ((Project names + Projection))
         Granules: 3/3
         Search Algorithm: generic exclusion search
       Ranges: 3
+upper bound: no pruning (beyond Date max, overflow wraps)
+Expression ((Project names + Projection))
+  Expression ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.t_dt64_explain)
+    Indexes:
+      MinMax
+        Keys:
+          ts
+        Condition: (ts in [\'5662310400\', +Inf))
+        Parts: 0/3
+        Granules: 0/3
+      Partition
+        Condition: true
+        Parts: 0/0
+        Granules: 0/0
+      PrimaryKey
+        Keys:
+          ts
+        Condition: (ts in [\'5662310400\', +Inf))
+        Parts: 0/0
+        Granules: 0/0
+      Ranges: 0
+at Date max: no pruning (boundary value, next wraps)
+Expression ((Project names + Projection))
+  Expression ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.t_dt64_explain)
+    Indexes:
+      MinMax
+        Keys:
+          ts
+        Condition: (ts in [\'5662224000\', +Inf))
+        Parts: 0/3
+        Granules: 0/3
+      Partition
+        Condition: true
+        Parts: 0/0
+        Granules: 0/0
+      PrimaryKey
+        Keys:
+          ts
+        Condition: (ts in [\'5662224000\', +Inf))
+        Parts: 0/0
+        Granules: 0/0
+      Ranges: 0

@@ -1090,19 +1090,31 @@ bool applyFunctionChainToColumn(
         result_column = castColumnAccurate({result_column, result_type, ""}, argument_type);
         auto func_result_type = func->getResultType();
 
-        /// Pre-epoch DateTime64/Date32 overflows unsigned Date/DateTime, producing wrong ranges
+        /// Pre-epoch/post-2149 DateTime64/Date32 overflows unsigned Date/DateTime, producing wrong ranges
         auto result_type_inner = removeLowCardinality(removeNullable(func_result_type));
         if (isDate(result_type_inner) || isDateTime(result_type_inner))
         {
             auto arg_type_inner = removeLowCardinality(removeNullable(argument_type));
             if (isDateTime64(arg_type_inner))
             {
-                if ((*result_column)[0].safeGet<DateTime64>().getValue() < 0)
+                Int64 value = (*result_column)[0].safeGet<DateTime64>().getValue();
+                if (value < 0)
+                    return false;
+
+                UInt32 scale = assert_cast<const DataTypeDateTime64 &>(*arg_type_inner).getScale();
+                Int64 seconds = value / intExp10OfSize<Int64>(scale);
+
+                if (isDate(result_type_inner) && seconds >= static_cast<Int64>(DATE_LUT_MAX_DAY_NUM) * 86400)
+                    return false;
+                if (isDateTime(result_type_inner) && seconds >= DATE_LUT_MAX)
                     return false;
             }
             else if (isDate32(arg_type_inner))
             {
-                if ((*result_column)[0].safeGet<Int32>() < 0)
+                auto value = (*result_column)[0].safeGet<Int32>();
+                if (value < 0)
+                    return false;
+                if (isDate(result_type_inner) && value > DATE_LUT_MAX_DAY_NUM)
                     return false;
             }
         }
@@ -1110,6 +1122,18 @@ bool applyFunctionChainToColumn(
         result_column = func->execute({{result_column, argument_type, ""}}, func_result_type, result_column->size(), /* dry_run = */ false);
         result_column = result_column->convertToFullColumnIfLowCardinality();
         result_type = removeLowCardinality(func_result_type);
+
+        /// at the type boundary the next value wraps, so pruning is unsafe
+        if (isDate(result_type_inner))
+        {
+            if (result_column->getUInt(0) >= DATE_LUT_MAX_DAY_NUM)
+                return false;
+        }
+        else if (isDateTime(result_type_inner))
+        {
+            if (result_column->get64(0) >= DATE_LUT_MAX)
+                return false;
+        }
 
         /// Transforming nullable columns to the nested ones, in case no nulls found
         if (result_column->isNullable())

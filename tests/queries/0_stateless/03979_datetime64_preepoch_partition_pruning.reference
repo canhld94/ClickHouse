@@ -8,3 +8,9 @@ Date32: without filter
 a
 Date32: with pre-epoch filter
 a
+DateTime64 upper: data beyond Date max, filter at boundary
+1
+DateTime64 upper: data beyond Date max, filter also beyond
+1
+Date32 upper: data beyond Date max
+1
