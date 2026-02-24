@@ -2267,9 +2267,12 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
             query_info_,
             metadata_snapshot);
 
-    Names primary_key_and_useful_skip_indexes_column_names = primary_key_column_names;
+    NameSet indexes_column_names(primary_key_column_names.begin(), primary_key_column_names.end());
     for (const auto & skip_index : indexes->skip_indexes.useful_indices)
-        primary_key_and_useful_skip_indexes_column_names.append_range(skip_index.index->getColumnsRequiredForIndexCalc());
+    {
+        const auto & skip_index_required_columns = skip_index.index->getColumnsRequiredForIndexCalc();
+        indexes_column_names.insert(skip_index_required_columns.begin(), skip_index_required_columns.end());
+    }
 
     indexes->use_skip_indexes_on_data_read = supports_skip_indexes_on_data_read;
     if (indexes->part_values && indexes->part_values->empty())
@@ -2414,7 +2417,7 @@ ReadFromMergeTree::AnalysisResultPtr ReadFromMergeTree::selectRangesToRead(
                 return filterPartsNamesByPrimaryKeyAndSkipIndexes(filter_context, parts_ranges_map, parts_to_analyze);
             };
 
-            DistributedIndexAnalysisPartsRanges distributed_index_analysis = distributedIndexAnalysisOnReplicas(data.getStorageID(), query_info_.filter_actions_dag.get(), primary_key_and_useful_skip_indexes_column_names, res_parts, vector_search_parameters, local_index_analysis_callback, context_);
+            DistributedIndexAnalysisPartsRanges distributed_index_analysis = distributedIndexAnalysisOnReplicas(data.getStorageID(), query_info_.filter_actions_dag.get(), indexes_column_names, res_parts, vector_search_parameters, local_index_analysis_callback, context_);
             IndexAnalysisPartsRanges analyzed_parts_ranges;
 
             /// Index stats
