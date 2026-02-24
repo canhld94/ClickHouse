@@ -2297,7 +2297,7 @@ private:
     }
 
     std::shared_ptr<BuildTextIndexTransform> transform;
-    SharedHeader original_output_header;
+    const SharedHeader original_output_header;
 };
 
 void MergeTask::addSkipIndexesExpressionSteps(QueryPlan & plan, const IndicesDescription & indices_description, const GlobalRuntimeContextPtr & global_ctx)
