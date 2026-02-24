@@ -43,3 +43,35 @@ LEFT JOIN test
     ON test.c0 = test2.c0
     AND test.c1 >= test2.c1
 SETTINGS join_algorithm='grace_hash', grace_hash_join_initial_buckets = 2;
+
+SELECT
+  count()
+FROM test
+RIGHT JOIN test2
+    ON test.c0 = test2.c0
+    AND test.c1 >= test2.c1
+SETTINGS join_algorithm='parallel_hash';
+
+SELECT
+  count()
+FROM test2
+RIGHT JOIN test
+    ON test.c0 = test2.c0
+    AND test.c1 >= test2.c1
+SETTINGS join_algorithm='grace_hash', grace_hash_join_initial_buckets = 2;
+
+SELECT
+  count()
+FROM test
+FULL JOIN test2
+    ON test.c0 = test2.c0
+    AND test.c1 >= test2.c1
+SETTINGS join_algorithm='parallel_hash';
+
+SELECT
+  count()
+FROM test2
+FULL JOIN test
+    ON test.c0 = test2.c0
+    AND test.c1 >= test2.c1
+SETTINGS join_algorithm='grace_hash', grace_hash_join_initial_buckets = 2;
