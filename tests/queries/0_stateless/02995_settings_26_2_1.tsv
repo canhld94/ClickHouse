@@ -1,5 +1,5 @@
 add_http_cors_header	0
-additional_result_filter	
+additional_result_filter
 additional_table_filters	{}
 aggregate_function_input_format	state
 aggregate_functions_null_for_empty	0
@@ -43,12 +43,12 @@ allow_experimental_database_unity_catalog	0
 allow_experimental_delta_kernel_rs	1
 allow_experimental_delta_lake_writes	0
 allow_experimental_dynamic_type	1
-allow_experimental_full_text_index	0
+allow_experimental_full_text_index	1
 allow_experimental_funnel_functions	0
 allow_experimental_geo_types	1
 allow_experimental_hash_functions	0
 allow_experimental_iceberg_compaction	0
-allow_insert_into_iceberg	0
+allow_experimental_insert_into_iceberg	0
 allow_experimental_inverted_index	0
 allow_experimental_join_condition	0
 allow_experimental_join_right_table_sorting	0
@@ -89,9 +89,11 @@ allow_experimental_window_view	0
 allow_experimental_ytsaurus_dictionary_source	0
 allow_experimental_ytsaurus_table_engine	0
 allow_experimental_ytsaurus_table_function	0
+allow_fuzz_query_functions	0
 allow_general_join_planning	1
 allow_get_client_http_header	0
 allow_hyperscan	1
+allow_insert_into_iceberg	0
 allow_introspection_functions	0
 allow_materialized_view_with_bad_select	0
 allow_named_collection_override_by_default	1
@@ -136,10 +138,12 @@ apply_mutations_on_fly	0
 apply_patch_parts	1
 apply_patch_parts_join_cache_buckets	8
 apply_prewhere_after_final	0
-apply_row_policy_after_final	0
+apply_row_policy_after_final	1
 apply_settings_from_server	1
 archive_adaptive_buffer_max_size_bytes	8388608
 arrow_flight_request_descriptor_type	path
+ast_fuzzer_any_query	0
+ast_fuzzer_runs	0
 asterisk_include_alias_columns	0
 asterisk_include_materialized_columns	0
 async_insert	0
@@ -229,6 +233,7 @@ cast_string_to_date_time_mode	basic
 cast_string_to_dynamic_use_inference	0
 cast_string_to_variant_use_inference	1
 check_conversion_from_numbers_to_enum	1
+check_named_collection_dependencies	1
 check_query_single_value_result	0
 check_referential_table_dependencies	0
 check_table_dependencies	1
@@ -236,14 +241,14 @@ checksum_on_read	1
 cloud_mode	0
 cloud_mode_database_engine	1
 cloud_mode_engine	1
-cluster_for_parallel_replicas	
+cluster_for_parallel_replicas
 cluster_function_process_archive_on_multiple_nodes	1
 cluster_table_function_buckets_batch_size	0
 cluster_table_function_split_granularity	file
 collect_hash_table_stats_during_aggregation	1
 collect_hash_table_stats_during_joins	1
-column_names_for_schema_inference	
-compatibility	
+column_names_for_schema_inference
+compatibility
 compatibility_ignore_auto_increment_in_create_table	0
 compatibility_ignore_collation_in_create_table	1
 compatibility_s3_presigned_url_query_in_path	0
@@ -286,7 +291,8 @@ date_time_input_format	basic
 date_time_output_format	simple
 date_time_overflow_behavior	ignore
 decimal_check_overflow	1
-deduplicate_blocks_in_dependent_materialized_views	0
+deduplicate_blocks_in_dependent_materialized_views	1
+deduplicate_insert	enable
 deduplicate_insert_select	enable_when_possible
 default_database_engine	Atomic
 default_materialized_view_sql_security	DEFINER
@@ -328,7 +334,7 @@ distributed_cache_credentials_refresh_period_seconds	5
 distributed_cache_data_packet_ack_window	5
 distributed_cache_discard_connection_if_unread_data	1
 distributed_cache_fetch_metrics_only_from_current_az	1
-distributed_cache_file_cache_name	
+distributed_cache_file_cache_name
 distributed_cache_log_mode	on_error
 distributed_cache_max_unacked_inflight_packets	10
 distributed_cache_min_bytes_for_seek	0
@@ -362,7 +368,7 @@ distributed_insert_skip_read_only_replicas	0
 distributed_plan_default_reader_bucket_count	8
 distributed_plan_default_shuffle_join_bucket_count	8
 distributed_plan_execute_locally	0
-distributed_plan_force_exchange_kind	
+distributed_plan_force_exchange_kind
 distributed_plan_force_shuffle_aggregation	0
 distributed_plan_max_rows_to_broadcast	20000
 distributed_plan_optimize_exchanges	1
@@ -378,6 +384,7 @@ empty_result_for_aggregation_by_empty_set	0
 enable_adaptive_memory_spill_scheduler	0
 enable_add_distinct_to_in_subqueries	0
 enable_analyzer	1
+enable_automatic_decision_for_merging_across_partitions_for_final	1
 enable_blob_storage_log	1
 enable_debug_queries	0
 enable_deflate_qpl_codec	0
@@ -388,12 +395,12 @@ enable_filesystem_cache	1
 enable_filesystem_cache_log	0
 enable_filesystem_cache_on_write_operations	0
 enable_filesystem_read_prefetches_log	0
-enable_full_text_index	0
+enable_full_text_index	1
 enable_global_with_statement	1
 enable_hdfs_pread	1
 enable_http_compression	1
 enable_job_stack_trace	0
-enable_join_runtime_filters	0
+enable_join_runtime_filters	1
 enable_json_type	1
 enable_lazy_columns_replication	1
 enable_lightweight_delete	1
@@ -436,7 +443,7 @@ errors_output_format	CSV
 evaluation_time	auto
 exact_rows_before_limit	0
 except_default_mode	ALL
-exclude_materialize_skip_indexes_on_insert	
+exclude_materialize_skip_indexes_on_insert
 execute_exists_as_scalar_subquery	1
 external_storage_connect_timeout_sec	10
 external_storage_max_read_bytes	0
@@ -453,7 +460,7 @@ filesystem_cache_boundary_alignment	0
 filesystem_cache_enable_background_download_during_fetch	1
 filesystem_cache_enable_background_download_for_metadata_files_in_packed_storage	1
 filesystem_cache_max_download_size	137438953472
-filesystem_cache_name	
+filesystem_cache_name
 filesystem_cache_prefer_bigger_buffer_size	1
 filesystem_cache_reserve_space_wait_lock_timeout_milliseconds	1000
 filesystem_cache_segments_batch_size	20
@@ -467,16 +474,16 @@ final	0
 flatten_nested	1
 force_aggregate_partitions_independently	0
 force_aggregation_in_order	0
-force_data_skipping_indices	
+force_data_skipping_indices
 force_grouping_standard_compatibility	1
 force_index_by_date	0
 force_optimize_projection	0
-force_optimize_projection_name	
+force_optimize_projection_name
 force_optimize_skip_unused_shards	0
 force_optimize_skip_unused_shards_nesting	0
 force_primary_key	0
 force_remove_data_recursively_on_drop	0
-format_avro_schema_registry_url	
+format_avro_schema_registry_url
 format_binary_max_array_size	1073741824
 format_binary_max_object_size	100000
 format_binary_max_string_size	1073741824
@@ -489,24 +496,24 @@ format_csv_delimiter	,
 format_csv_null_representation	\\N
 format_custom_escaping_rule	Escaped
 format_custom_field_delimiter	\t
-format_custom_result_after_delimiter	
-format_custom_result_before_delimiter	
+format_custom_result_after_delimiter
+format_custom_result_before_delimiter
 format_custom_row_after_delimiter	\n
-format_custom_row_before_delimiter	
-format_custom_row_between_delimiter	
+format_custom_row_before_delimiter
+format_custom_row_between_delimiter
 format_display_secrets_in_show_and_select	0
-format_json_object_each_row_column_for_object_name	
+format_json_object_each_row_column_for_object_name
 format_protobuf_use_autogenerated_schema	1
-format_regexp	
+format_regexp
 format_regexp_escaping_rule	Raw
 format_regexp_skip_unmatched	0
-format_schema	
-format_schema_message_name	
+format_schema
+format_schema_message_name
 format_schema_source	file
-format_template_resultset	
-format_template_resultset_format	
-format_template_row	
-format_template_row_format	
+format_template_resultset
+format_template_resultset_format
+format_template_row
+format_template_row_format
 format_template_rows_between_delimiter	\n
 format_tsv_null_representation	\\N
 formatdatetime_e_with_space_padding	0
@@ -516,7 +523,7 @@ formatdatetime_format_without_leading_zeros	0
 formatdatetime_parsedatetime_m_is_month_name	1
 fsync_metadata	1
 function_date_trunc_return_type_behavior	0
-function_implementation	
+function_implementation
 function_json_value_return_type_allow_complex	0
 function_json_value_return_type_allow_nullable	0
 function_locate_has_mysql_compatible_argument_order	1
@@ -571,21 +578,22 @@ iceberg_engine_ignore_schema_evolution	0
 iceberg_insert_max_bytes_in_data_file	1073741824
 iceberg_insert_max_partitions	100
 iceberg_insert_max_rows_in_data_file	1000000
-iceberg_metadata_compression_method	
+iceberg_metadata_compression_method
 iceberg_metadata_log_level	none
 iceberg_snapshot_id	0
 iceberg_timestamp_ms	0
 idle_connection_timeout	3600
 ignore_cold_parts_seconds	0
-ignore_data_skipping_indices	
+ignore_data_skipping_indices
 ignore_drop_queries_probability	0
+ignore_format_null_for_explain	1
 ignore_materialized_views_with_dropped_target_table	0
 ignore_on_cluster_for_replicated_access_entities_queries	0
 ignore_on_cluster_for_replicated_database	0
 ignore_on_cluster_for_replicated_named_collections_queries	0
 ignore_on_cluster_for_replicated_udf_queries	0
 implicit_select	0
-implicit_table_at_top_level	
+implicit_table_at_top_level
 implicit_transaction	0
 inject_random_order_for_select_without_order_by	0
 input_format_allow_errors_num	0
@@ -602,6 +610,7 @@ input_format_binary_max_type_complexity	1000
 input_format_binary_read_json_as_string	0
 input_format_bson_skip_fields_with_unsupported_types_in_schema_inference	0
 input_format_capn_proto_skip_fields_with_unsupported_types_in_schema_inference	0
+input_format_connection_handling	0
 input_format_csv_allow_cr_end_of_line	0
 input_format_csv_allow_variable_number_of_columns	0
 input_format_csv_allow_whitespace_or_tab_as_delimiter	0
@@ -650,11 +659,12 @@ input_format_json_try_infer_numbers_from_strings	0
 input_format_json_use_string_type_for_ambiguous_paths_in_named_tuples_inference_from_objects	0
 input_format_json_validate_types_from_metadata	1
 input_format_max_block_size_bytes	0
+input_format_max_block_wait_ms	0
 input_format_max_bytes_to_read_for_schema_inference	33554432
 input_format_max_rows_to_read_for_schema_inference	25000
 input_format_msgpack_number_of_columns	0
 input_format_mysql_dump_map_column_names	1
-input_format_mysql_dump_table_name	
+input_format_mysql_dump_table_name
 input_format_native_allow_types_conversion	1
 input_format_native_decode_types_in_binary_format	0
 input_format_null_as_default	1
@@ -692,7 +702,7 @@ input_format_parquet_verify_checksums	1
 input_format_protobuf_flatten_google_wrappers	0
 input_format_protobuf_oneof_presence	0
 input_format_protobuf_skip_fields_with_unsupported_types_in_schema_inference	0
-input_format_record_errors_file_path	
+input_format_record_errors_file_path
 input_format_skip_unknown_fields	1
 input_format_try_infer_dates	1
 input_format_try_infer_datetimes	1
@@ -715,7 +725,7 @@ input_format_with_names_use_header	1
 input_format_with_types_use_header	1
 insert_allow_materialized_columns	0
 insert_deduplicate	1
-insert_deduplication_token	
+insert_deduplication_token
 insert_distributed_one_random_shard	0
 insert_distributed_sync	0
 insert_distributed_timeout	0
@@ -736,6 +746,9 @@ interval_output_format	numeric
 into_outfile_create_parent_directories	0
 jemalloc_collect_profile_samples_in_trace_log	0
 jemalloc_enable_profiler	0
+jemalloc_profile_text_collapsed_use_count	0
+jemalloc_profile_text_output_format	collapsed
+jemalloc_profile_text_symbolize_with_inline	1
 join_algorithm	direct,parallel_hash,hash
 join_any_take_last_row	0
 join_default_strictness	ALL
@@ -773,7 +786,7 @@ load_marks_asynchronously	0
 local_filesystem_read_method	pread_threadpool
 local_filesystem_read_prefetch	0
 lock_acquire_timeout	120
-log_comment	
+log_comment
 log_formatted_queries	0
 log_processors_profiles	1
 log_profile_events	1
@@ -795,7 +808,7 @@ materialize_statistics_on_insert	1
 materialize_ttl_after_modify	1
 materialized_views_ignore_errors	0
 materialized_views_squash_parallel_inserts	1
-max_alter_threads	\'auto(12)\'
+max_alter_threads	\'auto(32)\'
 max_analyze_depth	5000
 max_ast_depth	1000
 max_ast_elements	50000
@@ -831,7 +844,7 @@ max_execution_time	0
 max_execution_time_leaf	0
 max_expanded_ast_elements	500000
 max_fetch_partition_retries_count	5
-max_final_threads	\'auto(12)\'
+max_final_threads	\'auto(32)\'
 max_http_get_redirects	0
 max_hyperscan_regexp_length	0
 max_hyperscan_regexp_total_length	0
@@ -859,7 +872,7 @@ max_os_cpu_wait_time_ratio_to_throw	0
 max_parallel_replicas	1000
 max_parser_backtracks	1000000
 max_parser_depth	1000
-max_parsing_threads	\'auto(12)\'
+max_parsing_threads	\'auto(32)\'
 max_partition_size_to_drop	50000000000
 max_partitions_per_insert_block	100
 max_partitions_to_read	-1
@@ -903,7 +916,7 @@ max_temporary_columns	0
 max_temporary_data_on_disk_size_for_query	0
 max_temporary_data_on_disk_size_for_user	0
 max_temporary_non_const_columns	0
-max_threads	\'auto(12)\'
+max_threads	\'auto(32)\'
 max_threads_for_annoy_index_creation	4
 max_threads_for_indexes	0
 max_untracked_memory	4194304
@@ -938,7 +951,7 @@ merge_tree_use_deserialization_prefixes_cache	1
 merge_tree_use_prefixes_deserialization_thread_pool	1
 merge_tree_use_v1_object_and_dynamic_serialization	0
 metrics_perf_events_enabled	0
-metrics_perf_events_list	
+metrics_perf_events_list
 min_bytes_to_use_direct_io	0
 min_bytes_to_use_mmap_io	0
 min_chunk_bytes_for_parallel_parsing	10485760
@@ -973,7 +986,7 @@ mutations_execute_nondeterministic_on_initiator	0
 mutations_execute_subqueries_on_initiator	0
 mutations_max_literal_size_to_replace	16384
 mutations_sync	0
-mysql_datatypes_support_level	
+mysql_datatypes_support_level
 mysql_map_fixed_string_to_text_in_show_columns	1
 mysql_map_string_to_text_in_show_columns	1
 mysql_max_rows_to_insert	65536
@@ -986,6 +999,7 @@ odbc_bridge_connection_pool_size	16
 odbc_bridge_use_connection_pooling	1
 odbc_max_field_size	0
 offset	0
+opentelemetry_start_keeper_trace_probability	auto
 opentelemetry_start_trace_probability	0
 opentelemetry_trace_cpu_scheduling	0
 opentelemetry_trace_processors	0
@@ -998,6 +1012,7 @@ optimize_const_name_size	256
 optimize_count_from_files	1
 optimize_distinct_in_order	1
 optimize_distributed_group_by_sharding_key	1
+optimize_dry_run_check_part	1
 optimize_duplicate_order_by_and_distinct	0
 optimize_empty_string_comparisons	1
 optimize_extract_common_expressions	1
@@ -1052,14 +1067,15 @@ os_thread_priority	0
 os_threads_nice_value_materialized_view	0
 os_threads_nice_value_query	0
 output_format_arrow_compression_method	lz4_frame
+output_format_arrow_date_as_uint16	0
 output_format_arrow_fixed_string_as_fixed_byte_array	1
 output_format_arrow_low_cardinality_as_dictionary	0
 output_format_arrow_string_as_string	1
 output_format_arrow_use_64_bit_indexes_for_dictionary	0
 output_format_arrow_use_signed_indexes_for_dictionary	1
-output_format_avro_codec	
+output_format_avro_codec
 output_format_avro_rows_in_file	1
-output_format_avro_string_column_pattern	
+output_format_avro_string_column_pattern
 output_format_avro_sync_interval	16384
 output_format_binary_encode_types_in_binary_format	0
 output_format_binary_write_json_as_string	0
@@ -1138,7 +1154,7 @@ output_format_pretty_single_large_number_tip_threshold	1000000
 output_format_pretty_squash_consecutive_ms	50
 output_format_pretty_squash_max_wait_ms	1000
 output_format_protobuf_nullables_with_google_wrappers	0
-output_format_schema	
+output_format_schema
 output_format_sql_insert_include_column_names	1
 output_format_sql_insert_max_batch_size	65409
 output_format_sql_insert_quote_names	1
@@ -1152,15 +1168,17 @@ page_cache_inject_eviction	0
 page_cache_lookahead_blocks	16
 parallel_distributed_insert_select	2
 parallel_hash_join_threshold	100000
+parallel_non_joined_rows_processing	1
 parallel_replica_offset	0
 parallel_replicas_allow_in_with_subquery	1
 parallel_replicas_allow_materialized_views	1
 parallel_replicas_connect_timeout_ms	300
 parallel_replicas_count	0
-parallel_replicas_custom_key	
+parallel_replicas_custom_key
 parallel_replicas_custom_key_filter_type	default
 parallel_replicas_custom_key_range_lower	0
 parallel_replicas_custom_key_range_upper	0
+parallel_replicas_filter_pushdown	0
 parallel_replicas_for_cluster_engines	1
 parallel_replicas_for_non_replicated_merge_tree	0
 parallel_replicas_index_analysis_only_on_coordinator	1
@@ -1201,13 +1219,13 @@ prefer_localhost_replica	1
 prefer_warmed_unmerged_parts_seconds	0
 preferred_block_size_bytes	1000000
 preferred_max_column_in_block_size_bytes	0
-preferred_optimize_projection_name	
+preferred_optimize_projection_name
 prefetch_buffer_size	1048576
 print_pretty_type_names	1
 priority	0
-promql_database	
+promql_database
 promql_evaluation_time	auto
-promql_table	
+promql_table
 push_external_roles_in_interserver_queries	1
 query_cache_compress_entries	1
 query_cache_max_entries	0
@@ -1219,7 +1237,7 @@ query_cache_share_between_users	0
 query_cache_squash_partial_results	1
 query_cache_store_results_of_queries_with_nondeterministic_functions	0
 query_cache_system_table_handling	throw
-query_cache_tag	
+query_cache_tag
 query_cache_ttl	60
 query_condition_cache_store_conditions_as_plaintext	0
 query_metric_log_interval	-1
@@ -1295,7 +1313,7 @@ remote_filesystem_read_prefetch	1
 remote_fs_read_backoff_max_tries	5
 remote_fs_read_max_backoff_ms	10000
 remote_read_min_bytes_for_seek	4194304
-rename_files_after_processing	
+rename_files_after_processing
 replace_running_query	0
 replace_running_query_max_wait_ms	5000
 replication_alter_columns_timeout	60
@@ -1351,7 +1369,7 @@ s3queue_enable_logging_to_s3queue_log	0
 s3queue_keeper_fault_injection_probability	0
 s3queue_migrate_old_metadata_to_buckets	0
 schema_inference_cache_require_modification_time_for_url	1
-schema_inference_hints	
+schema_inference_hints
 schema_inference_make_columns_nullable	3
 schema_inference_make_json_columns_nullable	0
 schema_inference_mode	default
@@ -1363,13 +1381,13 @@ schema_inference_use_cache_for_url	1
 secondary_indices_enable_bulk_filtering	1
 select_sequential_consistency	0
 send_logs_level	fatal
-send_logs_source_regexp	
+send_logs_source_regexp
 send_profile_events	1
 send_progress_in_http_headers	0
 send_timeout	300
 serialize_query_plan	0
 serialize_string_in_memory_with_zero_byte	1
-session_timezone	
+session_timezone
 set_overflow_mode	throw
 shared_merge_tree_sync_parts_on_partition_operations	1
 short_circuit_function_evaluation	enable
@@ -1396,7 +1414,7 @@ storage_file_read_method	pread
 storage_system_stack_trace_pipe_read_timeout_ms	100
 stream_flush_interval_ms	7500
 stream_like_engine_allow_direct_select	0
-stream_like_engine_insert_queue	
+stream_like_engine_insert_queue
 stream_poll_timeout_ms	500
 system_events_show_zero_values	0
 table_engine_read_through_distributed_cache	0
@@ -1419,7 +1437,7 @@ timeout_overflow_mode_leaf	throw
 totals_auto_threshold	0.5
 totals_mode	after_having_exclusive
 trace_profile_events	0
-trace_profile_events_list	
+trace_profile_events_list
 transfer_overflow_mode	throw
 transform_null_in	0
 traverse_shadow_remote_data_paths	0
@@ -1427,7 +1445,7 @@ type_json_allow_duplicated_key_with_literal_and_nested_object	0
 type_json_skip_duplicated_paths	0
 type_json_skip_invalid_typed_paths	0
 type_json_use_partial_match_to_skip_paths_by_regexp	1
-union_default_mode	
+union_default_mode
 unknown_packet_in_send_data	0
 update_insert_deduplication_token_in_dependent_materialized_views	0
 update_parallel_mode	auto
@@ -1450,6 +1468,8 @@ use_legacy_to_time	1
 use_local_cache_for_remote_storage	0
 use_mysql_types_in_show_columns	0
 use_page_cache_for_disks_without_file_cache	0
+use_page_cache_for_local_disks	0
+use_page_cache_for_object_storage	0
 use_page_cache_with_distributed_cache	0
 use_paimon_partition_pruning	0
 use_primary_key	1
@@ -1463,7 +1483,7 @@ use_skip_indexes_if_final	1
 use_skip_indexes_if_final_exact_mode	1
 use_skip_indexes_on_data_read	1
 use_statistics	1
-use_statistics_cache	0
+use_statistics_cache	1
 use_structure_from_insertion_table_in_table_functions	2
 use_text_index_dictionary_cache	0
 use_text_index_header_cache	0

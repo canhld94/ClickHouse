@@ -9,13 +9,11 @@ namespace DB
 
 namespace ErrorCodes
 {
-    extern const int LOGICAL_ERROR;
+extern const int LOGICAL_ERROR;
 }
 
 static void addSettingsChanges(
-    VersionToSettingsChangesMap & settings_changes_history,
-    std::string_view version,
-    SettingsChangesHistory::SettingsChanges && changes)
+    VersionToSettingsChangesMap & settings_changes_history, std::string_view version, SettingsChangesHistory::SettingsChanges && changes)
 {
     /// Forbid duplicate versions
     auto [_, inserted] = settings_changes_history.emplace(ClickHouseVersion(version), std::move(changes));
@@ -27,9 +25,11 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
 {
     static VersionToSettingsChangesMap settings_changes_history;
     static std::once_flag initialized_flag;
-    std::call_once(initialized_flag, [&]
-    {
-        // clang-format off
+    std::call_once(
+        initialized_flag,
+        [&]
+        {
+            // clang-format off
         /// History of settings changes that controls some backward incompatible changes
         /// across all ClickHouse versions. It maps ClickHouse version to settings changes that were done
         /// in this version. This history contains both changes to existing settings and newly added settings.
@@ -39,6 +39,10 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
         /// controls new feature and it's 'true' by default, use 'false' as previous_value).
         /// It's used to implement `compatibility` setting (see https://github.com/ClickHouse/ClickHouse/issues/35972)
         /// Note: please check if the key already exists to prevent duplicate entries.
+        addSettingsChanges(settings_changes_history, "26.3",
+        {
+
+        });
         addSettingsChanges(settings_changes_history, "26.2",
         {
             {"allow_fuzz_query_functions", false, false, "New setting to enable the fuzzQuery function."},
@@ -1062,6 +1066,10 @@ const VersionToSettingsChangesMap & getMergeTreeSettingsChangesHistory()
     static std::once_flag initialized_flag;
     std::call_once(initialized_flag, [&]
     {
+        addSettingsChanges(merge_tree_settings_changes_history, "26.3",
+        {
+
+        });
         addSettingsChanges(merge_tree_settings_changes_history, "26.2",
         {
             {"clone_replica_zookeeper_create_get_part_batch_size", 1, 100, "New setting"},
