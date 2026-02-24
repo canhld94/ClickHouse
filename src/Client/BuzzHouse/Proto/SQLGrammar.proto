@@ -3678,16 +3678,12 @@ message DeduplicateExpr {
     }
 }
 
-message OptimizeDryRun {
-    repeated PartitionExpr parts = 1;
-}
-
 message OptimizeTable {
     required ExprSchemaTable est = 1;
     optional Cluster cluster = 2;
     optional SinglePartitionExpr single_partition = 3;
     optional bool use_force = 4;
-    optional OptimizeDryRun dry_run = 5;
+    repeated PartitionExpr dry_run_parts = 5;
     optional bool final = 6;
     optional DeduplicateExpr dedup = 7;
     optional bool cleanup = 8;

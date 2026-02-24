@@ -804,7 +804,7 @@ void StatementGenerator::generateNextTablePartition(
         const String dname = t.getDatabaseName();
         const String tname = t.getTableName();
 
-        if ((table_has_partitions = (rg.nextMediumNumber() < 76 && fc.tableHasPartitions(detached, dname, tname))))
+        if ((table_has_partitions = ((allow_parts == 2 || rg.nextMediumNumber() < 76) && fc.tableHasPartitions(detached, dname, tname))))
         {
             if (allow_parts == 2 || (allow_parts == 1 && rg.nextBool()))
             {
@@ -863,11 +863,13 @@ void StatementGenerator::generateNextOptimizeTableInternal(RandomGenerator & rg,
     }
     if (!strict && ((!has_final && !has_partition) || rg.nextLargeNumber() < 6) && rg.nextSmallNumber() < 4)
     {
-        OptimizeDryRun * odr = ot->mutable_dry_run();
+        const bool detached = rg.nextSmallNumber() < 3;
+        const String dname = t.getDatabaseName();
+        const String tname = t.getTableName();
 
-        if (rg.nextBool())
+        if (fc.tableHasPartitions(detached, dname, tname))
         {
-            generateNextTablePartition(rg, 2, rg.nextSmallNumber() < 3, false, t, odr->add_parts());
+            generateNextTablePartition(rg, 2, detached, false, t, ot->add_dry_run_parts());
         }
     }
     setClusterClause(rg, t.getCluster(), ot->mutable_cluster());
