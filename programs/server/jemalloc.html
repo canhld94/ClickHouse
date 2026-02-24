@@ -18,7 +18,7 @@
             --metric-value-color: black;
             --error-color: #dc3545;
             --success-color: #28a745;
-            --warning-color: #ffc107;
+            --warning-color: #b58900;
             --table-header-bg: #f8f9fa;
             --table-hover-bg: #f1f1f1;
             --btn-primary-bg: black;
@@ -2376,8 +2376,9 @@ SETTINGS jemalloc_enable_profiler = 1,
                 // First, flush the logs to ensure all data is written
                 const flushQuery = 'SYSTEM FLUSH LOGS';
                 const flushResponse = await fetch(buildUrl(flushQuery), fetchOptions);
-                if (!flushResponse.ok) {
-                    throw new Error(`Failed to flush logs: HTTP ${flushResponse.status}: ${flushResponse.statusText}`);
+                const flushFailed = !flushResponse.ok;
+                if (flushFailed) {
+                    resultDiv.innerHTML = '<p style="color: var(--warning-color);">⚠ Could not flush logs. There may be a delay before recent queries appear in trace_log.</p>';
                 }
 
                 // Query to get min and max event_time_microseconds for JemallocSample events
@@ -2391,12 +2392,15 @@ SETTINGS jemalloc_enable_profiler = 1,
                 const result = await response.text();
                 const lines = result.trim().split('\n');
 
-                if (lines.length === 0 || !lines[0]) {
-                    resultDiv.innerHTML = `<div class="error">No JemallocSample events found for query_id: ${queryId}</div>`;
+                const [minTime, maxTime] = (lines[0] || '').split('\t');
+
+                if (!minTime || !maxTime || (minTime === '0' && maxTime === '0')) {
+                    const msg = flushFailed
+                        ? '<p style="color: var(--warning-color);">⚠ Could not flush logs. There may be a delay before recent queries appear in trace_log.</p>'
+                        : '';
+                    resultDiv.innerHTML = msg + `<div class="error">No JemallocSample events found for query_id: ${queryId}</div>`;
                     return;
                 }
-
-                const [minTime, maxTime] = lines[0].split('\t');
 
                 // Now get cumulative memory usage over time with at most 10000 points
                 const maxPoints = 10000;
@@ -2569,7 +2573,7 @@ SETTINGS jemalloc_enable_profiler = 1,
 
             try {
                 // Query to get collapsed flame graph data
-                const query = `SELECT arrayJoin(flameGraph(arrayReverse(trace), size, ptr)) FROM system.trace_log WHERE trace_type = 'JemallocSample' AND query_id = '${queryId}' AND event_time_microseconds <= '${time}'`;
+                const query = `SELECT arrayJoin(flameGraph(arrayReverse(trace), size, ptr)) FROM system.trace_log WHERE trace_type = 'JemallocSample' AND query_id = '${queryId}' AND event_time_microseconds <= '${time}' SETTINGS allow_introspection_functions = 1`;
 
                 const response = await fetch(buildUrl(query), fetchOptions);
                 if (!response.ok) {
