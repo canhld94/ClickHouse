@@ -1,5 +1,7 @@
 -- Tags: no-replicated-database, no-parallel-replicas, no-parallel, no-random-merge-tree-settings
 -- EXPLAIN output may differ
+-- Verify that partition pruning is disabled when toDate() would overflow (pre-epoch / post-2149),
+-- but still works for normal in-range values
 
 SET optimize_use_implicit_projections = 0, session_timezone = 'UTC';
 

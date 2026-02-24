@@ -1,3 +1,6 @@
+-- toDate(DateTime64/Date32) overflows for pre-epoch and post-2149 values,
+-- which broke partition pruning and silently returned incomplete results
+
 DROP TABLE IF EXISTS t_dt64_preepoch;
 
 CREATE TABLE t_dt64_preepoch (
