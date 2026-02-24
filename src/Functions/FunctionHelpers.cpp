@@ -414,8 +414,6 @@ NullPresence getNullPresense(const ColumnsWithTypeAndName & args)
     {
         res.has_nullable |= elem.type->isNullable();
         res.has_null_constant |= elem.type->onlyNull();
-        // if (elem.column && isColumnConst(*elem.column) && elem.column->size() == 1 && elem.column->isNullAt(0))
-        //     res.has_null_constant = true;
     }
 
     return res;
