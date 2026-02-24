@@ -6,6 +6,8 @@ set use_variant_as_common_type = 1;
 set session_timezone = 'UTC';
 
 set min_bytes_to_use_direct_io = 0; -- min_bytes_to_use_direct_io > 0 is broken
+-- Override randomized max_threads to avoid timeout with random settings
+SET max_threads=0;
 
 drop table if exists test;
 -- Pin index_granularity and disable prewarm_primary_key_cache to avoid timeouts with random settings:
