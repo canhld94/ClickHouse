@@ -328,6 +328,12 @@ bool ZooKeeper::configChanged(const Poco::Util::AbstractConfiguration & config, 
     if (new_args.implementation == args.implementation && args.implementation == "testkeeper")
         return false;
 
+    /// These fields are set out-of-band from server settings, not from the ZooKeeper XML config,
+    /// so they won't be present in new_args parsed from config. Copy them over before comparing
+    /// to avoid spurious "config changed" results.
+    new_args.enforce_component_tracking = args.enforce_component_tracking;
+    new_args.send_receive_os_threads_nice_value = args.send_receive_os_threads_nice_value;
+
     return args != new_args;
 }
 

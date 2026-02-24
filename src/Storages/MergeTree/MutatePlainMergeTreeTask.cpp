@@ -171,6 +171,7 @@ bool MutatePlainMergeTreeTask::executeStep()
 
 void MutatePlainMergeTreeTask::cancel() noexcept
 {
+    auto component_guard = Coordination::setCurrentComponent("MutatePlainMergeTreeTask::cancel");
     if (mutate_task)
         mutate_task->cancel();
 
