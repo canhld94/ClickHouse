@@ -1,7 +1,7 @@
 -- Tags: no-replicated-database, no-parallel-replicas, no-parallel, no-random-merge-tree-settings
 -- EXPLAIN output may differ
 
-SET optimize_use_implicit_projections = 0;
+SET optimize_use_implicit_projections = 0, session_timezone = 'UTC';
 
 DROP TABLE IF EXISTS t_dt64_explain;
 
