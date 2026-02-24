@@ -27,6 +27,7 @@
 #include <Storages/System/getQueriedColumnsMaskAndHeader.h>
 #include <Storages/VirtualColumnUtils.h>
 #include <Common/StringUtils.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Common/typeid_cast.h>
 
 #include <boost/range/adaptor/map.hpp>

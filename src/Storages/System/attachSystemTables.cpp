@@ -1,6 +1,7 @@
 #include <Storages/System/StorageSystemKeywords.h>
 #include "config.h"
 
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <Databases/IDatabase.h>
 #include <Storages/System/attachSystemTables.h>
 #include <Storages/System/attachSystemTablesImpl.h>

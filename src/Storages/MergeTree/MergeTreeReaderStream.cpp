@@ -4,6 +4,7 @@
 
 #include <base/getThreadId.h>
 #include <base/range.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 #include <utility>
 #include <filesystem>
 
