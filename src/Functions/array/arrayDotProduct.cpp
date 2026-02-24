@@ -3,7 +3,6 @@
 #include <Common/TargetSpecific.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypesNumber.h>
-#include <Common/TargetSpecific.h>
 #include <DataTypes/NumberTraits.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
