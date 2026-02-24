@@ -353,46 +353,39 @@ void appendObjectToGeoColumn(const GeometricObject & object, GeoType type, IColu
         {
             auto & variant_col = assert_cast<ColumnVariant &>(col);
             ColumnVariant::Discriminator global_discr;
+
             if (std::holds_alternative<CartesianPoint>(object))
-            {
                 global_discr = kPointDiscriminator;
-                appendPointToGeoColumn(
-                    std::get<CartesianPoint>(object),
-                    variant_col.getVariantByGlobalDiscriminator(global_discr));
-            }
             else if (std::holds_alternative<LineString<CartesianPoint>>(object))
-            {
                 global_discr = kLineStringDiscriminator;
-                appendLineStringToGeoColumn(
-                    std::get<LineString<CartesianPoint>>(object),
-                    variant_col.getVariantByGlobalDiscriminator(global_discr));
-            }
             else if (std::holds_alternative<Polygon<CartesianPoint>>(object))
-            {
                 global_discr = kPolygonDiscriminator;
-                appendPolygonToGeoColumn(
-                    std::get<Polygon<CartesianPoint>>(object),
-                    variant_col.getVariantByGlobalDiscriminator(global_discr));
-            }
             else if (std::holds_alternative<MultiLineString<CartesianPoint>>(object))
-            {
                 global_discr = kMultiLineStringDiscriminator;
-                appendMultiLineStringToGeoColumn(
-                    std::get<MultiLineString<CartesianPoint>>(object),
-                    variant_col.getVariantByGlobalDiscriminator(global_discr));
-            }
             else if (std::holds_alternative<MultiPolygon<CartesianPoint>>(object))
-            {
                 global_discr = kMultiPolygonDiscriminator;
-                appendMultiPolygonToGeoColumn(
-                    std::get<MultiPolygon<CartesianPoint>>(object),
-                    variant_col.getVariantByGlobalDiscriminator(global_discr));
-            }
             else
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "Unknown geometry type in WKB/WKT data");
 
-            variant_col.getLocalDiscriminators().push_back(
-                variant_col.localDiscriminatorByGlobal(global_discr));
+            IColumn & nested_col = variant_col.getVariantByGlobalDiscriminator(global_discr);
+
+            /// Must record discriminator and offset before appending, so offset equals
+            /// the pre-insertion size of the nested column.
+            auto local_discr = variant_col.localDiscriminatorByGlobal(global_discr);
+            variant_col.getLocalDiscriminators().push_back(local_discr);
+            variant_col.getOffsets().push_back(nested_col.size());
+
+            if (std::holds_alternative<CartesianPoint>(object))
+                appendPointToGeoColumn(std::get<CartesianPoint>(object), nested_col);
+            else if (std::holds_alternative<LineString<CartesianPoint>>(object))
+                appendLineStringToGeoColumn(std::get<LineString<CartesianPoint>>(object), nested_col);
+            else if (std::holds_alternative<Polygon<CartesianPoint>>(object))
+                appendPolygonToGeoColumn(std::get<Polygon<CartesianPoint>>(object), nested_col);
+            else if (std::holds_alternative<MultiLineString<CartesianPoint>>(object))
+                appendMultiLineStringToGeoColumn(std::get<MultiLineString<CartesianPoint>>(object), nested_col);
+            else
+                appendMultiPolygonToGeoColumn(std::get<MultiPolygon<CartesianPoint>>(object), nested_col);
+
             return;
         }
     }
