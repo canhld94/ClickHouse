@@ -1089,6 +1089,24 @@ bool applyFunctionChainToColumn(
 
         result_column = castColumnAccurate({result_column, result_type, ""}, argument_type);
         auto func_result_type = func->getResultType();
+
+        /// Pre-epoch DateTime64/Date32 overflows unsigned Date/DateTime, producing wrong ranges
+        auto result_type_inner = removeLowCardinality(removeNullable(func_result_type));
+        if (isDate(result_type_inner) || isDateTime(result_type_inner))
+        {
+            auto arg_type_inner = removeLowCardinality(removeNullable(argument_type));
+            if (isDateTime64(arg_type_inner))
+            {
+                if ((*result_column)[0].safeGet<DateTime64>().getValue() < 0)
+                    return false;
+            }
+            else if (isDate32(arg_type_inner))
+            {
+                if ((*result_column)[0].safeGet<Int32>() < 0)
+                    return false;
+            }
+        }
+
         result_column = func->execute({{result_column, argument_type, ""}}, func_result_type, result_column->size(), /* dry_run = */ false);
         result_column = result_column->convertToFullColumnIfLowCardinality();
         result_type = removeLowCardinality(func_result_type);
@@ -1121,25 +1139,11 @@ bool KeyCondition::isFunctionReallyMonotonic(const IFunctionBase & func, const I
     if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(type))
         type = nullable_type->getNestedType().get();
 
-    /// toDateTime(date) may overflow, breaking monotonicity.
-    if (func.getName() == "toDateTime" && isDateOrDate32(type))
-        return false;
-
-    /// signed-to-unsigned overflow: pre-epoch DateTime64/Date32 wraps in Date/DateTime
-    /// any function that returns Date or DateTime from DateTime64 or Date32 can overflow on negative values
-    if (isDate(type) || isDateTime(type))
+    if (date_time_overflow_behavior_ignore && func.getName() == "toDateTime")
     {
-        const auto & arg_types = func.getArgumentTypes();
-        const IDataType * input_type = !arg_types.empty() ? arg_types[0].get() : nullptr;
-        if (input_type)
-        {
-            if (const auto * lc = typeid_cast<const DataTypeLowCardinality *>(input_type))
-                input_type = lc->getDictionaryType().get();
-            if (const auto * nt = typeid_cast<const DataTypeNullable *>(input_type))
-                input_type = nt->getNestedType().get();
-            if (isDateTime64(input_type) || isDate32(input_type))
-                return false;
-        }
+        /// toDateTime(date) may overflow, breaking monotonicity.
+        if (isDateOrDate32(type))
+            return false;
     }
 
     return true;
