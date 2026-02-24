@@ -5,9 +5,6 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-# shellcheck source=./wasm_udf.lib
-. "$CUR_DIR"/wasm_udf.lib
-
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
 DROP FUNCTION IF EXISTS test_host_api;
@@ -24,7 +21,7 @@ DELETE FROM system.webassembly_modules WHERE name = 'export_faulty_malloc';
 
 EOF
 
-load_wasm_module host_api test_host_api
+cat ${CUR_DIR}/wasm/host_api.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'test_host_api', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
@@ -67,7 +64,7 @@ LIMIT 1
 
 EOF
 
-load_wasm_module import_unknown
+cat ${CUR_DIR}/wasm/import_unknown.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'import_unknown', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
@@ -76,7 +73,7 @@ DELETE FROM system.webassembly_modules WHERE name = 'import_unknown';
 
 EOF
 
-load_wasm_module import_incorrect
+cat ${CUR_DIR}/wasm/import_incorrect.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'import_incorrect', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
@@ -85,7 +82,7 @@ DELETE FROM system.webassembly_modules WHERE name = 'import_incorrect';
 
 EOF
 
-load_wasm_module export_incorrect_malloc
+cat ${CUR_DIR}/wasm/export_incorrect_malloc.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'export_incorrect_malloc', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
@@ -94,7 +91,7 @@ DELETE FROM system.webassembly_modules WHERE name = 'export_incorrect_malloc';
 
 EOF
 
-load_wasm_module export_faulty_malloc
+cat ${CUR_DIR}/wasm/export_faulty_malloc.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'export_faulty_malloc', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 

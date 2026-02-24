@@ -5,9 +5,6 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-# shellcheck source=./wasm_udf.lib
-. "$CUR_DIR"/wasm_udf.lib
-
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
 DROP FUNCTION IF EXISTS huge_allocate;
@@ -20,7 +17,7 @@ DELETE FROM system.webassembly_modules WHERE name = 'faulty';
 
 EOF
 
-load_wasm_module faulty
+cat ${CUR_DIR}/wasm/faulty.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'faulty', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 

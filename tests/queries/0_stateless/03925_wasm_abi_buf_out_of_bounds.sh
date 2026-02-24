@@ -5,9 +5,6 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-# shellcheck source=./wasm_udf.lib
-. "$CUR_DIR"/wasm_udf.lib
-
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
 DROP FUNCTION IF EXISTS returns_out_of_bounds;
@@ -18,7 +15,7 @@ DELETE FROM system.webassembly_modules WHERE name = 'abi_buf_out_of_bounds';
 
 EOF
 
-load_wasm_module abi_buf_out_of_bounds
+cat ${CUR_DIR}/wasm/abi_buf_out_of_bounds.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'abi_buf_out_of_bounds', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 

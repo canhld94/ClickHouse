@@ -5,9 +5,6 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-# shellcheck source=./wasm_udf.lib
-. "$CUR_DIR"/wasm_udf.lib
-
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
 DROP FUNCTION IF EXISTS concatInts;
@@ -15,7 +12,7 @@ DELETE FROM system.webassembly_modules WHERE name = 'test_v128';
 
 EOF
 
-load_wasm_module test_v128
+cat ${CUR_DIR}/wasm/test_v128.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'test_v128', code FROM input('code String') FORMAT RawBlob"
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 

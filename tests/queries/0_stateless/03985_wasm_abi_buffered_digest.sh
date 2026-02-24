@@ -5,11 +5,6 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../shell_config.sh
 . "$CUR_DIR"/../shell_config.sh
 
-# shellcheck source=./wasm_udf.lib
-. "$CUR_DIR"/wasm_udf.lib
-
-echo "LLVM_VERSION: ${LLVM_VERSION}"
-
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
 DROP FUNCTION IF EXISTS digest_csv;
@@ -21,7 +16,10 @@ DELETE FROM system.webassembly_modules WHERE name = 'buffered_abi';
 
 EOF
 
-load_wasm_module buffered_abi
+cat ${CUR_DIR}/wasm/buffered_abi.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO system.webassembly_modules (name, code) SELECT 'buffered_abi', code FROM input('code String') FORMAT RawBlob"
+
+# Verify that data is properly serialized and deserialized with ABI BUFFERED_V1 and memory layout is correct
+# Guest will just calculate hash of the input data, so if serialization or memory layout is broken, the result will be different
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
