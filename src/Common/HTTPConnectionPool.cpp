@@ -455,7 +455,10 @@ private:
         }
 
         ~PooledConnection() override
+        try
         {
+            CurrentMetrics::sub(metrics.active_count);
+
             if (bool(response_stream))
             {
                 if (auto * fixed_steam = dynamic_cast<Poco::Net::HTTPFixedLengthInputStream *>(response_stream))
@@ -486,8 +489,10 @@ private:
             if (!isExpired)
                 if (auto lock = pool.lock())
                     lock->atConnectionDestroy(*this);
-
-            CurrentMetrics::sub(metrics.active_count);
+        }
+        catch (...)
+        {
+            tryLogCurrentException("HTTPConnectionPool", "Exception in ~PooledConnection");
         }
 
     private:
