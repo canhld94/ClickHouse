@@ -92,7 +92,7 @@ namespace ServerSetting
 
 namespace ErrorCodes
 {
-    extern const int NO_ZOOKEEPER;
+    extern const int LOGICAL_ERROR;
 }
 
 }
@@ -452,6 +452,7 @@ ZooKeeper::ZooKeeper(
             close_xid = CLOSE_XID_64;
         }
         pass_opentelemetry_tracing_context = args.pass_opentelemetry_tracing_context;
+        enforce_component_tracking = args.enforce_component_tracking;
         connect(nodes, static_cast<Poco::Timespan::TimeDiff>(args.connection_timeout_ms) * 1000);
     }
     catch (...)
@@ -1394,8 +1395,14 @@ void ZooKeeper::pushRequest(RequestInfo && info)
         {
             auto current_component = Coordination::getCurrentComponent();
             if (current_component.empty())
-                throw DB::Exception(DB::ErrorCodes::NO_ZOOKEEPER, "Current component is empty, please set it for your scope using Coordination::setCurrentComponent");
-            info.component = Coordination::getCurrentComponent();
+            {
+                if (enforce_component_tracking)
+                    throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Current component is empty, please set it for your scope using Coordination::setCurrentComponent");
+            }
+            else
+            {
+                info.component = current_component;
+            }
         }
 
         auto maybe_zk_log = getZooKeeperLog();
