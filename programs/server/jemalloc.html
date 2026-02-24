@@ -2077,7 +2077,7 @@
         async function checkProfilingEnabled() {
             readConnectionParams();
             try {
-                const query = "SELECT value FROM system.server_settings WHERE name = 'jemalloc_enable_global_profiler'";
+                const query = "SELECT value FROM system.asynchronous_metrics WHERE metric = 'jemalloc.prof.thread_active_init'";
                 const response = await fetch(buildUrl(query), fetchOptions);
                 if (!response.ok) {
                     return null;
