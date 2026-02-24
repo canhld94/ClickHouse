@@ -329,12 +329,10 @@ IcebergIterator::IcebergIterator(
     LOG_DEBUG(logger, "Taken {} position deletes file and {} equality deletes files in iceberg iterator", position_deletes_files.size(), equality_deletes_files.size());
     std::sort(equality_deletes_files.begin(), equality_deletes_files.end());
     std::sort(position_deletes_files.begin(), position_deletes_files.end());
-    auto group = CurrentThread::getGroup();
     producer_task.emplace(
-        [this, group]()
+        [this, thread_group = CurrentThread::getGroup()]()
         {
-            CurrentThread::attachToGroup(group);
-            SCOPE_EXIT(CurrentThread::detachFromGroupIfNotDetached());
+            DB::ThreadGroupSwitcher switcher(thread_group, DB::ThreadName::DATALAKE_TABLE_SNAPSHOT);
             while (!blocking_queue.isFinished())
             {
                 std::optional<ManifestFileEntryPtr> entry;
