@@ -1200,7 +1200,6 @@ PrometheusQueryTree(STRING):
     StringLiteral('\n')
 )");
 
-#if 0 /// FIXME
     EXPECT_EQ(parse(R"(
         "these are unescaped: \n \\ ' \" ` \t"
         )"), R"(
@@ -1225,9 +1224,10 @@ PrometheusQueryTree(STRING):
 "these are not unescaped: \\n \\\\ ' \" \\t"
 
 PrometheusQueryTree(STRING):
-    StringLiteral('these are not unescaped: \n \\ \' " \\t')
+    StringLiteral('these are not unescaped: \\n \\\\ \' " \\t')
 )");
 
+#if 0 /// FIXME
     EXPECT_EQ(parse(R"(
         "日本語"
         )"), R"(
@@ -1256,7 +1256,6 @@ PrometheusQueryTree(STRING):
     StringLiteral('日本語')
 )");
 
-#if 0 /// FIXME
     EXPECT_EQ(parse(R"(
         "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e"
         )"), R"(
@@ -1265,6 +1264,5 @@ PrometheusQueryTree(STRING):
 PrometheusQueryTree(STRING):
     StringLiteral('日本語')
 )");
-#endif
 
 }
