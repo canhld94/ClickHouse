@@ -18,6 +18,8 @@
 
 #include <map>
 
+using namespace DB::QueryPlanOptimizations;
+
 namespace DB
 {
 
@@ -26,7 +28,7 @@ namespace ErrorCodes
 extern const int LOGICAL_ERROR;
 }
 
-namespace QueryPlanOptimizations
+namespace
 {
 
 /// Find the top node of the parallel replicas plan. E.g.:
@@ -40,7 +42,7 @@ namespace QueryPlanOptimizations
 ///            ReadFromMergeTree (default.hits)
 ///      ReadFromRemoteParallelReplicas (Query: ... Replicas: ...)
 ///
-static QueryPlan::Node * findTopNodeOfReplicasPlan(QueryPlan::Node * plan_with_parallel_replicas_root)
+QueryPlan::Node * findTopNodeOfReplicasPlan(QueryPlan::Node * plan_with_parallel_replicas_root)
 {
     QueryPlan::Node * replicas_plan_top_node = nullptr;
 
@@ -118,7 +120,7 @@ static QueryPlan::Node * findTopNodeOfReplicasPlan(QueryPlan::Node * plan_with_p
 /// to estimate whether parallel replicas will be beneficial for the query or not. For that, we need to estimate how much data
 /// replicas will send to the initiator. To do that, we found the node that will be at the top of replicas plan (e.g. Aggregating step in the example above),
 /// and ask it collect statistics on the number of bytes it'd send to the initiator if we executed the query with parallel replicas.
-static std::pair<const QueryPlan::Node *, size_t> findCorrespondingNodeInSingleNodePlan(
+std::pair<const QueryPlan::Node *, size_t> findCorrespondingNodeInSingleNodePlan(
     const QueryPlan::Node & final_node_in_replica_plan,
     QueryPlan::Node & parallel_replicas_plan_root,
     QueryPlan::Node & single_replica_plan_root)
@@ -154,7 +156,7 @@ static std::pair<const QueryPlan::Node *, size_t> findCorrespondingNodeInSingleN
     }
 }
 
-static ReadFromMergeTree * findReadingStep(const QueryPlan::Node & top_of_single_replica_plan)
+ReadFromMergeTree * findReadingStep(const QueryPlan::Node & top_of_single_replica_plan)
 {
     const auto * reading_step = &top_of_single_replica_plan;
     while (reading_step && !reading_step->children.empty())
@@ -179,7 +181,7 @@ static ReadFromMergeTree * findReadingStep(const QueryPlan::Node & top_of_single
 }
 
 /// Transplant the sets from the single-replica plan to the parallel-replicas plan once we decided to enable parallel replicas
-static void moveSetsFromLocalPlanToReplicasPlan(const QueryPlan & single_replica_plan, const QueryPlan & parallel_replicas_plan)
+void moveSetsFromLocalPlanToReplicasPlan(const QueryPlan & single_replica_plan, const QueryPlan & parallel_replicas_plan)
 {
     Stack stack;
     std::map<FutureSet::Hash, SetAndKeyPtr> sets_map;
@@ -226,6 +228,10 @@ static void moveSetsFromLocalPlanToReplicasPlan(const QueryPlan & single_replica
             }
         });
 }
+}
+
+namespace QueryPlanOptimizations
+{
 
 void considerEnablingParallelReplicas(
     const QueryPlanOptimizationSettings & optimization_settings, QueryPlan::Node & root, QueryPlan & query_plan)
@@ -372,5 +378,4 @@ void considerEnablingParallelReplicas(
 }
 
 }
-
 }
