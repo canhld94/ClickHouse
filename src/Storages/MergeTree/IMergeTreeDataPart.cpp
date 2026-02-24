@@ -806,8 +806,11 @@ void IMergeTreeDataPart::clearCaches()
 
 bool IMergeTreeDataPart::mayStoreDataInCaches() const
 {
+    if (cleared_data_in_caches)
+        return false;
+
     auto caches = storage.getCachesToPrewarm(getBytesUncompressedOnDisk());
-    return caches.hasAny() && !cleared_data_in_caches;
+    return caches.hasAny();
 }
 
 void IMergeTreeDataPart::removeIfNeeded()
