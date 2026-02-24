@@ -349,7 +349,16 @@ YTsaurusTableLock::YTsaurusTableLock(YTsaurusClientPtr client_, const String & c
 YTsaurusTableLock::~YTsaurusTableLock()
 {
     if (!transaction_id.empty())
-        client->commitTx(transaction_id);
+    {
+        try {
+            client->commitTx(transaction_id);
+        }
+        catch (Exception & e)
+        {
+            LOG_WARNING(getLogger("YTsaurusTableLock"), "Can't commit transaction {}. Leave it. Exception: {}",
+                transaction_id, e.displayText());
+        }
+    }
 }
 
 }
