@@ -932,6 +932,7 @@ LoadTaskPtr DatabaseReplicated::startupDatabaseAsync(AsyncLoader & async_loader,
         fmt::format("startup Replicated database {}", getDatabaseName()),
         [this] (AsyncLoader &, const LoadJobPtr &)
         {
+            auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::startupDatabaseAsync");
             UInt64 digest = 0;
             {
                 std::lock_guard lock{mutex};
@@ -2160,6 +2161,7 @@ void DatabaseReplicated::shutdown()
 
 void DatabaseReplicated::dropTable(ContextPtr local_context, const String & table_name, bool sync)
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseReplicated::dropTable");
     waitDatabaseStarted();
 
     auto txn = local_context->getZooKeeperMetadataTransaction();

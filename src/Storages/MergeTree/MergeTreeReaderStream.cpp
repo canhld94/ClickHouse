@@ -58,6 +58,7 @@ void MergeTreeReaderStream::init()
     if (initialized)
         return;
 
+    auto component_guard = Coordination::setCurrentComponent("MergeTreeReaderStream::init");
     /// Compute the size of the buffer.
     auto [max_mark_range_bytes, sum_mark_range_bytes] = estimateMarkRangeBytes(all_mark_ranges);
 
@@ -96,6 +97,7 @@ void MergeTreeReaderStream::init()
             std::string(fs::path(data_part_storage->getFullPath()) / (path_prefix + data_file_extension)),
             [this, estimated_sum_mark_range_bytes, read_settings]()
             {
+                auto local_component_guard = Coordination::setCurrentComponent("MergeTreeReaderStream::create_buffer");
                 return data_part_storage->readFile(
                     path_prefix + data_file_extension,
                     read_settings,

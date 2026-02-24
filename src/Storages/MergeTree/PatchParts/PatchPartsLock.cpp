@@ -12,6 +12,7 @@
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
 #include <Common/ElapsedTimeProfileEventIncrement.h>
+#include <Common/ZooKeeper/ZooKeeperCommon.h>
 
 namespace fs = std::filesystem;
 

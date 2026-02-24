@@ -88,6 +88,7 @@ void MutatePlainMergeTreeTask::finish()
 
 bool MutatePlainMergeTreeTask::executeStep()
 {
+    auto component_guard = Coordination::setCurrentComponent("MutatePlainMergeTreeTask::executeStep");
     /// Metrics will be saved in the local profile_counters.
     ProfileEventsScope profile_events_scope(&profile_counters);
 

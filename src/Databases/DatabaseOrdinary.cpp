@@ -264,6 +264,7 @@ void DatabaseOrdinary::loadTablesMetadata(ContextPtr local_context, ParsedTables
 
     auto process_metadata = [&metadata, is_startup, local_context, db_disk, this](const String & file_name)
     {
+        auto component_guard = Coordination::setCurrentComponent("DatabaseOrdinary::loadTablesMetadata");
         fs::path path(getMetadataPath());
         fs::path file_path(file_name);
         fs::path full_path = path / file_path;
@@ -704,6 +705,7 @@ Strings DatabaseOrdinary::getAllTableNames(ContextPtr) const
 
 void DatabaseOrdinary::alterTable(ContextPtr local_context, const StorageID & table_id, const StorageInMemoryMetadata & metadata, const bool validate_new_create_query)
 {
+    auto component_guard = Coordination::setCurrentComponent("DatabaseOrdinary::alterTable");
     auto db_disk = getDisk();
     waitDatabaseStarted();
 

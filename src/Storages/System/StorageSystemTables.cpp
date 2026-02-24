@@ -339,6 +339,8 @@ protected:
         if (done)
             return {};
 
+        auto component_guard = Coordination::setCurrentComponent("TablesBlockSource::generate");
+
         MutableColumns res_columns = getPort().getHeader().cloneEmptyColumns();
 
         const auto access = context->getAccess();

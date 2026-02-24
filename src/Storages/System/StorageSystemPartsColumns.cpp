@@ -88,6 +88,7 @@ StorageSystemPartsColumns::StorageSystemPartsColumns(const StorageID & table_id_
 void StorageSystemPartsColumns::processNextStorage(
     ContextPtr, MutableColumns & columns, std::vector<UInt8> & columns_mask, const StoragesInfo & info, bool has_state_column)
 {
+    auto component_guard = Coordination::setCurrentComponent("StorageSystemPartsColumns::processNextStorage");
     /// Prepare information about columns in storage.
     struct ColumnInfo
     {
