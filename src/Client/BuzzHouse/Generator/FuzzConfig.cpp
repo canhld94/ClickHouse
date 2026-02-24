@@ -21,18 +21,7 @@ const DB::Strings compressionMethods
     = {"auto", "none", "gz", "gzip", "deflate", "brotli", "br", "xz", "zst", "zstd", "lzma", "lz4", "bz2", "snappy"};
 
 const DB::Strings codecs
-    = {"None",
-       "LZ4",
-       "LZ4HC",
-       "ZSTD",
-       "Delta",
-       "DoubleDelta",
-       "Gorilla",
-       "T64",
-       "FPC",
-       "GCD",
-       "AES_128_GCM_SIV",
-       "AES_256_GCM_SIV"};
+    = {"None", "LZ4", "LZ4HC", "ZSTD", "Delta", "DoubleDelta", "Gorilla", "T64", "FPC", "GCD", "AES_128_GCM_SIV", "AES_256_GCM_SIV"};
 
 using SettingEntries = std::unordered_map<String, std::function<void(const JSONObjectType &)>>;
 

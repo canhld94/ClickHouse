@@ -2846,8 +2846,8 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         + reload_dictionary + flush_distributed + stop_distributed_sends + start_distributed_sends + drop_query_condition_cache
         + enable_failpoint + disable_failpoint + reconnect_keeper + drop_text_index_dictionary_cache + drop_text_index_header_cache
         + drop_text_index_postings_cache + drop_text_index_caches + iceberg_metadata_cache + reset_ddl_worker + wait_failpoint
-        + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view + unfreeze
-        + drop_replica + drop_database_replica;
+        + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view
+        + unfreeze + drop_replica + drop_database_replica;
     std::uniform_int_distribution<uint32_t> next_dist(1, prob_space);
     const uint32_t nopt = next_dist(rg.generator);
     std::optional<String> cluster;
@@ -3978,7 +3978,8 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
                + flush_distributed + stop_distributed_sends + start_distributed_sends + drop_query_condition_cache + enable_failpoint
                + disable_failpoint + reconnect_keeper + drop_text_index_dictionary_cache + drop_text_index_header_cache
                + drop_text_index_postings_cache + drop_text_index_caches + iceberg_metadata_cache + reset_ddl_worker + wait_failpoint
-               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view + 1))
+               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view
+               + 1))
     {
         cluster = setTableSystemStatement<SQLView>(rg, has_refreshable_view_func, sc->mutable_start_replicated_view());
     }
@@ -3999,7 +4000,8 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
                + flush_distributed + stop_distributed_sends + start_distributed_sends + drop_query_condition_cache + enable_failpoint
                + disable_failpoint + reconnect_keeper + drop_text_index_dictionary_cache + drop_text_index_header_cache
                + drop_text_index_postings_cache + drop_text_index_caches + iceberg_metadata_cache + reset_ddl_worker + wait_failpoint
-               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view + unfreeze + 1))
+               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view
+               + unfreeze + 1))
     {
         chassert(freeze_counter > 0);
         sc->set_unfreeze(rg.randomInt<uint32_t>(0, freeze_counter - 1));
@@ -4021,7 +4023,8 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
                + flush_distributed + stop_distributed_sends + start_distributed_sends + drop_query_condition_cache + enable_failpoint
                + disable_failpoint + reconnect_keeper + drop_text_index_dictionary_cache + drop_text_index_header_cache
                + drop_text_index_postings_cache + drop_text_index_caches + iceberg_metadata_cache + reset_ddl_worker + wait_failpoint
-               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view + unfreeze + drop_replica + 1))
+               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view
+               + unfreeze + drop_replica + 1))
     {
         const uint32_t nopt2 = rg.nextSmallNumber();
         DropReplica * dr = sc->mutable_drop_replica();
@@ -4054,8 +4057,8 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
                + flush_distributed + stop_distributed_sends + start_distributed_sends + drop_query_condition_cache + enable_failpoint
                + disable_failpoint + reconnect_keeper + drop_text_index_dictionary_cache + drop_text_index_header_cache
                + drop_text_index_postings_cache + drop_text_index_caches + iceberg_metadata_cache + reset_ddl_worker + wait_failpoint
-               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view + unfreeze + drop_replica
-               + drop_database_replica + 1))
+               + notify_failpoint + reload_delta_kernel_tracing + restore_database_replica + stop_replicated_view + start_replicated_view
+               + unfreeze + drop_replica + drop_database_replica + 1))
     {
         DropDatabaseReplica * dr = sc->mutable_drop_database_replica();
         const std::shared_ptr<SQLDatabase> & d = rg.pickRandomly(filterCollection<std::shared_ptr<SQLDatabase>>(db_has_replicas));
