@@ -212,7 +212,7 @@ private:
                     continue;
 
                 auto sparse_file_name = *actual_sparse_index_name + extension;
-                auto idx_file = storage.readFile(sparse_file_name, read_settings, storage.getFileSize(sparse_file_name));
+                auto idx_file = storage.readFile(sparse_file_name, read_settings, part->checksums.files.at(sparse_file_name).file_size);
 
                 CompressedReadBufferFromFile idx_buf(std::move(idx_file));
                 sparse_index = TextIndexSerialization::deserializeSparseIndex(idx_buf);
@@ -234,7 +234,7 @@ private:
                 continue;
 
             auto dict_file_name = *actual_dict_name + extension;
-            auto dict_file = storage.readFile(dict_file_name, read_settings, storage.getFileSize(dict_file_name));
+            auto dict_file = storage.readFile(dict_file_name, read_settings, part->checksums.files.at(dict_file_name).file_size);
 
             dictionary_buf = std::make_unique<CompressedReadBufferFromFile>(std::move(dict_file));
             current_part_name = part->name;
