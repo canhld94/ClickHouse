@@ -1,11 +1,12 @@
 #pragma once
 
+#include <queue>
 #include <Columns/ColumnsNumber.h>
+#include <Processors/Chunk.h>
 #include <Processors/Merges/Algorithms/IMergingAlgorithmWithSharedChunks.h>
 #include <Processors/Merges/Algorithms/MergedData.h>
-#include <Processors/Transforms/ColumnGathererTransform.h>
 #include <Processors/Merges/Algorithms/RowRef.h>
-#include <Processors/Chunk.h>
+#include <Processors/Transforms/ColumnGathererTransform.h>
 
 namespace Poco
 {

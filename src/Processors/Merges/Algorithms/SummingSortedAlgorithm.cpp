@@ -4,18 +4,20 @@
 #include <AggregateFunctions/AggregateFunctionFactory.h>
 #include <Columns/ColumnAggregateFunction.h>
 #include <Columns/ColumnTuple.h>
-#include <Common/Exception.h>
-#include <Common/AlignedBuffer.h>
-#include <Common/Arena.h>
-#include <Common/FieldVisitorSum.h>
-#include <Common/StringUtils.h>
-#include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeCustomSimpleAggregateFunction.h>
-#include <DataTypes/NestedUtils.h>
+#include <DataTypes/DataTypeIPv4andIPv6.h>
 #include <DataTypes/DataTypeLowCardinality.h>
+#include <DataTypes/DataTypeTuple.h>
+#include <DataTypes/DataTypeUUID.h>
+#include <DataTypes/NestedUtils.h>
 #include <IO/WriteHelpers.h>
 #include <Storages/MergeTree/MergeTreeVirtualColumns.h>
+#include <Common/AlignedBuffer.h>
+#include <Common/Arena.h>
+#include <Common/Exception.h>
+#include <Common/FieldVisitorSum.h>
+#include <Common/StringUtils.h>
 
 namespace DB
 {
