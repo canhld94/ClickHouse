@@ -85,3 +85,4 @@ Always load and apply the following skills:
 - .claude/skills/test
 - .claude/skills/fix-sync
 - .claude/skills/alloc-profile
+- .claude/skills/bisect
