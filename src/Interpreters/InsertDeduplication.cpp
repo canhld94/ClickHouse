@@ -701,10 +701,12 @@ void DeduplicationInfo::redefineTokensWithDataHash(const Block & block)
     if (!is_async_insert && getCount() == 1)
     {
         chassert(original_block->rows() == 0);
+        /// we have optimized case for one token, empty block are stored in original_block
+        /// but we have columns in the chunk to calculate hash, so we can calculate data hash for the token if it is not set before
         if (tokens[0].empty())
         {
-            /// we have optimized case for one token, empty block are stored in original_block
-            /// but we have columns in the chunk
+            // when migration has been started, data_hash is set in `updateOriginalBlock` method
+            chassert(unification_stage == InsertDeduplicationVersions::OLD_SEPARATE_HASHES || tokens[0].data_hash.has_value());
             [[maybe_unused]] auto unused = calculateDataHash(0, block);
         }
     }

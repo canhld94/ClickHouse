@@ -1647,9 +1647,6 @@ Chain InsertDependenciesBuilder::createRetry(const std::vector<StorageIDMaybeEmp
     else if (it == path.begin())
         ++it;
 
-    if (start_from == root_view)
-        result = Chain::concat(std::move(result), createRedefineDeduplicationInfoWithDataHashTransformChain());
-
     for (; it != path.end(); ++it)
     {
         // build nodes only for views in path
