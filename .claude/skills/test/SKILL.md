@@ -382,3 +382,8 @@ The test runner automatically detects and sets the necessary environment variabl
 - **CRITICAL:** The `--path` argument MUST use an absolute path to the clickhouse binary. Relative paths break because they are resolved inside Docker relative to `tests/integration/`, not the repo root.
 - Debug builds (`build_debug`) enable `chassert` assertions - useful for reproducing race conditions
 - **Debugging failures:** When an integration test fails, check the `_instances*` directories inside the test directory (e.g., `tests/integration/test_reload_client_certificate/_instances*/`). These contain per-node logs, configs, and data created during the test run, which are invaluable for diagnosing failures.
+- **Permission issues with `_instances*` directories:** Integration tests run in Docker as root, so files in `_instances*` are owned by root and may not be readable. If you encounter "Permission denied" errors when trying to read logs or configs from these directories, suggest the user run the following command (in a copyable code block):
+  ```bash
+  sudo chown -R $(id -u):$(id -g) tests/integration/<test_name>/_instances*/
+  ```
+  Replace `<test_name>` with the actual test directory name. Then retry reading the files.
