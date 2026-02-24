@@ -9,4 +9,7 @@ CREATE VIEW v0 AS (SELECT 1 c0 FROM t0);
 SELECT 1 FROM t0 tx RIGHT JOIN t0 ON TRUE RIGHT JOIN v0 ON t0.c0 = v0.c0;
 
 SELECT '---';
-SELECT * FROM (SELECT 1 FROM remote('localhost:9000', 'default', 't0') AS tx JOIN t0 ty ON TRUE RIGHT JOIN t0 ON TRUE);
+SELECT * FROM (SELECT 1 FROM remote('localhost:9000', currentDatabase(), 't0') AS tx JOIN t0 ty ON TRUE RIGHT JOIN t0 ON TRUE);
+
+DROP TABLE v0;
+DROP TABLE t0;
