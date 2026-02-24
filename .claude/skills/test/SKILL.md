@@ -3,7 +3,7 @@ name: test
 description: Run ClickHouse stateless or integration tests. Use when the user wants to run or execute tests.
 argument-hint: [test-name] [--flags]
 disable-model-invocation: false
-allowed-tools: Task, Bash(./tests/clickhouse-test:*), Bash(pgrep:*), Bash(./build/*/programs/clickhouse:*), Bash(python:*), Bash(python3:*), Bash(mktemp:*), Bash(export:*)
+allowed-tools: Task, Bash(./tests/clickhouse-test:*), Bash(pgrep:*), Bash(./build/*/programs/clickhouse:*), Bash(./build*/programs/clickhouse:*), Bash(python:*), Bash(python3:*), Bash(mktemp:*), Bash(export:*), Bash(ls:*), Bash(test:*)
 ---
 
 # ClickHouse Test Runner Skill
@@ -46,6 +46,34 @@ If no test name is provided in arguments, prompt the user with `AskUserQuestion`
   - Stateless examples: `03312_issue_63093`, `00029_test_zookeeper`
   - Integration examples: `test_keeper_three_nodes_start`, `test_access_control_on_cluster`
 
+## Build Directory Auto-Detection
+
+Before running any test, the skill must locate a valid build directory containing the `clickhouse` binary. This is used for stateless tests (server binary + PATH) and integration tests (binary path).
+
+**Search for `programs/clickhouse` binary in the following locations, in order. Stop at the first match:**
+
+1. `build/programs/clickhouse`
+2. `build/RelWithDebInfo/programs/clickhouse`
+3. `build/Debug/programs/clickhouse`
+4. `build_debug/programs/clickhouse`
+5. `build_asan/programs/clickhouse`
+6. `build_tsan/programs/clickhouse`
+7. `build_msan/programs/clickhouse`
+8. `build_ubsan/programs/clickhouse`
+
+The **build directory** is the path up to and including the parent of `programs/` (e.g., if `build/RelWithDebInfo/programs/clickhouse` is found, the build directory is `build/RelWithDebInfo`).
+
+**If no binary is found:**
+- Use `AskUserQuestion` to ask:
+  - Question: "No ClickHouse binary found in well-known build directories. Where is your build directory?"
+  - Option 1: "Build first" - Description: "Run /build to compile ClickHouse first"
+  - Option 2: "Specify path" - Description: "Enter the path to an existing build directory containing programs/clickhouse"
+- Do NOT proceed without a valid build directory.
+
+**If a binary is found:**
+- Report to the user: "Using build directory: `<path>`"
+- Use this path for all subsequent steps (server check, PATH, binary path).
+
 ## Test Execution Process
 
 ### For Stateless Tests
@@ -59,7 +87,7 @@ If no test name is provided in arguments, prompt the user with `AskUserQuestion`
      - Test if server responds to a simple query: `SELECT 1`
      - Report status: "Server is running and healthy" or "Server is not running" or "Server is running but not responding"
 
-   Example Task prompt:
+   Example Task prompt (using the auto-detected `[build_directory]`):
    ```
    Check if the ClickHouse server is running and responding to queries.
 
@@ -68,7 +96,7 @@ If no test name is provided in arguments, prompt the user with `AskUserQuestion`
       Command: pgrep -f "clickhouse[- ]server" | xargs -I {} ps -p {} -o pid,cmd --no-headers 2>/dev/null | grep -v "cmake\|ninja\|Building"
 
    2. Test if the server responds to a simple query: SELECT 1
-      Command: ./build/RelWithDebInfo/programs/clickhouse client -q "SELECT 1" 2>/dev/null
+      Command: ./[build_directory]/programs/clickhouse client -q "SELECT 1" 2>/dev/null
 
    Report:
    - Whether a server process is running (show PID and command if found)
@@ -78,7 +106,7 @@ If no test name is provided in arguments, prompt the user with `AskUserQuestion`
 
    - **If server is not running or not responding:**
      - Report the Task agent's finding
-     - Provide instructions: "Start the server with: `./build/RelWithDebInfo/programs/clickhouse server --config-file ./programs/server/config.xml`"
+     - Provide instructions: "Start the server with: `./[build_directory]/programs/clickhouse server --config-file ./programs/server/config.xml`"
      - Use `AskUserQuestion` to prompt: "Did you start the ClickHouse server?"
        - Option 1: "Yes, server is running now" - Run the liveness check Task again to verify
        - Option 2: "No, I'll start it later" - Exit without running the test
@@ -87,8 +115,6 @@ If no test name is provided in arguments, prompt the user with `AskUserQuestion`
 
    - **If server is running and healthy:**
      - Proceed to run the test
-
-   - Note: Build directory path is configured via `/install-skills` (currently: `build/RelWithDebInfo`)
 
 2. **Determine test name and type:**
    - If `$ARGUMENTS` is provided, use it as the test name
@@ -113,10 +139,10 @@ If no test name is provided in arguments, prompt the user with `AskUserQuestion`
 
    **Step 3b: Start the stateless test:**
    ```bash
-   # Add clickhouse binary to PATH
-   # Configured via /install-skills (currently: build/RelWithDebInfo)
-   export PATH="./build/RelWithDebInfo/programs:$PATH" && ./tests/clickhouse-test <test_name> [flags] > [log file path] 2>&1
+   # Add clickhouse binary to PATH using auto-detected build directory
+   export PATH="./[build_directory]/programs:$PATH" && ./tests/clickhouse-test <test_name> [flags] > [log file path] 2>&1
    ```
+   Where `[build_directory]` is the path found during auto-detection.
 
    **Important:**
    - Run from repository root directory
@@ -178,7 +204,7 @@ If no test name is provided in arguments, prompt the user with `AskUserQuestion`
    - Use `--path <binary_path>` to specify a custom ClickHouse binary location
    - Useful for testing with different builds (e.g., debug build to trigger assertions)
    - Example: `--path ./build_debug/programs/clickhouse` for debug build
-   - Default search order without `--path`: `./ci/tmp/clickhouse`, `./build/programs/clickhouse`, `./clickhouse`
+   - Default: uses the auto-detected build directory from the auto-detection step
 
 3. **Wait for integration test completion:**
    - Use TaskOutput with `block=true` to wait for the background task to finish
@@ -341,8 +367,7 @@ The test runner automatically detects and sets the necessary environment variabl
 - The server check protects against running tests when the server has crashed or been stopped
 - Test runner creates temporary database with random name for isolation
 - Reference files use `default` database name, not the random test database
-- Build directory used: `build/RelWithDebInfo` (configured with `/install-skills`)
-- Use `/install-skills test` to reconfigure which build directory to use for testing
+- Build directory is auto-detected at the start of each test run (see "Build Directory Auto-Detection" section)
 
 ### Integration Tests
 - Test names are directory names (use `test_keeper_three_nodes_start`, not `test.py`)
