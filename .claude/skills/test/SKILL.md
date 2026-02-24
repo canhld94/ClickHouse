@@ -71,8 +71,9 @@ The **build directory** is the path up to and including the parent of `programs/
 - Do NOT proceed without a valid build directory.
 
 **If a binary is found:**
-- Report to the user: "Using build directory: `<path>`"
-- Use this path for all subsequent steps (server check, PATH, binary path).
+- **Convert the path to an absolute path** (e.g., using `$(pwd)/build/RelWithDebInfo` or `realpath`). Integration tests require absolute paths because the praktika Docker container resolves paths relative to a different working directory.
+- Report to the user: "Using build directory: `<absolute_path>`"
+- Use this absolute path for all subsequent steps (server check, PATH, binary path).
 
 ## Test Execution Process
 
@@ -187,7 +188,7 @@ The **build directory** is the path up to and including the parent of `programs/
 
    **Step 2b: Start the integration test with praktika:**
    ```bash
-   python -u -m ci.praktika run "integration" --test <test_name> [--path <binary_path>] > [log file path] 2>&1
+   python -u -m ci.praktika run "integration" --test <test_name> [--path <absolute_binary_path>] > [log file path] 2>&1
    ```
 
    **Important:**
@@ -202,9 +203,10 @@ The **build directory** is the path up to and including the parent of `programs/
 
    **Custom binary path (--path option):**
    - Use `--path <binary_path>` to specify a custom ClickHouse binary location
+   - **CRITICAL: The path MUST be absolute.** Relative paths will be resolved incorrectly inside the Docker container (pytest runs from `tests/integration/`, not the repo root), causing "command not found" errors.
    - Useful for testing with different builds (e.g., debug build to trigger assertions)
-   - Example: `--path ./build_debug/programs/clickhouse` for debug build
-   - Default: uses the auto-detected build directory from the auto-detection step
+   - Example: `--path /home/user/ClickHouse/build_debug/programs/clickhouse` for debug build
+   - Default: uses the auto-detected build directory from the auto-detection step, converted to an absolute path
 
 3. **Wait for integration test completion:**
    - Use TaskOutput with `block=true` to wait for the background task to finish
@@ -344,7 +346,7 @@ The **build directory** is the path up to and including the parent of `programs/
 ### Integration Tests
 - `/test test_keeper_three_nodes_start` - Run specific integration test
 - `/test test_access_control_on_cluster` - Run integration test by name
-- `/test test_named_collections --path ./build_debug/programs/clickhouse` - Run with debug build (to trigger assertions)
+- `/test test_named_collections --path /home/user/ClickHouse/build_debug/programs/clickhouse` - Run with debug build (absolute path required)
 - `/test` - If viewing `tests/integration/test_*/test.py`, automatically detect and run that integration test
 
 ## Environment Variables
@@ -377,5 +379,6 @@ The test runner automatically detects and sets the necessary environment variabl
 - Docker daemon must be running and accessible
 - Requires Python dependencies from `tests/integration/` directory
 - Tests are run via praktika: `python -m ci.praktika run "integration" --test <test_name>`
-- Use `--path <binary_path>` to specify a custom ClickHouse binary (e.g., debug build)
+- **CRITICAL:** The `--path` argument MUST use an absolute path to the clickhouse binary. Relative paths break because they are resolved inside Docker relative to `tests/integration/`, not the repo root.
 - Debug builds (`build_debug`) enable `chassert` assertions - useful for reproducing race conditions
+- **Debugging failures:** When an integration test fails, check the `_instances*` directories inside the test directory (e.g., `tests/integration/test_reload_client_certificate/_instances*/`). These contain per-node logs, configs, and data created during the test run, which are invaluable for diagnosing failures.
