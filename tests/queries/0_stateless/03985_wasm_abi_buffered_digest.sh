@@ -8,6 +8,8 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=./wasm_udf.lib
 . "$CUR_DIR"/wasm_udf.lib
 
+echo "LLVM_VERSION: ${LLVM_VERSION}"
+
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
 DROP FUNCTION IF EXISTS digest_csv;
