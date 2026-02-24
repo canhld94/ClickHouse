@@ -410,7 +410,7 @@ std::tuple<FunctionNode *, ColumnNode *, TableNode *> getTypedNodesForOptimizati
         return {};
 
     auto & function_arguments_nodes = function_node->getArguments().getNodes();
-    if (function_arguments_nodes.empty())
+    if (function_arguments_nodes.empty() || function_arguments_nodes.size() > 2)
         return {};
 
     auto * first_argument_column_node = function_arguments_nodes.front()->as<ColumnNode>();

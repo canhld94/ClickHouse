@@ -272,10 +272,6 @@ public:
                 auto sub_object_type = data_type_object.getSubcolumnType(sub_object_name);
                 ColumnPtr sub_object_subcolumn = data_type_object.getSubcolumn(sub_object_name, object_column);
 
-                /// If neither subcolumn exists, the path is absent thus return defaults.
-                if (!literal_subcolumn && !sub_object_subcolumn)
-                    return result_type->createColumnConstWithDefaultValue(input_rows_count)->convertToFullColumnIfConst();
-
                 /// Merge literal and subobject subcolumns (same logic as `getObjectElement' in tupleElement.cpp):
                 /// For each row: prefer literal (scalar) value, if absent, use subobject (nested JSON).
                 if (sub_object_subcolumn->getNumberOfDefaultRows() == sub_object_subcolumn->size())
