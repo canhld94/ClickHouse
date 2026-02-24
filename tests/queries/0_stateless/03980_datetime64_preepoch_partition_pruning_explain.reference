@@ -115,3 +115,65 @@ Expression ((Project names + Projection))
         Parts: 0/0
         Granules: 0/0
       Ranges: 0
+Date32 post-epoch: prunes partitions
+Expression ((Project names + Projection))
+  Expression ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.t_d32_explain)
+    Indexes:
+      MinMax
+        Keys:
+          d
+        Condition: (d in [20505, +Inf))
+        Parts: 2/3
+        Granules: 2/3
+      Partition
+        Keys:
+          toDate(d)
+        Condition: (toDate(d) in [20505, +Inf))
+        Parts: 2/2
+        Granules: 2/2
+      PrimaryKey
+        Condition: true
+        Parts: 2/2
+        Granules: 2/2
+      Ranges: 2
+Date32 pre-epoch: no pruning
+Expression ((Project names + Projection))
+  Expression ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.t_d32_explain)
+    Indexes:
+      MinMax
+        Keys:
+          d
+        Condition: (d in [-1, +Inf))
+        Parts: 3/3
+        Granules: 3/3
+      Partition
+        Condition: true
+        Parts: 3/3
+        Granules: 3/3
+      PrimaryKey
+        Condition: true
+        Parts: 3/3
+        Granules: 3/3
+      Ranges: 3
+Date32 upper bound: no pruning
+Expression ((Project names + Projection))
+  Expression ((WHERE + Change column names to column identifiers))
+    ReadFromMergeTree (default.t_d32_explain)
+    Indexes:
+      MinMax
+        Keys:
+          d
+        Condition: (d in [65536, +Inf))
+        Parts: 0/3
+        Granules: 0/3
+      Partition
+        Condition: true
+        Parts: 0/0
+        Granules: 0/0
+      PrimaryKey
+        Condition: true
+        Parts: 0/0
+        Granules: 0/0
+      Ranges: 0
