@@ -1227,7 +1227,6 @@ PrometheusQueryTree(STRING):
     StringLiteral('these are not unescaped: \\n \\\\ \' " \\t')
 )");
 
-#if 0 /// FIXME
     EXPECT_EQ(parse(R"(
         "日本語"
         )"), R"(
@@ -1236,7 +1235,6 @@ PrometheusQueryTree(STRING):
 PrometheusQueryTree(STRING):
     StringLiteral('日本語')
 )");
-#endif
 
     EXPECT_EQ(parse(R"(
         "\u65e5\u672c\u8a9e" 
