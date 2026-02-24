@@ -13,6 +13,8 @@ drop table if exists test;
 -- Pin index_granularity and disable cache prewarming to avoid timeouts with random settings:
 -- small index_granularity creates many marks per JSON subcolumn, and prewarming them is very expensive.
 create table test (id UInt64, json JSON(max_dynamic_paths=2, a.b.c UInt32)) engine=MergeTree order by id settings min_rows_for_wide_part=1, min_bytes_for_wide_part=1, index_granularity=8192, prewarm_primary_key_cache=0, prewarm_mark_cache=0;
+-- Stop merges before inserts to avoid wasting time on background merges during data load.
+system stop merges test;
 
 insert into test select number, '{}' from numbers(100000);
 insert into test select number, toJSONString(map('a.b.c', number)) from numbers(100000, 100000);
