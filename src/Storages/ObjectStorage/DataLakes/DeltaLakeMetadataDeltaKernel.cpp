@@ -36,6 +36,7 @@ namespace ErrorCodes
 {
     extern const int SUPPORT_IS_DISABLED;
     extern const int BAD_ARGUMENTS;
+    extern const int LOGICAL_ERROR
 }
 
 namespace FailPoints
