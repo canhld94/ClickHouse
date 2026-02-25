@@ -17,37 +17,9 @@ extern const int LOGICAL_ERROR;
 
 namespace DB
 {
-
-MatchedTrees::Matches matchTrees(
-    const ActionsDAG::NodeRawConstPtrs & inner_dag, const ActionsDAG & outer_dag, bool check_monotonicity, bool ignore_materialize_identity)
+MatchedTrees::Matches matchTrees(const ActionsDAG::NodeRawConstPtrs & inner_dag, const ActionsDAG & outer_dag, bool check_monotonicity)
 {
     using Parents = std::set<const ActionsDAG::Node *>;
-
-    /// Check if node is a transparent wrapper (materialize/identity) that should be skipped.
-    /// Views automatically add these wrappers, but they don't change semantics.
-    auto is_transparent_wrapper = [&](const ActionsDAG::Node * node) -> bool
-    {
-        if (!node || !ignore_materialize_identity || node->type != ActionsDAG::ActionType::FUNCTION || node->children.size() != 1)
-            return false;
-        const auto & name = node->function_base->getName();
-        return name == "materialize" || name == "identity";
-    };
-
-    /// Unwrap chains of transparent wrappers: materialize(identity(x)) -> x
-    auto unwrap = [&](const ActionsDAG::Node * node) -> const ActionsDAG::Node *
-    {
-        while (is_transparent_wrapper(node))
-            node = node->children[0];
-        return node;
-    };
-
-    /// ------------------------------------------------------------------------------------------
-    /// Phase 1: Build parent index for inner_dag
-    /// ------------------------------------------------------------------------------------------
-    /// For each node in inner_dag, track which nodes use it as a child (its "parents").
-    /// This allows us to quickly find candidate matches when we see a function in outer_dag:
-    /// if all children match, the parent function might also match.
-
     std::unordered_map<const ActionsDAG::Node *, Parents> inner_parents;
     std::unordered_map<std::string_view, const ActionsDAG::Node *> inner_inputs;
 
@@ -55,7 +27,6 @@ MatchedTrees::Matches matchTrees(
         std::stack<const ActionsDAG::Node *> stack;
         for (const auto * out : inner_dag)
         {
-            out = unwrap(out);
             if (inner_parents.contains(out))
                 continue;
 
@@ -66,15 +37,14 @@ MatchedTrees::Matches matchTrees(
                 const auto * node = stack.top();
                 stack.pop();
 
-                /// Remember INPUT nodes by name for matching with outer_dag inputs
                 if (node->type == ActionsDAG::ActionType::INPUT)
                     inner_inputs.emplace(node->result_name, node);
 
                 for (const auto * child : node->children)
                 {
-                    child = unwrap(child);
                     auto [it, inserted] = inner_parents.emplace(child, Parents());
-                    it->second.emplace(node);  /// Record that 'node' is a parent of 'child'
+                    it->second.emplace(node);
+
                     if (inserted)
                         stack.push(child);
                 }
@@ -82,16 +52,10 @@ MatchedTrees::Matches matchTrees(
         }
     }
 
-    /// ------------------------------------------------------------------------------------------
-    /// Phase 2: Match outer_dag nodes to inner_dag nodes
-    /// ------------------------------------------------------------------------------------------
-    /// Process outer_dag nodes in DFS order (children before parents).
-    /// For each node, try to find an equivalent node in inner_dag.
-
     struct Frame
     {
         const ActionsDAG::Node * node;
-        ActionsDAG::NodeRawConstPtrs mapped_children;  /// Matched inner_dag nodes for each child
+        ActionsDAG::NodeRawConstPtrs mapped_children;
     };
 
     MatchedTrees::Matches matches;
@@ -108,71 +72,73 @@ MatchedTrees::Matches matchTrees(
             auto & frame = stack.top();
             frame.mapped_children.reserve(frame.node->children.size());
 
-            /// First, ensure all children are processed (DFS traversal)
             while (frame.mapped_children.size() < frame.node->children.size())
             {
                 const auto * child = frame.node->children[frame.mapped_children.size()];
                 auto it = matches.find(child);
                 if (it == matches.end())
                 {
-                    stack.push(Frame{child, {}});  /// Process child first
+                    /// If match map does not contain a child, it was not visited.
+                    stack.push(Frame{child, {}});
                     break;
                 }
+                /// A node from found match may be nullptr.
+                /// It means that node is visited, but no match was found.
+                if (it->second.monotonicity)
+                    /// Ignore a match with monotonicity.
+                    frame.mapped_children.push_back(nullptr);
+                else
+                    frame.mapped_children.push_back(it->second.node);
 
-                /// Collect matched inner_dag node for this child (nullptr if monotonicity match or no match)
-                frame.mapped_children.push_back(it->second.monotonicity ? nullptr : it->second.node);
             }
 
             if (frame.mapped_children.size() < frame.node->children.size())
-                continue;  /// Still waiting for children to be processed
+                continue;
 
-            /// All children processed, now try to match this node
+            /// Create an empty match for current node.
+            /// match.node will be set if match is found.
             auto & match = matches[frame.node];
 
             if (frame.node->type == ActionsDAG::ActionType::INPUT)
             {
-                /// INPUT nodes match by column name
+                const ActionsDAG::Node * mapped = nullptr;
                 if (auto it = inner_inputs.find(frame.node->result_name); it != inner_inputs.end())
-                    match.node = it->second;
+                    mapped = it->second;
+
+                match.node = mapped;
             }
-            else if (frame.node->type == ActionsDAG::ActionType::ALIAS || is_transparent_wrapper(frame.node))
+            else if (frame.node->type == ActionsDAG::ActionType::ALIAS)
             {
-                /// ALIAS and materialize/identity are transparent - inherit child's match
                 match = matches[frame.node->children.at(0)];
             }
             else if (frame.node->type == ActionsDAG::ActionType::FUNCTION)
             {
-                auto func_name = frame.node->function_base->getName();
-                size_t num_children = frame.node->children.size();
+                //std::cerr << "... Processing " << frame.node->function_base->getName() << std::endl;
 
-                /// Check if all non-const children have matches
                 bool found_all_children = true;
                 const ActionsDAG::Node * any_child = nullptr;
+                size_t num_children = frame.node->children.size();
                 for (size_t i = 0; i < num_children; ++i)
                 {
-                    if (const auto * mapped = unwrap(frame.mapped_children[i]))
-                        any_child = mapped;
+                    if (frame.mapped_children[i])
+                        any_child = frame.mapped_children[i];
                     else if (!frame.node->children[i]->column || !isColumnConst(*frame.node->children[i]->column))
-                        found_all_children = false;  /// Non-const child without match
+                        found_all_children = false;
                 }
 
                 if (found_all_children && any_child)
                 {
-                    /// Find common parents of all matched children in inner_dag.
-                    /// A function in inner_dag can only match if it's a parent of all matched children.
                     Parents container;
                     Parents * intersection = &inner_parents[any_child];
 
                     if (frame.mapped_children.size() > 1)
                     {
-                        /// Intersect parent sets of all matched children
                         std::vector<Parents *> other_parents;
-                        other_parents.reserve(frame.mapped_children.size());
-                        for (size_t i = 1; i < frame.mapped_children.size(); ++i)
-                        {
+                        size_t mapped_children_size = frame.mapped_children.size();
+                        other_parents.reserve(mapped_children_size);
+                        for (size_t i = 1; i < mapped_children_size; ++i)
                             if (frame.mapped_children[i])
                                 other_parents.push_back(&inner_parents[frame.mapped_children[i]]);
-                        }
 
                         for (const auto * parent : *intersection)
                         {
@@ -185,57 +151,51 @@ MatchedTrees::Matches matchTrees(
                                     break;
                                 }
                             }
+
                             if (is_common)
                                 container.insert(parent);
                         }
+
                         intersection = &container;
                     }
 
-                    /// Check each candidate parent for exact match
-                    for (const auto * parent : *intersection)
+                    //std::cerr << ".. Candidate parents " << intersection->size() << std::endl;
+
+                    if (!intersection->empty())
                     {
-                        parent = unwrap(parent);
-                        if (parent->type != ActionsDAG::ActionType::FUNCTION || func_name != parent->function_base->getName())
-                            continue;
-
-                        const auto & children = parent->children;
-                        if (children.size() != num_children)
-                            continue;
-
-                        /// Verify all children match (either same node or same constant value)
-                        bool all_children_matched = true;
-                        for (size_t i = 0; all_children_matched && i < num_children; ++i)
+                        auto func_name = frame.node->function_base->getName();
+                        for (const auto * parent : *intersection)
                         {
-                            const auto * mapped_child = unwrap(frame.mapped_children[i]);
-                            const auto * parent_child = unwrap(children[i]);
-
-                            if (mapped_child == nullptr)
+                            //std::cerr << ".. candidate " << parent->result_name << std::endl;
+                            if (parent->type == ActionsDAG::ActionType::FUNCTION && func_name == parent->function_base->getName())
                             {
-                                /// No match for this child - must be matching constants
-                                all_children_matched = parent_child->column && isColumnConst(*parent_child->column)
-                                    && parent_child->result_type->equals(*frame.node->children[i]->result_type)
-                                    && assert_cast<const ColumnConst &>(*parent_child->column).getField()
-                                        == assert_cast<const ColumnConst &>(*frame.node->children[i]->column).getField();
-                            }
-                            else
-                            {
-                                all_children_matched = mapped_child == parent_child;
-                            }
-                        }
+                                const auto & children = parent->children;
+                                if (children.size() == num_children)
+                                {
+                                    bool all_children_matched = true;
+                                    for (size_t i = 0; all_children_matched && i < num_children; ++i)
+                                    {
+                                        if (frame.mapped_children[i] == nullptr)
+                                        {
+                                            all_children_matched = children[i]->column && isColumnConst(*children[i]->column)
+                                                && children[i]->result_type->equals(*frame.node->children[i]->result_type)
+                                                && assert_cast<const ColumnConst &>(*children[i]->column).getField() == assert_cast<const ColumnConst &>(*frame.node->children[i]->column).getField();
+                                        }
+                                        else
+                                            all_children_matched = frame.mapped_children[i] == children[i];
+                                    }
 
-                        if (all_children_matched)
-                        {
-                            match.node = parent;
-                            break;
+                                    if (all_children_matched)
+                                    {
+                                        match.node = parent;
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
-                /// ----------------------------------------------------------------------------------
-                /// Monotonicity tracking for read-in-order optimization
-                /// ----------------------------------------------------------------------------------
-                /// If no exact match but function is monotonic with single non-const argument,
-                /// we can still use it for ordering optimization.
                 if (!match.node && check_monotonicity && frame.node->function_base->hasInformationAboutMonotonicity())
                 {
                     size_t num_const_args = 0;
@@ -248,7 +208,6 @@ MatchedTrees::Matches matchTrees(
                             monotonic_child = child;
                     }
 
-                    /// Function with exactly one non-const argument
                     if (monotonic_child && num_const_args + 1 == frame.node->children.size())
                     {
                         const auto & child_match = matches[monotonic_child];
@@ -263,7 +222,6 @@ MatchedTrees::Matches matchTrees(
                                 monotonicity.child_match = &child_match;
                                 monotonicity.child_node = monotonic_child;
 
-                                /// Compose with child's monotonicity if present
                                 if (child_match.monotonicity)
                                 {
                                     monotonicity.direction *= child_match.monotonicity->direction;
