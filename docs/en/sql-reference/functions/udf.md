@@ -465,7 +465,7 @@ Create a function using your WASM module:
 ```sql
 CREATE FUNCTION my_function
 LANGUAGE WASM
-ABI PLAIN
+ABI ROW_DIRECT
 FROM 'my_module'
 ARGUMENTS (x UInt32, y UInt32)
 RETURNS UInt32;

@@ -61,7 +61,7 @@ def test_disabled_not_available(start_cluster):
 
     # CREATE FUNCTION must fail
     error = node0.query_and_get_error(
-        "CREATE FUNCTION is_prime LANGUAGE WASM ABI PLAIN "
+        "CREATE FUNCTION is_prime LANGUAGE WASM ABI ROW_DIRECT "
         "FROM 'module1' ARGUMENTS (num UInt32) RETURNS UInt32"
     )
     assert "WebAssembly support is not enabled" in error
@@ -93,7 +93,7 @@ def test_enabled(start_cluster):
     assert result.strip() == "isprime"
 
     node1.query(
-        "CREATE FUNCTION is_prime LANGUAGE WASM ABI PLAIN "
+        "CREATE FUNCTION is_prime LANGUAGE WASM ABI ROW_DIRECT "
         "FROM 'isprime' ARGUMENTS (num UInt32) RETURNS UInt32"
     )
 
@@ -137,7 +137,7 @@ def test_enabled(start_cluster):
         ]
     )
     node1.query(
-        "CREATE FUNCTION add_or_sub LANGUAGE WASM ABI PLAIN FROM 'add_or_sub'"
+        "CREATE FUNCTION add_or_sub LANGUAGE WASM ABI ROW_DIRECT FROM 'add_or_sub'"
         "ARGUMENTS (a UInt32, b UInt32, control Int32) RETURNS UInt32"
     )
     result = node1.query(
@@ -156,7 +156,7 @@ def test_enabled(start_cluster):
         ]
     )
     error = node1.query_and_get_error(
-        "CREATE FUNCTION some_func LANGUAGE WASM ABI PLAIN FROM 'broken'"
+        "CREATE FUNCTION some_func LANGUAGE WASM ABI ROW_DIRECT FROM 'broken'"
         "ARGUMENTS (a UInt32) RETURNS UInt32"
     )
     assert "Cannot load WebAssembly module" in error

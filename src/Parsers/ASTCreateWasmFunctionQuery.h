@@ -21,7 +21,7 @@ public:
         String module_name;
         String module_hash;
         String source_function_name;
-        WasmAbiVersion abi_version = WasmAbiVersion::Plain;
+        WasmAbiVersion abi_version = WasmAbiVersion::RowDirect;
 
         WebAssemblyFunctionSettings settings;
     };

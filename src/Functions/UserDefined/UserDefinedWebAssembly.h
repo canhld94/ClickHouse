@@ -16,7 +16,7 @@ namespace DB
 
 enum class WasmAbiVersion : uint8_t
 {
-    Plain,
+    RowDirect,
     BufferedV1,
 };
 

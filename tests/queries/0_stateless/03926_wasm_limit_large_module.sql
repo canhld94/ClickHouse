@@ -37,8 +37,8 @@ INSERT INTO system.webassembly_modules (name, hash, code) SELECT 'large_module',
 ));
 
 
-CREATE OR REPLACE FUNCTION access_data LANGUAGE WASM ABI PLAIN FROM 'large_module' ARGUMENTS (UInt32) RETURNS Int32 SETTINGS max_memory = 655360;
+CREATE OR REPLACE FUNCTION access_data LANGUAGE WASM ABI ROW_DIRECT FROM 'large_module' ARGUMENTS (UInt32) RETURNS Int32 SETTINGS max_memory = 655360;
 SELECT access_data(0 :: UInt32) == 42; -- { serverError WASM_ERROR }
 
-CREATE OR REPLACE FUNCTION access_data LANGUAGE WASM ABI PLAIN FROM 'large_module' ARGUMENTS (UInt32) RETURNS Int32 SETTINGS max_memory = 6553600;
+CREATE OR REPLACE FUNCTION access_data LANGUAGE WASM ABI ROW_DIRECT FROM 'large_module' ARGUMENTS (UInt32) RETURNS Int32 SETTINGS max_memory = 6553600;
 SELECT access_data(0 :: UInt32);

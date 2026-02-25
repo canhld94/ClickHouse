@@ -382,7 +382,7 @@ std::unique_ptr<UserDefinedWebAssemblyFunction> UserDefinedWebAssemblyFunction::
 {
     switch (abi_type)
     {
-        case WasmAbiVersion::Plain:
+        case WasmAbiVersion::RowDirect:
             return std::make_unique<UserDefinedWebAssemblyFunctionSimple>(
                 wasm_module_, function_name_, argument_names_, arguments_, result_type_, std::move(function_settings));
         case WasmAbiVersion::BufferedV1:
@@ -397,8 +397,8 @@ String toString(WasmAbiVersion abi_type)
 {
     switch (abi_type)
     {
-        case WasmAbiVersion::Plain:
-            return "PLAIN";
+        case WasmAbiVersion::RowDirect:
+            return "ROW_DIRECT";
         case WasmAbiVersion::BufferedV1:
             return "BUFFERED_V1";
     }
@@ -408,7 +408,7 @@ String toString(WasmAbiVersion abi_type)
 
 WasmAbiVersion getWasmAbiFromString(const String & str)
 {
-    for (auto abi_type : {WasmAbiVersion::Plain, WasmAbiVersion::BufferedV1})
+    for (auto abi_type : {WasmAbiVersion::RowDirect, WasmAbiVersion::BufferedV1})
         if (Poco::toUpper(str) == toString(abi_type))
             return abi_type;
 

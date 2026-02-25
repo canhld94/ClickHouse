@@ -165,7 +165,7 @@ LANGUAGE WASM
 FROM 'module_name' [:: 'source_function_name']
 ARGUMENTS ( [name type[, ...]] | [type[, ...]] )
 RETURNS return_type
-[ABI PLAIN | ABI BUFFERED_V1]
+[ABI ROW_DIRECT | ABI BUFFERED_V1]
 [SHA256_HASH 'hex']
 [SETTINGS key = value[, ...]];
 ```
@@ -176,7 +176,7 @@ RETURNS return_type
 - `FROM 'module_name' :: 'source_function_name'`: Name of the loaded WASM module and function name in WASM module to use (defaults to function_name)
 - `ARGUMENTS`: List of argument names and types (names optional and used for serialization formats that support named fields)
 - `ABI`: Application Binary Interface version
-  - `PLAIN`: Direct type mapping, row-by-row processing
+  - `ROW_DIRECT`: Direct type mapping, row-by-row processing
   - `BUFFERED_V1`: Block-based processing with serialization
 - `SHA256_HASH`: Expected module hash for verification (auto-filled if omitted), can be used to ensure the correct WASM module loaded across different replicas.
 - `SETTINGS`: Per-function settings
@@ -190,10 +190,10 @@ RETURNS return_type
 
 To interact with ClickHouse, WebAssembly modules must adhere to one of the supported ABIs (Application Binary Interfaces).
 
-- `PLAIN`: Direct type mapping (primitive types `Int32`, `UInt32`, `Int64`, `UInt64`, `Float32`, `Float64` only)
-- `BUFFERED_V1`: Complex types with serialization (default)
+- `ROW_DIRECT`: Direct type mapping (primitive types `Int32`, `UInt32`, `Int64`, `UInt64`, `Float32`, `Float64` only)
+- `BUFFERED_V1`: Complex types with serialization
 
-### ABI PLAIN
+### ABI ROW_DIRECT
 
 Calls an exported WASM function directly per row.
 

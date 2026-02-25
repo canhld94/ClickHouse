@@ -25,10 +25,10 @@ cat ${CUR_DIR}/wasm/host_api.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT INTO sy
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
-CREATE FUNCTION test_random LANGUAGE WASM ABI PLAIN FROM 'test_host_api' ARGUMENTS (UInt32) RETURNS UInt32;
+CREATE FUNCTION test_random LANGUAGE WASM ABI ROW_DIRECT FROM 'test_host_api' ARGUMENTS (UInt32) RETURNS UInt32;
 SELECT test_random(1 :: UInt32) != test_random(2 :: UInt32);
 
-CREATE FUNCTION test_host_api LANGUAGE WASM ABI PLAIN FROM 'test_host_api' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32;
+CREATE FUNCTION test_host_api LANGUAGE WASM ABI ROW_DIRECT FROM 'test_host_api' :: 'test_func' ARGUMENTS (UInt32) RETURNS UInt32;
 
 EOF
 
@@ -42,7 +42,7 @@ cat ${CUR_DIR}/wasm/import_unknown.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT I
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
-CREATE FUNCTION test_func LANGUAGE WASM ABI PLAIN FROM 'import_unknown' ARGUMENTS (UInt32) RETURNS UInt32; -- { serverError RESOURCE_NOT_FOUND }
+CREATE FUNCTION test_func LANGUAGE WASM ABI ROW_DIRECT FROM 'import_unknown' ARGUMENTS (UInt32) RETURNS UInt32; -- { serverError RESOURCE_NOT_FOUND }
 DELETE FROM system.webassembly_modules WHERE name = 'import_unknown';
 
 EOF
@@ -51,7 +51,7 @@ cat ${CUR_DIR}/wasm/import_incorrect.wasm | ${CLICKHOUSE_CLIENT} --query "INSERT
 
 ${CLICKHOUSE_CLIENT} --allow_experimental_analyzer=1 << EOF
 
-CREATE FUNCTION test_func LANGUAGE WASM ABI PLAIN FROM 'import_incorrect' ARGUMENTS (UInt32) RETURNS UInt32;  -- { serverError BAD_ARGUMENTS }
+CREATE FUNCTION test_func LANGUAGE WASM ABI ROW_DIRECT FROM 'import_incorrect' ARGUMENTS (UInt32) RETURNS UInt32;  -- { serverError BAD_ARGUMENTS }
 DELETE FROM system.webassembly_modules WHERE name = 'import_incorrect';
 
 EOF

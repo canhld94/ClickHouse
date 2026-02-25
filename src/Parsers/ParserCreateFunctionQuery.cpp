@@ -84,7 +84,7 @@ bool ParserCreateFunctionQuery::parseImpl(IParser::Pos & pos, ASTPtr & node, Exp
           *     RETURNS UInt64
           *     FROM 'some_module' [:: 'internal_func_name']
           *     SHA256_HASH 'cafe42...'
-          *     ABI PLAIN
+          *     ABI ROW_DIRECT
           *     SETTINGS key1 = value1, key2 = value2
           */
 
