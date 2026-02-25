@@ -35,7 +35,7 @@ curl https://clickhouse.com/ | sh
 
 ## Monthly Release & Community Call
 
-Join us for the [ClickHouse **26.1** Release Call](https://clickhouse.com/company/events/v26-01-community-release-call) on January 29, 2026.
+Join us for the [ClickHouse **26.2** Release Call](https://clickhouse.com/company/events/v26-2-community-release-call) on February 26, 2026.
 
 Watch all release presentations and videos at [ClickHouse Theater](https://presentations.clickhouse.com/) and [YouTube Playlist](https://www.youtube.com/playlist?list=PL0Z2YDlm0b3jAlSy1JxyP8zluvXaN3nxU).
 
@@ -76,8 +76,8 @@ Recent meetups
 * [Data & AI Paris Meetup](https://luma.com/3szhmv9h) - January 22nd, 2026
 * [Iceberg Meetup Menlo Park](https://luma.com/abggijbh) - January 21st, 2026
 * [Gurgaon/Delhi Meetup](https://www.meetup.com/clickhouse-delhi-user-group/events/312621832/) - January 10th, 2026
-
-
+* [AI Night San Francisco](https://luma.com/j2ck1sbz)- February 11th, 2026
+* [Toronto Meetup](https://luma.com/8p8unbnw) - February 19th, 2026
 
 
 ## Recent Recordings
