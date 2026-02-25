@@ -1441,19 +1441,16 @@ size_t CachedOnDiskReadBufferFromFile::readBigAt(
             current_state.reset();
             continue;
         }
-        else if (current_state && offset <= file_segment.range().right)
-            updateReadStateIfNeeded(file_segment, offset, current_state, current_info, object_size, log);
-
-        SCOPE_EXIT({
-            if (file_segment.isDownloader())
-                file_segment.completePartAndResetDownloader();
-        });
 
         chassert(
             file_segment.range().contains(offset),
             fmt::format("Current offset: {}, file segment: {}", offset, file_segment.getInfoForLog()));
 
-        if (!current_state)
+        if (current_state)
+        {
+            updateReadStateIfNeeded(file_segment, offset, current_state, current_info, object_size, log);
+        }
+        else
         {
             file_segment.increasePriority();
             current_state = prepareReadFromFileSegmentState(
@@ -1463,6 +1460,11 @@ size_t CachedOnDiskReadBufferFromFile::readBigAt(
                 object_size,
                 log);
         }
+
+        SCOPE_EXIT({
+            if (file_segment.isDownloader())
+                file_segment.completePartAndResetDownloader();
+        });
 
         [[maybe_unused]] size_t remaining_size_in_file_segment = file_segment.range().right - offset + 1;
         current_state->buf->set(to + read_bytes, n - read_bytes);
