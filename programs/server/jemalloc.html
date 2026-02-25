@@ -2500,7 +2500,7 @@ SETTINGS jemalloc_enable_profiler = 1,
                                 <label for="flamegraph-time" style="display: block; font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem;">Time</label>
                                 <input type="text" id="flamegraph-time" value="${formatTime(maxMemTime)}" style="width: 100%; padding: 0.5rem; font-family: monospace; font-size: 0.85rem; background: var(--input-background); color: var(--color); border: 1px solid var(--border-color); border-radius: 4px;">
                             </div>
-                            <button id="generate-query-flamegraph-btn" onclick="getQueryFlameGraphProfile()" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">Get Profile</button>
+                            <button id="generate-query-flamegraph-btn" onclick="getQueryCollapsedProfile()" class="btn btn-primary" style="padding: 0.5rem 1rem; white-space: nowrap;">Get Profile</button>
                         </div>
                         <div id="query-flamegraph-result"></div>
                     </div>
@@ -2568,7 +2568,7 @@ SETTINGS jemalloc_enable_profiler = 1,
             }
         }
 
-        async function getQueryFlameGraphProfile() {
+        async function getQueryCollapsedProfile() {
             readConnectionParams();
             const button = document.getElementById('generate-query-flamegraph-btn');
             const queryIdInput = document.getElementById('query-profile-id');
@@ -2607,7 +2607,6 @@ SETTINGS jemalloc_enable_profiler = 1,
                 }
 
                 const lines = collapsedData.split('\n');
-                const queryId = document.getElementById('query-profile-id').value.trim();
                 const flameGraphOnclick = `downloadFlameGraphFromProfile('query-flamegraph-result', 'query-flamegraph-' + document.getElementById('query-profile-id').value.trim())`;
 
                 renderProfileOutputCard('query-flamegraph-result', 'Profile Output (Collapsed)', lines, 'Collapsed', flameGraphOnclick, 'query-profile-' + queryId);
