@@ -324,7 +324,7 @@ IcebergIterator::IcebergIterator(
     producer_task.emplace(
         [this, thread_group = CurrentThread::getGroup()]()
         {
-            DB::ThreadGroupSwitcher switcher(thread_group, DB::ThreadName::DATALAKE_TABLE_SNAPSHOT);
+            DB::ThreadGroupSwitcher switcher(thread_group, DB::ThreadName::ICEBERG_ITERATOR);
             while (!blocking_queue.isFinished())
             {
                 std::optional<ManifestFileEntryPtr> entry;
