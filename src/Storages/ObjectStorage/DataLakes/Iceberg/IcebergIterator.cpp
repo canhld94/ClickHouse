@@ -210,11 +210,11 @@ std::optional<ManifestFileEntryPtr> SingleThreadIcebergKeysIterator::next()
                 case PruningReturnStatus::NOT_PRUNED:
                     return manifest_file_entry;
                 case PruningReturnStatus::MIN_MAX_INDEX_PRUNED: {
-                    ++min_max_index_pruned_files;
+                    ProfileEvents::increment(ProfileEvents::IcebergMinMaxIndexPrunedFiles, 1);
                     break;
                 }
                 case PruningReturnStatus::PARTITION_PRUNED: {
-                    ++partition_pruned_files;
+                    ProfileEvents::increment(ProfileEvents::IcebergPartitionPrunedFiles, 1);
                     break;
                 }
             }
@@ -228,14 +228,6 @@ std::optional<ManifestFileEntryPtr> SingleThreadIcebergKeysIterator::next()
     }
 
     return std::nullopt;
-}
-
-SingleThreadIcebergKeysIterator::~SingleThreadIcebergKeysIterator()
-{
-    if (partition_pruned_files > 0)
-        ProfileEvents::increment(ProfileEvents::IcebergPartitionPrunedFiles, partition_pruned_files);
-    if (min_max_index_pruned_files > 0)
-        ProfileEvents::increment(ProfileEvents::IcebergMinMaxIndexPrunedFiles, min_max_index_pruned_files);
 }
 
 SingleThreadIcebergKeysIterator::SingleThreadIcebergKeysIterator(
