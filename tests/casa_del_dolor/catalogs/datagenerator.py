@@ -512,5 +512,5 @@ class LakeDataGenerator:
         except Exception as e:
             # If an error happens, ignore it, but log it
             traceback.print_exc()
-            self.logger.error(str(e))
+            self.logger.exception(e)
         return True
