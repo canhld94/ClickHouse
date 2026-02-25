@@ -118,7 +118,6 @@ extern const SettingsString iceberg_metadata_compression_method;
 extern const SettingsBool allow_insert_into_iceberg;
 extern const SettingsBool allow_experimental_iceberg_compaction;
 extern const SettingsBool iceberg_delete_data_on_drop;
-extern const SettingsBool iceberg_reload_schema_for_consistency;
 }
 
 namespace
@@ -928,9 +927,9 @@ std::unique_ptr<StorageInMemoryMetadata> IcebergMetadata::buildStorageMetadataFr
     return result;
 }
 
-bool IcebergMetadata::shouldReloadSchemaForConsistency(ContextPtr context) const
+bool IcebergMetadata::shouldReloadSchemaForConsistency(ContextPtr) const
 {
-    return context->getSettingsRef()[Setting::iceberg_reload_schema_for_consistency];
+    return true;
 }
 
 void IcebergMetadata::modifyFormatSettings(FormatSettings & format_settings, const Context & local_context) const

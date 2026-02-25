@@ -326,11 +326,7 @@ ObjectIterator DeltaLakeMetadataDeltaKernel::iterate(
     }
     else
     {
-        /// Fall back to reading from settings if no version is stored in metadata.
-        snapshot_version = getSnapshotVersion(context->getSettingsRef());
-        LOG_TEST(
-            log, "Using snapshot version {} from settings (no version in metadata)",
-            snapshot_version.has_value() ? toString(snapshot_version.value()) : "Latest");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "No version found in table state snapshot");
     }
 
     return getTableSnapshot(snapshot_version)->iterate(filter_dag, callback, list_batch_size, context);
