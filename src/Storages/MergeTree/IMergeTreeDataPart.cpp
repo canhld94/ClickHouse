@@ -735,16 +735,14 @@ void IMergeTreeDataPart::loadIndexMarksToCache(MarkCache * index_mark_cache) con
 
         for (const auto & substream : index_format.substreams)
         {
-            auto stream_name = index_name + substream.suffix;
-            auto marks_file = index_granularity_info.getMarksFilePath(stream_name);
-
-            if (!checksums.has(marks_file))
+            auto stream_name = getStreamNameOrHash(index_name + substream.suffix, substream.extension, checksums);
+            if (!stream_name)
                 continue;
 
             loaders.emplace_back(std::make_unique<MergeTreeMarksLoader>(
                 info_for_read,
                 index_mark_cache,
-                marks_file,
+                index_granularity_info.getMarksFilePath(*stream_name),
                 index_marks_count,
                 index_granularity_info,
                 /*save_marks_in_cache=*/ true,
@@ -781,8 +779,11 @@ void IMergeTreeDataPart::removeIndexMarksFromCache(MarkCache * index_mark_cache)
 
         for (const auto & substream : index_format.substreams)
         {
-            auto stream_name = index_name + substream.suffix;
-            auto marks_file = index_granularity_info.getMarksFilePath(stream_name);
+            auto stream_name = getStreamNameOrHash(index_name + substream.suffix, substream.extension, checksums);
+            if (!stream_name)
+                continue;
+
+            auto marks_file = index_granularity_info.getMarksFilePath(*stream_name);
             auto key = MarkCache::hash(getDataPartStorage().getDiskName() + ":" + (fs::path(getRelativePathOfActivePart()) / marks_file).string());
             index_mark_cache->remove(key);
         }
