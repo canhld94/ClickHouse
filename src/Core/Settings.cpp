@@ -5171,10 +5171,6 @@ Enables logging delta lake metadata files into system table.
 If enabled, schema is reloaded from the DeltaLake metadata before each query execution to ensure
 consistency between the schema used during query analysis and the schema used during execution.
 )", 0) \
-    DECLARE(Bool, iceberg_reload_schema_for_consistency, true, R"(
-If enabled, schema is reloaded from the Iceberg metadata before each query execution to ensure
-consistency between the schema used during query analysis and the schema used during execution.
-)", 0) \
     DECLARE(IcebergMetadataLogLevel, iceberg_metadata_log_level, IcebergMetadataLogLevel::None, R"(
 Controls the level of metadata logging for Iceberg tables to system.iceberg_metadata_log.
 Usually this setting can be modified for debugging purposes.
