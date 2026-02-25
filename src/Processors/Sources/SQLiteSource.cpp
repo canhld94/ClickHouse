@@ -59,6 +59,8 @@ SQLiteSource::SQLiteSource(
 
 Chunk SQLiteSource::generate()
 {
+    LOG_TEST(getLogger("SQLiteSource"), "Generate a chuck");
+
     if (!compiled_statement)
         return {};
 
@@ -71,7 +73,6 @@ Chunk SQLiteSource::generate()
 
         if (status == SQLITE_INTERRUPT)
         {
-            LOG_DEBUG(getLogger("SQLiteSource"), "SQLite query was interrupted");
             compiled_statement.reset();
             break;
         }
@@ -140,7 +141,6 @@ void SQLiteSource::onCancel() noexcept
         if (sqlite_db)
         {
             sqlite3_interrupt(sqlite_db.get());
-            LOG_DEBUG(getLogger("SQLiteSource"), "SQLite query interrupted");
         }
     }
     catch (...)
