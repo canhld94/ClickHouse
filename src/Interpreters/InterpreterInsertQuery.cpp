@@ -944,8 +944,7 @@ BlockIO InterpreterInsertQuery::execute()
                     res.pipeline = std::move(*pipeline);
             }
 
-            if (!res.pipeline.initialized())
-                query.select = std::move(saved_select);
+            query.select = std::move(saved_select);
         }
         if (!res.pipeline.initialized())
             res.pipeline = buildInsertSelectPipeline(query, table);
