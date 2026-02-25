@@ -109,12 +109,13 @@ function fuzz
 
     # server.log -> All server logs, including sanitizer
     # stderr.log -> Process logs (sanitizer) only
-    clickhouse-server \
-        --config-file $CONFIG_DIR/config.xml \
-        --pid-file /var/run/clickhouse-server/clickhouse-server.pid \
-        --  --path $CONFIG_DIR \
-            --logger.console=0 \
-            --logger.log=server.log 2>&1 | tee -a stderr.log >> server.log 2>&1 &
+    ( clickhouse-server \
+          --config-file $CONFIG_DIR/config.xml \
+          --pid-file /var/run/clickhouse-server/clickhouse-server.pid \
+          --  --path $CONFIG_DIR \
+              --logger.console=0 \
+              --logger.log=server.log 2>&1 | tee -a stderr.log >> server.log 2>&1
+      exit "${PIPESTATUS[0]}" ) &
     server_bg_pid=$!
     for _ in {1..30}
     do
@@ -277,11 +278,12 @@ function fuzz
         fi
     done
 
-    # Stop the server in background so we can wait for the pipeline job to
-    # finish in the foreground. We wait on server_bg_pid (the pipeline job)
-    # rather than server_pid (from the PID file), because the PID file
-    # contains the forked server process which is not a direct child of this
-    # shell, so wait would fail with "not a child of this shell".
+    # Stop the server in background so we can wait for the subshell to
+    # finish in the foreground. We wait on server_bg_pid (the subshell running
+    # the server pipeline) rather than server_pid (from the PID file), because
+    # the PID file contains the forked server process which is not a direct
+    # child of this shell, so wait would fail with "not a child of this shell".
+    # The subshell exits with clickhouse-server's exit code via PIPESTATUS.
     stop_server &
     server_exit_code=0
     wait $server_bg_pid || server_exit_code=$?
