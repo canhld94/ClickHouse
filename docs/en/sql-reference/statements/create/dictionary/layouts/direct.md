@@ -14,7 +14,7 @@ import TabItem from '@theme/TabItem';
 
 The dictionary is not stored in memory and directly goes to the source during the processing of a request.
 
-The dictionary key has the [UInt64](../../../data-types/int-uint.md) type.
+The dictionary key has the [UInt64](../../../../../data-types/int-uint.md) type.
 
 All types of [sources](../sources/#dictionary-sources), except local files, are supported.
 

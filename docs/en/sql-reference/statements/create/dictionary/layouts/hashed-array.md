@@ -14,7 +14,7 @@ import TabItem from '@theme/TabItem';
 
 The dictionary is completely stored in memory. Each attribute is stored in an array. The key attribute is stored in the form of a hashed table where value is an index in the attributes array. The dictionary can contain any number of elements with any identifiers. In practice, the number of keys can reach tens of millions of items.
 
-The dictionary key has the [UInt64](../../../data-types/int-uint.md) type.
+The dictionary key has the [UInt64](../../../../../data-types/int-uint.md) type.
 
 All types of sources are supported. When updating, data (from a file or from a table) is read in its entirety.
 
