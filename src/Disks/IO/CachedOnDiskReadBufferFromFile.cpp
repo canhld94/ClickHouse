@@ -1444,6 +1444,11 @@ size_t CachedOnDiskReadBufferFromFile::readBigAt(
         else if (current_state && offset <= file_segment.range().right)
             updateReadStateIfNeeded(file_segment, offset, current_state, current_info, object_size, log);
 
+        SCOPE_EXIT({
+            if (file_segment.isDownloader())
+                file_segment.completePartAndResetDownloader();
+        });
+
         chassert(
             file_segment.range().contains(offset),
             fmt::format("Current offset: {}, file segment: {}", offset, file_segment.getInfoForLog()));
@@ -1461,6 +1466,9 @@ size_t CachedOnDiskReadBufferFromFile::readBigAt(
 
         [[maybe_unused]] size_t remaining_size_in_file_segment = file_segment.range().right - offset + 1;
         current_state->buf->set(to + read_bytes, n - read_bytes);
+        SCOPE_EXIT({
+            current_state->buf->set(nullptr, 0);
+        });
 
         const auto size = readFromFileSegment(
             file_segment,
@@ -1492,10 +1500,6 @@ size_t CachedOnDiskReadBufferFromFile::readBigAt(
                 "Cannot read all data. Offset: {} (initial offset: {}), read bytes {}/{}",
                 offset, range_begin, read_bytes, n);
         }
-
-        current_state->buf->set(nullptr, 0);
-        if (file_segment.isDownloader())
-            file_segment.completePartAndResetDownloader();
 
         if (progress_callback)
             cancelled = progress_callback(size);
