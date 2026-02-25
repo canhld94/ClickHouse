@@ -121,7 +121,7 @@ It is also possible to use `shards` for this type of dictionary, and again it is
 
 ## complex_key_hashed {#complex_key_hashed}
 
-This type of storage is for use with composite [keys](../keys-and-fields.md#dictionary-key-and-fields). Similar to `hashed`.
+This type of storage is for use with composite [keys](../attributes.md#composite-key). Similar to `hashed`.
 
 Configuration example:
 
@@ -151,7 +151,7 @@ LAYOUT(COMPLEX_KEY_HASHED([SHARDS 1] [SHARD_LOAD_QUEUE_BACKLOG 10000] [MAX_LOAD_
 
 ## complex_key_sparse_hashed {#complex_key_sparse_hashed}
 
-This type of storage is for use with composite [keys](../keys-and-fields.md#dictionary-key-and-fields). Similar to [sparse_hashed](#sparse_hashed).
+This type of storage is for use with composite [keys](../attributes.md#composite-key). Similar to [sparse_hashed](#sparse_hashed).
 
 Configuration example:
 

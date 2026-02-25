@@ -50,4 +50,4 @@ LAYOUT(SSD_CACHE(BLOCK_SIZE 4096 FILE_SIZE 16777216 READ_BUFFER_SIZE 1048576
 
 ## complex_key_ssd_cache {#complex_key_ssd_cache}
 
-This type of storage is for use with composite [keys](../keys-and-fields.md#dictionary-key-and-fields). Similar to `ssd_cache`.
+This type of storage is for use with composite [keys](../attributes.md#composite-key). Similar to `ssd_cache`.

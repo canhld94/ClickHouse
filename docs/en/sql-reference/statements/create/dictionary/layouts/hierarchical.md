@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem';
 
 ## Hierarchical dictionaries {#hierarchical-dictionaries}
 
-ClickHouse supports hierarchical dictionaries with a [numeric key](../keys-and-fields.md#numeric-key).
+ClickHouse supports hierarchical dictionaries with a [numeric key](../attributes.md#numeric-key).
 
 Look at the following hierarchical structure:
 

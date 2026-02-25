@@ -43,7 +43,7 @@ LAYOUT(HASHED_ARRAY([SHARDS 1]))
 
 ## complex_key_hashed_array {#complex_key_hashed_array}
 
-This type of storage is for use with composite [keys](../keys-and-fields.md#dictionary-key-and-fields). Similar to [hashed_array](#hashed_array).
+This type of storage is for use with composite [keys](../attributes.md#composite-key). Similar to [hashed_array](#hashed_array).
 
 Configuration example:
 
