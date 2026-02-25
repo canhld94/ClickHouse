@@ -20,7 +20,6 @@ BUGFIX_VALIDATE_CHECK=0
 NO_AZURE=0
 KEEPER_INJECT_AUTH=1
 WASM_ENGINE=""
-USE_ENCRYPTED_STORAGE=0
 REMOTE_DATABASE_DISK=0
 
 while [[ "$#" -gt 0 ]]; do
@@ -426,6 +425,8 @@ fi
 ln -sf $SRC_PATH/config.d/wasm_udf.xml $DEST_SERVER_PATH/config.d/
 
 if [ ! -z "$WASM_ENGINE" ]; then
+    # ensure that default entry exists and we correctly replace it
+    grep -q -F ">wasmtime<" $DEST_SERVER_PATH/config.d/wasm_udf.xml || exit 1
     sed -i "s|>wasmtime<|>${WASM_ENGINE}<|" $DEST_SERVER_PATH/config.d/wasm_udf.xml
 fi
 

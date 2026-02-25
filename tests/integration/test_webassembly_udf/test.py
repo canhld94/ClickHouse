@@ -70,6 +70,9 @@ def test_disabled_not_available(start_cluster):
 def test_enabled(start_cluster):
     """With the flag enabled: table is visible, modules and functions can be loaded, and they persist after restart."""
 
+    if node1.is_built_with_memory_sanitizer():
+        pytest.skip("Wasmtime is disabled in MSAN builds")
+
     # Table must appear in system.tables
     result = node1.query(
         "SELECT name FROM system.tables WHERE database = 'system' AND name = 'webassembly_modules'"
