@@ -267,6 +267,7 @@ namespace ServerSetting
     extern const ServerSettingsBool jemalloc_collect_global_profile_samples_in_trace_log;
     extern const ServerSettingsBool jemalloc_enable_background_threads;
     extern const ServerSettingsUInt64 jemalloc_max_background_threads_num;
+    extern const ServerSettingsUInt64 jemalloc_profiler_sampling_rate;
     extern const ServerSettingsSeconds keep_alive_timeout;
     extern const ServerSettingsString mark_cache_policy;
     extern const ServerSettingsUInt64 mark_cache_size;
