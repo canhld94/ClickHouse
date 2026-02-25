@@ -70,7 +70,6 @@ const VersionToSettingsChangesMap & getSettingsChangesHistory()
             {"jemalloc_profile_text_collapsed_use_count", false, false, "New setting to aggregate by allocation count instead of bytes in the collapsed jemalloc heap profile format"},
             {"opentelemetry_start_keeper_trace_probability", "auto", "auto", "New setting"},
             {"delta_lake_reload_schema_for_consistency", false, false, "New setting to control whether DeltaLake reloads schema before each query for consistency."},
-            {"iceberg_reload_schema_for_consistency", true, true, "New setting to control whether Iceberg reloads schema before each query for consistency."},
         });
         addSettingsChanges(settings_changes_history, "26.1",
         {
