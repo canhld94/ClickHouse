@@ -3640,10 +3640,10 @@ WasmModuleManager * Context::initWasmModuleManager()
     if (!shared->server_settings[ServerSetting::allow_experimental_webassembly_udf])
         return nullptr;
 
-    LOG_DEBUG(shared->log, "Experimental WebAssembly UDF support is enabled");
-
     const auto & config = shared->getConfigRefWithLock(lock);
     auto engine_name = config.getString("webassembly_udf_engine", "wasmtime");
+
+    LOG_DEBUG(shared->log, "Experimental WebAssembly UDF support is enabled, using engine: {}", engine_name);
 
     auto user_scripts_disk = std::make_shared<DiskLocal>("user_scripts", shared->user_scripts_path);
     user_scripts_disk->startup(/* skip_access_check */ true);

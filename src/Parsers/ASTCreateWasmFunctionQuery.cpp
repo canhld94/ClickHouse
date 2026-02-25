@@ -87,16 +87,16 @@ void ASTCreateWasmFunctionQuery::formatImpl(WriteBuffer & ostr, const FormatSett
         }
     }
 
-    if (module_hash_ast)
-    {
-        ostr << " SHA256_HASH ";
-        module_hash_ast->format(ostr, settings, state, frame);
-    }
-
     if (abi_ast)
     {
         ostr << " ABI ";
         abi_ast->format(ostr, settings, state, frame);
+    }
+
+    if (module_hash_ast)
+    {
+        ostr << " SHA256_HASH ";
+        module_hash_ast->format(ostr, settings, state, frame);
     }
 
     if (!function_settings.empty())

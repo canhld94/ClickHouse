@@ -112,11 +112,12 @@
 #include <Storages/System/StorageSystemDashboards.h>
 #include <Storages/System/StorageSystemViewRefreshes.h>
 #include <Storages/System/StorageSystemDNSCache.h>
-#include <Storages/System/StorageSystemWasmModules.h>
 #include <Storages/System/StorageSystemIcebergHistory.h>
 #if USE_ICU
 #   include <Storages/System/StorageSystemUnicode.h>
 #endif
+#include <Storages/System/StorageSystemWasmModules.h>
+
 #include <Interpreters/Context.h>
 
 #include <Poco/Util/LayeredConfiguration.h>
