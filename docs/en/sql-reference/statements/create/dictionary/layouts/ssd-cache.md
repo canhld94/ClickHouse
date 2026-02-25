@@ -14,7 +14,7 @@ import TabItem from '@theme/TabItem';
 
 Similar to `cache`, but stores data on SSD and index in RAM. All cache dictionary settings related to update queue can also be applied to SSD cache dictionaries.
 
-The dictionary key has the [UInt64](../../../../../data-types/int-uint.md) type.
+The dictionary key has the [UInt64](/sql-reference/data-types/int-uint.md) type.
 
 <Tabs>
 <TabItem value="ddl" label="DDL" default>
