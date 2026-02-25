@@ -403,6 +403,7 @@ void Session::authenticate(const Credentials & credentials_, const Poco::Net::So
         throw;
     }
 
+    chassert(!auth_result.user_name.empty());
     prepared_client_info->current_user = auth_result.user_name;
     prepared_client_info->authenticated_user = auth_result.user_name;
     prepared_client_info->current_address = std::make_shared<Poco::Net::SocketAddress>(address);
