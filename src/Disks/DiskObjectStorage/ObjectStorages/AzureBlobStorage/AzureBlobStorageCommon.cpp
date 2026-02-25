@@ -44,8 +44,6 @@ namespace ProfileEvents
     extern const Event DiskAzurePutRequestThrottlerSleepMicroseconds;
 }
 
-namespace fs = std::filesystem;
-
 namespace DB
 {
 
