@@ -2132,7 +2132,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
             /// Comment table
             {2, [&] { ati->set_comment(nextComment(rg)); }},
             /// Rewrite parts
-            {8,
+            {2,
              [&]
              {
                  OptionalPartitionExpr * ope = ati->mutable_rewrite_parts();
@@ -2423,7 +2423,7 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         {3, [&] { sc->set_drop_compiled_expression_cache(true); }},
         {3, [&] { sc->set_drop_query_cache(true); }},
         {3, [&] { sc->set_drop_format_schema_cache(rg.nextBool()); }},
-        {3, [&] { sc->set_flush_logs(true); }},
+        {1, [&] { sc->set_flush_logs(true); }},
         {3, [&] { sc->set_reload_config(true); }},
         {3, [&] { sc->set_reload_users(true); }},
         /// MergeTree operations
@@ -2534,8 +2534,8 @@ void StatementGenerator::generateNextSystemStatement(RandomGenerator & rg, const
         {3, [&] { sc->set_drop_text_index_caches(true); }},
         {3, [&] { sc->set_iceberg_metadata_cache(true); }},
         {3, [&] { sc->set_reset_ddl_worker(true); }},
-        {5 * static_cast<uint32_t>(!fc.failpoints.empty()), [&] { sc->set_wait_failpoint(rg.pickRandomly(fc.failpoints)); }},
-        {5 * static_cast<uint32_t>(!fc.failpoints.empty()), [&] { sc->set_notify_failpoint(rg.pickRandomly(fc.failpoints)); }},
+        {1 * static_cast<uint32_t>(!fc.failpoints.empty()), [&] { sc->set_wait_failpoint(rg.pickRandomly(fc.failpoints)); }},
+        {2 * static_cast<uint32_t>(!fc.failpoints.empty()), [&] { sc->set_notify_failpoint(rg.pickRandomly(fc.failpoints)); }},
         {3,
          [&]
          {
