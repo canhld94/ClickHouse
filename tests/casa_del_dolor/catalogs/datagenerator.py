@@ -1,8 +1,9 @@
 import random
 from decimal import Decimal, getcontext
 from datetime import datetime, timedelta, date
-import math
+import json
 import logging
+import math
 import string
 import threading
 import traceback
@@ -30,7 +31,7 @@ from pyspark.sql.types import (
 )
 
 try:
-    from pyspark.sql.types import VariantType
+    from pyspark.sql.types import VariantType, VariantVal
 
     HAS_VARIANT_TYPE = True
 except ImportError:
@@ -308,7 +309,8 @@ class LakeDataGenerator:
             inner_type = self.type_generator.generate_random_spark_type(
                 allow_variant=False, max_depth=random.randint(1, 5)
             )
-            return self._random_value_for_type(inner_type, null_rate)
+            val = self._random_value_for_type(inner_type, null_rate)
+            return None if val is None else VariantVal.from_json(json.dumps(val))
         if isinstance(dtype, ArrayType):
             # Arrays of variable length
             elem_null_rate = null_rate if dtype.containsNull else 0.0
