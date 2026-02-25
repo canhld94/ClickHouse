@@ -1,5 +1,6 @@
--- toDate(DateTime64/Date32) overflows for pre-epoch and post-2149 values,
--- which broke partition pruning and silently returned incomplete results
+-- toDate/toDateTime on DateTime64/Date32 overflows for pre-epoch, post-2149, and
+-- timezone-shifted boundary values, which broke partition pruning and silently
+-- returned incomplete results
 
 DROP TABLE IF EXISTS t_dt64_preepoch;
 
@@ -77,3 +78,37 @@ SELECT 'Date32 upper: data beyond Date max';
 SELECT id FROM t_date32_upper WHERE d >= '2149-06-06';
 
 DROP TABLE t_date32_upper;
+
+-- timezone-shifted overflow
+
+DROP TABLE IF EXISTS t_dt64_tz;
+
+CREATE TABLE t_dt64_tz (
+    id UInt8,
+    ts DateTime64(0, 'UTC')
+) ENGINE = MergeTree()
+PARTITION BY toDate(ts, 'America/Adak')
+ORDER BY id;
+
+INSERT INTO t_dt64_tz VALUES (1, '1970-01-02 00:00:00');
+
+SELECT 'DateTime64 timezone shift: pre-epoch after tz conversion';
+SELECT id FROM t_dt64_tz WHERE ts >= '1970-01-01 00:00:00';
+
+DROP TABLE t_dt64_tz;
+
+DROP TABLE IF EXISTS t_dt64_todatetime;
+
+CREATE TABLE t_dt64_todatetime (
+    id UInt8,
+    ts DateTime64
+) ENGINE = MergeTree()
+PARTITION BY toDateTime(ts)
+ORDER BY id;
+
+INSERT INTO t_dt64_todatetime VALUES (1, '2026-02-21 00:00:00');
+
+SELECT 'toDateTime(DateTime64): pre-epoch filter';
+SELECT groupArray(id) FROM t_dt64_todatetime WHERE ts >= '1969-12-31 12:00:00';
+
+DROP TABLE t_dt64_todatetime;

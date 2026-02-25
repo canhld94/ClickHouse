@@ -1090,7 +1090,12 @@ bool applyFunctionChainToColumn(
         result_column = castColumnAccurate({result_column, result_type, ""}, argument_type);
         auto func_result_type = func->getResultType();
 
-        /// Pre-epoch/post-2149 DateTime64/Date32 overflows unsigned Date/DateTime, producing wrong ranges
+        /// DateTime64/Date32 are signed, but Date and DateTime are unsigned, so converting
+        /// values outside the unsigned range wraps around via static_cast, this can produce wrong pruning
+        ///
+        /// we check the constant BEFORE execution to catch obvious out-of-range inputs,
+        /// and AFTER execution to catch boundary values where the next value would wrap
+        /// (toDate returns day 65535 — the next day overflows to 0)
         auto result_type_inner = removeLowCardinality(removeNullable(func_result_type));
         if (isDate(result_type_inner) || isDateTime(result_type_inner))
         {
@@ -1098,12 +1103,15 @@ bool applyFunctionChainToColumn(
             if (isDateTime64(arg_type_inner))
             {
                 Int64 value = (*result_column)[0].safeGet<DateTime64>().getValue();
+
+                /// negative timestamps after cast -> large unsigned values
                 if (value < 0)
                     return false;
 
                 UInt32 scale = assert_cast<const DataTypeDateTime64 &>(*arg_type_inner).getScale();
                 Int64 seconds = value / intExp10OfSize<Int64>(scale);
 
+                /// timestamps beyond the target range -> small values
                 if (isDate(result_type_inner) && seconds >= static_cast<Int64>(DATE_LUT_MAX_DAY_NUM) * 86400)
                     return false;
                 if (isDateTime(result_type_inner) && seconds >= DATE_LUT_MAX)
@@ -1111,10 +1119,14 @@ bool applyFunctionChainToColumn(
             }
             else if (isDate32(arg_type_inner))
             {
+                /// day numbers as Int32 -> Date only fits [0, 65535],
+                /// DateTime only fits seconds up to DATE_LUT_MAX
                 auto value = (*result_column)[0].safeGet<Int32>();
                 if (value < 0)
                     return false;
                 if (isDate(result_type_inner) && value > DATE_LUT_MAX_DAY_NUM)
+                    return false;
+                if (isDateTime(result_type_inner) && value * 86400LL >= DATE_LUT_MAX)
                     return false;
             }
         }
@@ -1123,7 +1135,8 @@ bool applyFunctionChainToColumn(
         result_column = result_column->convertToFullColumnIfLowCardinality();
         result_type = removeLowCardinality(func_result_type);
 
-        /// at the type boundary the next value wraps, so pruning is unsafe
+        /// the result itself sits at the type's max — next value wraps so any >= / <= condition on
+        /// it would give wrong partition ranges -> this catches timezone edge cases that pre-execution check might miss
         if (isDate(result_type_inner))
         {
             if (result_column->getUInt(0) >= DATE_LUT_MAX_DAY_NUM)
@@ -1135,7 +1148,7 @@ bool applyFunctionChainToColumn(
                 return false;
         }
 
-        /// Transforming nullable columns to the nested ones, in case no nulls found
+        // Transforming nullable columns to the nested ones, in case no nulls found
         if (result_column->isNullable())
         {
             const auto & result_column_nullable = assert_cast<const ColumnNullable &>(*result_column);
@@ -1157,14 +1170,14 @@ bool applyFunctionChainToColumn(
 
 bool KeyCondition::isFunctionReallyMonotonic(const IFunctionBase & func, const IDataType & arg_type) const
 {
-    const IDataType * type = &arg_type;
-    if (const auto * lowcard_type = typeid_cast<const DataTypeLowCardinality *>(type))
-        type = lowcard_type->getDictionaryType().get();
-    if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(type))
-        type = nullable_type->getNestedType().get();
-
     if (date_time_overflow_behavior_ignore && func.getName() == "toDateTime")
     {
+        const IDataType * type = &arg_type;
+        if (const auto * lowcard_type = typeid_cast<const DataTypeLowCardinality *>(type))
+            type = lowcard_type->getDictionaryType().get();
+        if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(type))
+            type = nullable_type->getNestedType().get();
+
         /// toDateTime(date) may overflow, breaking monotonicity.
         if (isDateOrDate32(type))
             return false;
