@@ -12,7 +12,6 @@ INSERT INTO t (x, y, v) SELECT number % 10, number % 100, number FROM numbers(10
 
 SET optimize_use_projections = 1;
 SET force_optimize_projection = 1;
-EXPLAIN SELECT x, SUM(v) FROM v GROUP BY x;
 SELECT x, SUM(v) FROM v GROUP BY x ORDER BY x;
 
 DROP TABLE t;
