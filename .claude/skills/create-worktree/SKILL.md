@@ -30,7 +30,9 @@ Let `DEST_BASE` be the chosen destination base directory (resolved to an absolut
 
 ### 3. Determine worktree path and branch state
 
-- Worktree path: `<DEST_BASE>/<branch-name>`
+Compute `DIR_NAME` by replacing all `/` characters in the branch name with `-`. For example, branch `release/25.12` → `DIR_NAME=release-25.12`. This ensures the worktree destination is a flat directory (no nested paths from slashes in branch names).
+
+- Worktree path: `<DEST_BASE>/<DIR_NAME>`
 - Check if the worktree directory already exists. If it does, report to the user and stop.
 - Check if the branch already exists:
   ```bash
@@ -42,17 +44,17 @@ Let `DEST_BASE` be the chosen destination base directory (resolved to an absolut
 
 **If branch exists locally:**
 ```bash
-git -C <MAIN_REPO> worktree add <DEST_BASE>/<branch-name> <branch-name>
+git -C <MAIN_REPO> worktree add <DEST_BASE>/<DIR_NAME> <branch-name>
 ```
 
 **If branch exists on remote only:**
 ```bash
-git -C <MAIN_REPO> worktree add <DEST_BASE>/<branch-name> -b <branch-name> origin/<branch-name>
+git -C <MAIN_REPO> worktree add <DEST_BASE>/<DIR_NAME> -b <branch-name> origin/<branch-name>
 ```
 
 **If branch does not exist (create new):**
 ```bash
-git -C <MAIN_REPO> worktree add -b <branch-name> <DEST_BASE>/<branch-name>
+git -C <MAIN_REPO> worktree add -b <branch-name> <DEST_BASE>/<DIR_NAME>
 ```
 
 ### 5. Set up submodules via hardlinks
@@ -61,18 +63,20 @@ This is the key optimization — instead of cloning each submodule from the netw
 
 Determine `GIT_DIR` — the `.git` directory of the main repo. For a regular repo this is `<MAIN_REPO>/.git`. For a worktree it may differ; use `git -C <MAIN_REPO> rev-parse --git-common-dir` to get the correct path.
 
+Since `DIR_NAME` has no `/` characters, the git worktree entry name in `$GIT_DIR/worktrees/` will be exactly `DIR_NAME`.
+
 ```bash
 GIT_DIR=$(git -C <MAIN_REPO> rev-parse --git-common-dir)
 
 # Hardlink-copy the modules directory from the main repo
 cp -al $GIT_DIR/modules \
-       $GIT_DIR/worktrees/<branch-name>/modules
+       $GIT_DIR/worktrees/<DIR_NAME>/modules
 
 # Fix the worktree pointer inside each submodule's config.
 # The hardlinked configs still reference the main repo's worktree path,
 # so update them to point to the new worktree's contrib directories.
-find $GIT_DIR/worktrees/<branch-name>/modules -name config -exec \
-    sed -i "s|worktree = .*/contrib/|worktree = <DEST_BASE>/<branch-name>/contrib/|" {} +
+find $GIT_DIR/worktrees/<DIR_NAME>/modules -name config -exec \
+    sed -i "s|worktree = .*/contrib/|worktree = <DEST_BASE>/<DIR_NAME>/contrib/|" {} +
 
 # Some submodules (e.g. contrib/boost) use the worktreeConfig extension,
 # storing the actual core.worktree in config.worktree instead of config.
@@ -80,18 +84,18 @@ find $GIT_DIR/worktrees/<branch-name>/modules -name config -exec \
 # "../../../../contrib/boost" that resolve correctly from the main repo's
 # modules dir but incorrectly from the worktree's modules dir.
 # Fix them to use absolute paths pointing to the new worktree.
-find $GIT_DIR/worktrees/<branch-name>/modules -name config.worktree -exec \
-    sed -i "s|worktree = .*/contrib/|worktree = <DEST_BASE>/<branch-name>/contrib/|" {} +
+find $GIT_DIR/worktrees/<DIR_NAME>/modules -name config.worktree -exec \
+    sed -i "s|worktree = .*/contrib/|worktree = <DEST_BASE>/<DIR_NAME>/contrib/|" {} +
 
 # Register submodules and write .git pointer files into contrib/ directories
 # (no network — uses hardlinked objects). This does NOT populate working trees.
-git -C <DEST_BASE>/<branch-name> submodule update
+git -C <DEST_BASE>/<DIR_NAME> submodule update
 
 # Populate submodule working trees. The previous command only writes .git pointer
 # files but leaves working trees empty because the hardlinked index files are empty.
 # We must explicitly reset each submodule's index from HEAD and checkout the files.
 # Some submodules may fail if their git data is incomplete — safe to skip.
-git -C <DEST_BASE>/<branch-name> submodule foreach \
+git -C <DEST_BASE>/<DIR_NAME> submodule foreach \
     '(git read-tree HEAD && git checkout -- .) 2>/dev/null || echo "SKIP: $name"'
 ```
 
@@ -99,18 +103,18 @@ git -C <DEST_BASE>/<branch-name> submodule foreach \
 
 If `git submodule update` fails with errors about uninitialized submodules, run:
 ```bash
-git -C <DEST_BASE>/<branch-name> submodule init
-git -C <DEST_BASE>/<branch-name> submodule update
+git -C <DEST_BASE>/<DIR_NAME> submodule init
+git -C <DEST_BASE>/<DIR_NAME> submodule update
 ```
 
 ### 6. Report results
 
 Report to the user:
 - Source repo: `<MAIN_REPO>`
-- Worktree path: `<DEST_BASE>/<branch-name>`
+- Worktree path: `<DEST_BASE>/<DIR_NAME>`
 - Branch: `<branch-name>` (newly created or existing)
 - Submodules: hardlinked from main repo (independent copies, no network cloning)
-- Suggest: `cd <DEST_BASE>/<branch-name>`
+- Suggest: `cd <DEST_BASE>/<DIR_NAME>`
 
 ## Examples
 
@@ -123,7 +127,7 @@ Report to the user:
 - The main repo must have submodules already cloned (`git submodule update --init` must have been run in the main repo at least once).
 - To remove a worktree later:
   ```bash
-  rm -rf <DEST_BASE>/<branch-name>
+  rm -rf <DEST_BASE>/<DIR_NAME>
   git -C <MAIN_REPO> worktree prune
   ```
 - Build directories are NOT shared — you'll need to set up CMake/build separately in the new worktree.
