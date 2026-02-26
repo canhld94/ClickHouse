@@ -1417,6 +1417,15 @@ size_t CachedOnDiskReadBufferFromFile::readBigAt(
     ReadFromFileSegmentStatePtr current_state;
     auto object_size = const_cast<CachedOnDiskReadBufferFromFile &>(*this).getFileSize();
 
+    SCOPE_EXIT({
+        if (current_info.file_segments->empty())
+            return;
+
+        auto & file_segment = current_info.file_segments->front();
+        if (file_segment.isDownloader())
+            file_segment.completePartAndResetDownloader();
+    });
+
     while (!cancelled && read_bytes < n)
     {
         if (current_info.file_segments->empty())
@@ -1460,11 +1469,6 @@ size_t CachedOnDiskReadBufferFromFile::readBigAt(
                 object_size,
                 log);
         }
-
-        SCOPE_EXIT({
-            if (file_segment.isDownloader())
-                file_segment.completePartAndResetDownloader();
-        });
 
         [[maybe_unused]] size_t remaining_size_in_file_segment = file_segment.range().right - offset + 1;
         current_state->buf->set(to + read_bytes, n - read_bytes);
