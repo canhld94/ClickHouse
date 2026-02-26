@@ -730,9 +730,6 @@ void IMergeTreeDataPart::loadIndexMarksToCache(MarkCache * index_mark_cache) con
         if (!index_format)
             continue;
 
-        size_t marks_count = index_granularity->getMarksCountWithoutFinal();
-        size_t index_marks_count = (marks_count + index_description.granularity - 1) / index_description.granularity;
-
         for (const auto & substream : index_format.substreams)
         {
             auto stream_name = getStreamNameOrHash(index_name + substream.suffix, substream.extension, checksums);
@@ -743,7 +740,7 @@ void IMergeTreeDataPart::loadIndexMarksToCache(MarkCache * index_mark_cache) con
                 info_for_read,
                 index_mark_cache,
                 index_granularity_info.getMarksFilePath(*stream_name),
-                index_marks_count,
+                index_granularity->getMarksCountForSkipIndex(index_description.granularity),
                 index_granularity_info,
                 /*save_marks_in_cache=*/ true,
                 read_settings,
