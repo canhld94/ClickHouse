@@ -24,13 +24,13 @@ Create a new git worktree for ClickHouse development with submodules hardlinked 
 ### 2. Validate inputs
 
 - Ensure `$0` (branch name) is provided. If not, use `AskUserQuestion` to ask the user for a branch name.
-- Use `AskUserQuestion` to ask the user for the **destination base directory** (the parent directory where the worktree will be created). Suggest `<MAIN_REPO>/../CHWorktree` as the default.
+- Use `AskUserQuestion` to ask the user for the **worktree destination path**. Suggest `<MAIN_REPO>/../<MAIN_REPO_NAME>-<branch-name>` as the default — this places the worktree as a sibling of the main repo directory, named after both the repo and the branch (e.g. `../ClickHouse-my-feature`). The user may enter a different path if preferred.
 
-Let `DEST_BASE` be the chosen destination base directory (resolved to an absolute path).
+Let `WORKTREE_PATH` be the chosen path (resolved to an absolute path).
 
 ### 3. Determine worktree path and branch state
 
-- Worktree path: `<DEST_BASE>/<branch-name>`
+- Worktree path: `<WORKTREE_PATH>` (from step 2)
 - Check if the worktree directory already exists. If it does, report to the user and stop.
 - Check if the branch already exists:
   ```bash
@@ -42,17 +42,17 @@ Let `DEST_BASE` be the chosen destination base directory (resolved to an absolut
 
 **If branch exists locally:**
 ```bash
-git -C <MAIN_REPO> worktree add <DEST_BASE>/<branch-name> <branch-name>
+git -C <MAIN_REPO> worktree add <WORKTREE_PATH> <branch-name>
 ```
 
 **If branch exists on remote only:**
 ```bash
-git -C <MAIN_REPO> worktree add <DEST_BASE>/<branch-name> -b <branch-name> origin/<branch-name>
+git -C <MAIN_REPO> worktree add <WORKTREE_PATH> -b <branch-name> origin/<branch-name>
 ```
 
 **If branch does not exist (create new):**
 ```bash
-git -C <MAIN_REPO> worktree add -b <branch-name> <DEST_BASE>/<branch-name>
+git -C <MAIN_REPO> worktree add -b <branch-name> <WORKTREE_PATH>
 ```
 
 ### 5. Set up submodules via hardlinks
@@ -72,7 +72,7 @@ cp -al $GIT_DIR/modules \
 # The hardlinked configs still reference the main repo's worktree path,
 # so update them to point to the new worktree's contrib directories.
 find $GIT_DIR/worktrees/<branch-name>/modules -name config -exec \
-    sed -i "s|worktree = .*/contrib/|worktree = <DEST_BASE>/<branch-name>/contrib/|" {} +
+    sed -i "s|worktree = .*/contrib/|worktree = <WORKTREE_PATH>/contrib/|" {} +
 
 # Some submodules (e.g. contrib/boost) use the worktreeConfig extension,
 # storing the actual core.worktree in config.worktree instead of config.
@@ -81,17 +81,17 @@ find $GIT_DIR/worktrees/<branch-name>/modules -name config -exec \
 # modules dir but incorrectly from the worktree's modules dir.
 # Fix them to use absolute paths pointing to the new worktree.
 find $GIT_DIR/worktrees/<branch-name>/modules -name config.worktree -exec \
-    sed -i "s|worktree = .*/contrib/|worktree = <DEST_BASE>/<branch-name>/contrib/|" {} +
+    sed -i "s|worktree = .*/contrib/|worktree = <WORKTREE_PATH>/contrib/|" {} +
 
 # Register submodules and write .git pointer files into contrib/ directories
 # (no network — uses hardlinked objects). This does NOT populate working trees.
-git -C <DEST_BASE>/<branch-name> submodule update
+git -C <WORKTREE_PATH> submodule update
 
 # Populate submodule working trees. The previous command only writes .git pointer
 # files but leaves working trees empty because the hardlinked index files are empty.
 # We must explicitly reset each submodule's index from HEAD and checkout the files.
 # Some submodules may fail if their git data is incomplete — safe to skip.
-git -C <DEST_BASE>/<branch-name> submodule foreach \
+git -C <WORKTREE_PATH> submodule foreach \
     '(git read-tree HEAD && git checkout -- .) 2>/dev/null || echo "SKIP: $name"'
 ```
 
@@ -99,18 +99,18 @@ git -C <DEST_BASE>/<branch-name> submodule foreach \
 
 If `git submodule update` fails with errors about uninitialized submodules, run:
 ```bash
-git -C <DEST_BASE>/<branch-name> submodule init
-git -C <DEST_BASE>/<branch-name> submodule update
+git -C <WORKTREE_PATH> submodule init
+git -C <WORKTREE_PATH> submodule update
 ```
 
 ### 6. Report results
 
 Report to the user:
 - Source repo: `<MAIN_REPO>`
-- Worktree path: `<DEST_BASE>/<branch-name>`
+- Worktree path: `<WORKTREE_PATH>`
 - Branch: `<branch-name>` (newly created or existing)
 - Submodules: hardlinked from main repo (independent copies, no network cloning)
-- Suggest: `cd <DEST_BASE>/<branch-name>`
+- Suggest: `cd <WORKTREE_PATH>`
 
 ## Examples
 
@@ -123,7 +123,7 @@ Report to the user:
 - The main repo must have submodules already cloned (`git submodule update --init` must have been run in the main repo at least once).
 - To remove a worktree later:
   ```bash
-  rm -rf <DEST_BASE>/<branch-name>
+  rm -rf <WORKTREE_PATH>
   git -C <MAIN_REPO> worktree prune
   ```
 - Build directories are NOT shared — you'll need to set up CMake/build separately in the new worktree.
