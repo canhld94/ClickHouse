@@ -1338,7 +1338,6 @@ void StatementGenerator::generateExpression(RandomGenerator & rg, Expr * expr)
                 }
                 this->ids.emplace_back(static_cast<uint32_t>(WINcume_dist));
                 this->ids.emplace_back(static_cast<uint32_t>(WINdense_rank));
-                this->ids.emplace_back(static_cast<uint32_t>(WINnth_value));
                 this->ids.emplace_back(static_cast<uint32_t>(WINpercent_rank));
                 this->ids.emplace_back(static_cast<uint32_t>(WINrank));
                 this->ids.emplace_back(static_cast<uint32_t>(WINrow_number));
