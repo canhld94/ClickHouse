@@ -32,29 +32,29 @@ StatementGenerator::StatementGenerator(
           rg.nextInFullRange(),
           {{
               {0.05, 0.20}, /// CreateTable
-              {0.05, 0.10}, /// CreateView
-              {0.01, 0.02}, /// Drop
-              {0.10, 0.25}, /// Insert
-              {0.01, 0.04}, /// LightDelete
-              {0.01, 0.02}, /// Truncate
-              {0.01, 0.03}, /// OptimizeTable
-              {0.01, 0.02}, /// CheckTable
-              {0.01, 0.01}, /// DescTable
-              {0.01, 0.01}, /// Exchange
-              {0.03, 0.29}, /// Alter
+              {0.05, 0.25}, /// CreateView
+              {0.01, 0.05}, /// Drop
+              {0.10, 0.30}, /// Insert
+              {0.01, 0.08}, /// LightDelete
+              {0.01, 0.03}, /// Truncate
+              {0.01, 0.08}, /// OptimizeTable
+              {0.01, 0.05}, /// CheckTable
+              {0.01, 0.03}, /// DescTable
+              {0.01, 0.10}, /// Exchange
+              {0.03, 0.30}, /// Alter
               {0.06, 0.25}, /// SetValues
-              {0.03, 0.08}, /// Attach
-              {0.01, 0.05}, /// Detach
-              {0.02, 0.06}, /// CreateDatabase
-              {0.02, 0.05}, /// CreateFunction
+              {0.03, 0.10}, /// Attach
+              {0.01, 0.06}, /// Detach
+              {0.02, 0.08}, /// CreateDatabase
+              {0.02, 0.08}, /// CreateFunction
               {0.05, 0.20}, /// SystemStmt
-              {0.01, 0.01}, /// BackupOrRestore
-              {0.05, 0.10}, /// CreateDictionary
-              {0.01, 0.01}, /// Rename
-              {0.01, 0.06}, /// LightUpdate
+              {0.01, 0.15}, /// BackupOrRestore
+              {0.05, 0.15}, /// CreateDictionary
+              {0.01, 0.10}, /// Rename
+              {0.01, 0.10}, /// LightUpdate
               {0.30, 0.90}, /// SelectQuery
-              {0.01, 0.03}, /// Kill
-              {0.01, 0.01} /// ShowStatement
+              {0.01, 0.10}, /// Kill
+              {0.01, 0.08} /// ShowStatement
           }}))
     , litGen(ProbabilityGenerator(
           static_cast<ProbabilityStrategy>(rg.randomInt<uint32_t>(0, 2)),
@@ -76,7 +76,7 @@ StatementGenerator::StatementGenerator(
               {0.01, 0.30}, /// LitStr
               {0.01, 0.25}, /// LitSpecial
               {0.01, 0.10}, /// LitJSON
-              {0.01, 0.05}, /// LitNULLVal
+              {0.01, 0.15}, /// LitNULLVal
               {0.01, 0.10} /// LitFraction
           }}))
     , expGen(ProbabilityGenerator(
@@ -97,12 +97,12 @@ StatementGenerator::StatementGenerator(
               {0.01, 0.30}, /// ArrayTupleExpr
               {0.01, 0.60}, /// FuncExpr
               {0.01, 0.25}, /// WindowFuncExpr
-              {0.01, 0.02}, /// TableStarExpr
+              {0.01, 0.10}, /// TableStarExpr
               {0.01, 0.05}, /// LambdaExpr
               {0.01, 0.05}, /// ProjectionExpr
-              {0.01, 0.05}, /// DictExpr
-              {0.01, 0.05}, /// JoinExpr
-              {0.01, 0.02} /// StarExpr
+              {0.01, 0.15}, /// DictExpr
+              {0.01, 0.15}, /// JoinExpr
+              {0.01, 0.15} /// StarExpr
           }}))
     , predGen(ProbabilityGenerator(
           static_cast<ProbabilityStrategy>(rg.randomInt<uint32_t>(0, 2)),
