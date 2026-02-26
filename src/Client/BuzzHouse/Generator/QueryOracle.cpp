@@ -726,11 +726,6 @@ void QueryOracle::generateOracleSelectQuery(RandomGenerator & rg, const PeerQuer
         const auto err = std::filesystem::remove(qcfile);
         UNUSED(err);
         ff->set_path(qsfile.generic_string());
-        if (peer_query == PeerQuery::ClickHouseOnly && outf == OutFormat::OUT_Parquet)
-        {
-            /// ClickHouse prints server version on Parquet file, making checksum incompatible between versions
-            outf = OutFormat::OUT_CSV;
-        }
         ff->set_outformat(outf);
         ff->set_fname(FileFunc_FName::FileFunc_FName_file);
         sel = query = sparen->mutable_select();

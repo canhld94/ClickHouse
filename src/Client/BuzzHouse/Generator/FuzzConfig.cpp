@@ -130,8 +130,8 @@ static PerformanceMetric
 loadPerformanceMetric(const JSONParserImpl::Element & jobj, const uint32_t default_threshold, const uint32_t default_minimum)
 {
     bool enabled = false;
-    uint32_t threshold = default_minimum;
-    uint32_t minimum = default_threshold;
+    uint32_t threshold = default_threshold;
+    uint32_t minimum = default_minimum;
 
     const SettingEntries metricEntries
         = {{"enabled", [&](const JSONObjectType & value) { enabled = value.getBool(); }},
@@ -330,7 +330,7 @@ FuzzConfig::FuzzConfig(DB::ClientBase * c, const String & path)
          [&](const JSONObjectType & value)
          {
              server_file_path = std::filesystem::path(String(value.getString()));
-             fuzz_server_out = client_file_path / "fuzz.data";
+             fuzz_server_out = server_file_path / "fuzz.data";
          }},
         {"lakes_path", [&](const JSONObjectType & value) { lakes_path = std::filesystem::path(String(value.getString())); }},
         {"log_path", [&](const JSONObjectType & value) { log_path = std::filesystem::path(String(value.getString())); }},
@@ -594,6 +594,12 @@ void FuzzConfig::loadSystemTables(std::vector<SystemTable> & tables)
             }
             next_cols.emplace_back(ncol);
             buf.resize(0);
+        }
+        /// Emit the last table group that was never flushed by the loop
+        if (!next_cols.empty() && current_table != "stack_trace"
+            && (allow_infinite_tables || (!current_table.starts_with("numbers") && !current_table.starts_with("zeros"))))
+        {
+            tables.emplace_back(SystemTable(current_schema, current_table, next_cols));
         }
     }
 }
