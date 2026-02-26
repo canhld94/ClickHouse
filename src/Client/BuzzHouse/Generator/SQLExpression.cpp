@@ -57,7 +57,7 @@ void StatementGenerator::addColNestedAccess(RandomGenerator & rg, ExprColumn * e
 
     if (!has_nested)
     {
-        ColumnPath & cp = const_cast<ColumnPath &>(expr->path());
+        ColumnPath & cp = *expr->mutable_path();
 
         this->depth++;
         if (rg.nextMediumNumber() < nested_prob)

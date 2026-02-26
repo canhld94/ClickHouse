@@ -58,18 +58,18 @@ bool ClickHouseIntegratedDatabase::dropPeerTableOnRemote(const SQLTable & t)
 
 void ClickHouseIntegratedDatabase::swapTableDefinitions(RandomGenerator & rg, CreateTable & newt)
 {
-    TableEngine & te = const_cast<TableEngine &>(newt.engine());
+    TableEngine & te = *newt.mutable_engine();
     const auto & teng = te.engine();
 
     if (te.has_setting_values() && rg.nextSmallNumber() < 10)
     {
         /// Swap table settings
         const auto & allSettings = allTableSettings.at(teng);
-        const auto & svs = te.setting_values();
+        auto * svs = te.mutable_setting_values();
 
-        for (int i = 0; i < svs.other_values_size() + 1; i++)
+        for (int i = 0; i < svs->other_values_size() + 1; i++)
         {
-            SetValue & sv = const_cast<SetValue &>(i == 0 ? svs.set_value() : svs.other_values(i - 1));
+            SetValue & sv = *(i == 0 ? svs->mutable_set_value() : svs->mutable_other_values(i - 1));
 
             if (allSettings.contains(sv.property()))
             {
@@ -125,7 +125,7 @@ void ClickHouseIntegratedDatabase::swapTableDefinitions(RandomGenerator & rg, Cr
             {
                 if (rg.nextSmallNumber() < 9)
                 {
-                    TableKeyExpr & tke = const_cast<TableKeyExpr &>(te.order().exprs(i));
+                    TableKeyExpr & tke = *te.mutable_order()->mutable_exprs(i);
 
                     tke.set_asc_desc((!tke.has_asc_desc() || tke.asc_desc() == AscDesc::ASC) ? AscDesc::DESC : AscDesc::ASC);
                 }
@@ -143,16 +143,16 @@ void ClickHouseIntegratedDatabase::swapTableDefinitions(RandomGenerator & rg, Cr
     if (newt.has_table_def())
     {
         std::vector<TableDefItem> items_to_keep;
-        TableDef & def = const_cast<TableDef &>(newt.table_def());
+        TableDef & def = *newt.mutable_table_def();
 
         for (int i = 0; i < def.table_defs_size(); i++)
         {
-            const auto & next = def.table_defs(i);
+            auto & next = *def.mutable_table_defs(i);
 
             if (next.has_col_def())
             {
-                ColumnDef & cdef = const_cast<ColumnDef &>(next.col_def());
-                TopTypeName & ttn = const_cast<TopTypeName &>(cdef.type().type());
+                ColumnDef & cdef = *next.mutable_col_def();
+                TopTypeName & ttn = *cdef.mutable_type()->mutable_type();
 
                 if (cdef.has_codecs() && rg.nextBool())
                 {
@@ -183,11 +183,11 @@ void ClickHouseIntegratedDatabase::swapTableDefinitions(RandomGenerator & rg, Cr
                     else
                     {
                         const auto & allSettings = allTableSettings.at(teng);
-                        const auto & svs = cdef.setting_values();
+                        auto * svs = cdef.mutable_setting_values();
 
-                        for (int j = 0; j < svs.other_values_size() + 1; j++)
+                        for (int j = 0; j < svs->other_values_size() + 1; j++)
                         {
-                            SetValue & sv = const_cast<SetValue &>(j == 0 ? svs.set_value() : svs.other_values(j - 1));
+                            SetValue & sv = *(j == 0 ? svs->mutable_set_value() : svs->mutable_other_values(j - 1));
 
                             if (allSettings.contains(sv.property()))
                             {
@@ -261,7 +261,7 @@ bool ClickHouseIntegratedDatabase::performCreatePeerTable(
             newt.CopyFrom(*ct);
 
             chassert(newt.has_est() && !newt.has_table_as());
-            ExprSchemaTable & est = const_cast<ExprSchemaTable &>(newt.est());
+            ExprSchemaTable & est = *newt.mutable_est();
             if (t.db)
             {
                 t.db->setName(est.mutable_database());

@@ -997,8 +997,7 @@ bool StatementGenerator::tableOrFunctionRef(
         const bool isCluster = (cluster_func && (nopt < cluster_func + 1));
 
         setTableFunction(rg, isCluster ? TableFunctionUsage::ClusterCall : TableFunctionUsage::RemoteCall, t, tof->mutable_tfunc());
-        tof = isCluster ? const_cast<ClusterFunc &>(tof->tfunc().cluster()).mutable_tof()
-                        : const_cast<RemoteFunc &>(tof->tfunc().remote()).mutable_tof();
+        tof = isCluster ? tof->mutable_tfunc()->mutable_cluster()->mutable_tof() : tof->mutable_tfunc()->mutable_remote()->mutable_tof();
         cluster_or_remote = true;
     }
 
@@ -1447,7 +1446,7 @@ void StatementGenerator::generateNextUpdate(RandomGenerator & rg, const SQLTable
         for (uint32_t j = 0; j < nupdates; j++)
         {
             const ColumnPathChain & entry = this->entries[j];
-            UpdateSet & uset = const_cast<UpdateSet &>(j == 0 ? upt->update() : upt->other_updates(j - 1));
+            UpdateSet & uset = *(j == 0 ? upt->mutable_update() : upt->mutable_other_updates(j - 1));
             Expr * expr = uset.mutable_expr();
 
             if (rg.nextBool())
@@ -1799,7 +1798,7 @@ std::optional<String> StatementGenerator::alterSingleTable(
                  this->entries.clear();
                  rcol->mutable_new_name()->CopyFrom(rcol->old_name());
                  const uint32_t size = rcol->new_name().sub_cols_size();
-                 Column & ncol = const_cast<Column &>(size ? rcol->new_name().sub_cols(size - 1) : rcol->new_name().col());
+                 Column & ncol = *(size ? rcol->mutable_new_name()->mutable_sub_cols(size - 1) : rcol->mutable_new_name()->mutable_col());
                  ncol.set_column("c" + std::to_string(ncname));
              }},
             /// Clear column
@@ -3072,7 +3071,7 @@ void StatementGenerator::generateNextRename(RandomGenerator & rg, Rename * ren)
     if (newn->has_est() && rg.nextBool())
     {
         /// Change database
-        Database * db = const_cast<ExprSchemaTable &>(newn->est()).mutable_database();
+        Database * db = newn->mutable_est()->mutable_database();
 
         if (!has_database || rg.nextSmallNumber() < 4)
         {
