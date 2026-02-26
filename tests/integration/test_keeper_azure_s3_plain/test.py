@@ -29,9 +29,8 @@ def generate_config(azurite_port):
                 <path>/var/lib/clickhouse/coordination/logs/</path>
             </log_local>
             <log_azure_plain>
-                <type>object_storage</type>
+                <type>s3_plain</type>
                 <object_storage_type>azure_blob_storage</object_storage_type>
-                <metadata_type>plain</metadata_type>
                 <endpoint>http://azurite1:{azurite_port}/devstoreaccount1/cont</endpoint>
                 <endpoint_subpath>logs</endpoint_subpath>
                 <account_name>devstoreaccount1</account_name>

@@ -206,8 +206,6 @@ bool diskValidator(const Poco::Util::AbstractConfiguration & config, const std::
         "s3"sv,
         "s3_plain"sv,
         "local"sv,
-        "object_storage"sv,
-        "azure_blob_storage"sv,
     };
 
     if (std::all_of(

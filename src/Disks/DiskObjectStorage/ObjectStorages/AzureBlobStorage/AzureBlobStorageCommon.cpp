@@ -18,7 +18,6 @@
 #include <Core/Settings.h>
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Interpreters/Context.h>
-#include <filesystem>
 #include <Common/logger_useful.h>
 #include <Common/Throttler.h>
 
