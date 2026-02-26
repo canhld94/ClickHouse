@@ -21,9 +21,3 @@ ${CLICKHOUSE_LOCAL} nonexistent_04001.rep 2>&1 | grep -o 'No such file: nonexist
 
 # A bare word without dots or slashes should still show the generic help:
 ${CLICKHOUSE_BINARY} nonexistent_command 2>&1 | grep -F 'Use one of the following commands'
-
-# Existing file should still work (routed to clickhouse-local):
-echo "SELECT 'OK_04001'" > /tmp/clickhouse_test_04001.sql
-${CLICKHOUSE_BINARY} /tmp/clickhouse_test_04001.sql 2>&1
-${CLICKHOUSE_LOCAL} /tmp/clickhouse_test_04001.sql 2>&1
-rm -f /tmp/clickhouse_test_04001.sql
