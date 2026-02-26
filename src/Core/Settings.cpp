@@ -1572,6 +1572,14 @@ Possible values:
 - 0 — Disabled.
 - 1 — Enabled.
 )", 0) \
+    DECLARE_WITH_ALIAS(Bool, use_partition_pruning, true, R"(
+Use partition key to prune partitions during query execution for MergeTree tables.
+
+Possible values:
+
+- 0 — Disabled.
+- 1 — Enabled.
+)", 0, use_partition_key) \
     DECLARE(Bool, force_primary_key, false, R"(
 Disables query execution if indexing by the primary key is not possible.
 
@@ -3124,6 +3132,21 @@ but the query will fail.
     DECLARE(UInt64, max_expanded_ast_elements, 500000, R"(
 Maximum size of query syntax tree in number of nodes after expansion of aliases and the asterisk.
 )", 0) \
+    \
+    DECLARE(Float, ast_fuzzer_runs, 0, R"(
+Enables the server-side AST fuzzer that runs randomized queries after each normal query, discarding their results.
+- 0: disabled (default).
+- A value between 0 and 1 (exclusive): probability of running a single fuzzed query.
+- A value >= 1: the number of fuzzed queries to run per normal query.
+
+The fuzzer accumulates AST fragments from all queries across all sessions, producing increasingly interesting mutations over time. Fuzzed queries that fail are silently discarded; results are never returned to the client.
+)", EXPERIMENTAL) \
+    DECLARE(Bool, ast_fuzzer_any_query, false, R"(
+When false (default), the server-side AST fuzzer (controlled by `ast_fuzzer_runs`) only fuzzes read-only queries (SELECT, EXPLAIN, SHOW, DESCRIBE, EXISTS). When true, all query types including DDL and INSERT are fuzzed.
+)", EXPERIMENTAL) \
+    DECLARE(Bool, allow_fuzz_query_functions, false, R"(
+Enables the `fuzzQuery` function that applies random AST mutations to a query string.
+)", EXPERIMENTAL) \
     \
     DECLARE(UInt64, readonly, 0, R"(
 0 - no read-only restrictions. 1 - only read requests, as well as changing explicitly allowed settings. 2 - only read requests, as well as changing settings, except for the 'readonly' setting.
@@ -5152,6 +5175,10 @@ The probability of a fault injection during table creation after creating metada
     DECLARE(Bool, delta_lake_log_metadata, false, R"(
 Enables logging delta lake metadata files into system table.
 )", 0) \
+    DECLARE(Bool, delta_lake_reload_schema_for_consistency, false, R"(
+If enabled, schema is reloaded from the DeltaLake metadata before each query execution to ensure
+consistency between the schema used during query analysis and the schema used during execution.
+)", 0) \
     DECLARE(IcebergMetadataLogLevel, iceberg_metadata_log_level, IcebergMetadataLogLevel::None, R"(
 Controls the level of metadata logging for Iceberg tables to system.iceberg_metadata_log.
 Usually this setting can be modified for debugging purposes.
@@ -6147,6 +6174,10 @@ Maximum memory usage for prefetches.
 Maximum number of prefetches. Zero means unlimited. A setting `filesystem_prefetches_max_memory_usage` is more recommended if you want to limit the number of prefetches
 )", 0) \
     \
+    DECLARE(Bool, allow_calculating_subcolumns_sizes_for_merge_tree_reading, true, R"(
+When enabled, ClickHouse will calculate the size of files required for each subcolumn reading for better task and block sizes calculation.
+)", 0) \
+\
     DECLARE(UInt64, use_structure_from_insertion_table_in_table_functions, 2, R"(
 Use structure from insertion table instead of schema inference from data. Possible values: 0 - disabled, 1 - enabled, 2 - auto
 )", 0) \
