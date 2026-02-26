@@ -164,13 +164,7 @@ BlobContainerPropertiesRespones ContainerClientWrapper::GetProperties() const
 ListBlobsPagedResponse ContainerClientWrapper::ListBlobs(const ListBlobsOptions & options) const
 {
     auto new_options = options;
-
-    /// The listing prefix is relative to blob_prefix, so strip any leading '/'
-    /// to avoid producing paths like "logs//" when the caller passes "/".
-    String listing_prefix = options.Prefix.ValueOr("");
-    if (listing_prefix.starts_with('/'))
-        listing_prefix = listing_prefix.substr(1);
-    new_options.Prefix = blob_prefix + listing_prefix;
+    new_options.Prefix = blob_prefix + options.Prefix.ValueOr("");
 
     auto response = client.ListBlobs(new_options);
 
