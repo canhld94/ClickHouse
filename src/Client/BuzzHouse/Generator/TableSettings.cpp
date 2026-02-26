@@ -222,12 +222,12 @@ static std::unordered_map<String, CHSetting> mergeTreeTableSettings = {
          false)},
     {"max_replicated_merges_in_queue",
      CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 1, 100)); },
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 100)); },
          {"0", "1", "2", "8", "10", "100"},
          false)},
     {"max_replicated_mutations_in_queue",
      CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 1, 100)); },
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.2, 0.2, 0, 100)); },
          {"0", "1", "2", "8", "10", "100"},
          false)},
     {"max_suspicious_broken_parts", highRangeSetting},
@@ -800,8 +800,8 @@ void loadFuzzerTableSettings(const FuzzConfig & fc)
            {"max_processed_rows_before_commit", CHSetting(rowsRange, {}, false)},
            {"metadata_cache_size_bytes", CHSetting(bytesRange, {}, false)},
            {"metadata_cache_size_elements", CHSetting(rowsRange, {}, false)},
-           {"min_insert_block_size_rows_for_materialized_views", CHSetting(bytesRange, {}, false)},
-           {"min_insert_block_size_bytes_for_materialized_views", CHSetting(rowsRange, {}, false)},
+           {"min_insert_block_size_rows_for_materialized_views", CHSetting(rowsRange, {}, false)},
+           {"min_insert_block_size_bytes_for_materialized_views", CHSetting(bytesRange, {}, false)},
            {"parallel_inserts", trueOrFalseSetting},
            {"partitioning_mode",
             CHSetting(

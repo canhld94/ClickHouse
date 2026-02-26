@@ -99,10 +99,16 @@ String generateNextCodecString(RandomGenerator & rg)
             res += std::to_string(rg.randomInt<uint32_t>(1, 22));
             res += ")";
         }
-        else if ((choices[i] == "Delta" || choices[i] == "DoubleDelta" || choices[i] == "Gorilla") && rg.nextBool())
+        else if ((choices[i] == "Delta" || choices[i] == "DoubleDelta") && rg.nextBool())
         {
             res += "(";
-            res += std::to_string(rg.randomInt<uint32_t>(0, 8));
+            res += std::to_string(UINT32_C(1) << rg.randomInt<uint32_t>(0, 3));
+            res += ")";
+        }
+        else if (choices[i] == "Gorilla" && rg.nextBool())
+        {
+            res += "(";
+            res += std::to_string(rg.nextBool() ? 4 : 8);
             res += ")";
         }
         else if (choices[i] == "FPC" && rg.nextBool())
@@ -967,7 +973,6 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"output_format_arrow_string_as_string", trueOrFalseSettingNoOracle},
     {"output_format_arrow_use_64_bit_indexes_for_dictionary", trueOrFalseSettingNoOracle},
     {"output_format_arrow_use_signed_indexes_for_dictionary", trueOrFalseSettingNoOracle},
-    {"output_format_arrow_date_as_uint16", trueOrFalseSettingNoOracle},
     {"output_format_avro_codec",
      CHSetting(
          [](RandomGenerator & rg, FuzzConfig &)
@@ -1319,9 +1324,7 @@ static std::unordered_map<String, CHSetting> serverSettings2 = {
     {"write_through_distributed_cache", trueOrFalseSettingNoOracle},
     {"zstd_window_log_max",
      CHSetting(
-         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.2, -100, 100)); },
-         {},
-         false)}};
+         [](RandomGenerator & rg, FuzzConfig &) { return std::to_string(rg.thresholdGenerator<uint64_t>(0.3, 0.2, 0, 31)); }, {}, false)}};
 
 std::unordered_map<String, CHSetting> queryOracleSettings;
 
