@@ -1822,21 +1822,16 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
         case IndexType::IDX_text: {
             String buf;
             bool has_paren = rg.nextSmallNumber() < 8;
-            static const std::vector<Tokenizer> & tokenizerVals
-                = {{"splitByNonAlpha", "SplitByNonAlpha"},
-                   {"splitByString", "SplitByString"},
-                   {"ngrams", "Ngrams"},
-                   {"array", "Array"},
-                   {"sparseGrams", "SparseGrams"}};
-            const Tokenizer & nt = rg.pickRandomly(fc.tokenizers.empty() ? tokenizerVals : fc.tokenizers);
+            static const DB::Strings & tokenizerVals = {"splitByNonAlpha", "splitByString", "ngrams", "array", "sparseGrams"};
+            const auto & nt = rg.pickRandomly(fc.tokenizers.empty() ? tokenizerVals : fc.tokenizers);
 
-            buf += fmt::format("tokenizer = {}", nt.name);
+            buf += fmt::format("tokenizer = {}", nt);
             buf += has_paren ? "(" : "";
-            if (has_paren && nt.type == "Ngrams" && rg.nextBool())
+            if (has_paren && (nt == "ngrams" || nt == "ngrambf_v1") && rg.nextBool())
             {
                 buf += std::to_string(rg.randomInt<uint32_t>(1, 8));
             }
-            else if (has_paren && nt.type == "SplitByString" && rg.nextBool())
+            else if (has_paren && nt == "splitByString" && rg.nextBool())
             {
                 String buf2;
                 DB::Strings separators
@@ -1857,7 +1852,7 @@ void StatementGenerator::addTableIndex(RandomGenerator & rg, SQLTable & t, const
                 buf2 += "]";
                 buf += buf2;
             }
-            else if (has_paren && nt.type == "SparseGrams")
+            else if (has_paren && (nt == "sparseGrams" || nt == "sparse_grams"))
             {
                 /// sparseGrams[(min_length[, max_length[, min_cutoff_length]])]
                 const uint32_t nextra = rg.randomInt<uint32_t>(0, 3);

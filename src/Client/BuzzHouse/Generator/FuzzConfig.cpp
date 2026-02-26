@@ -513,18 +513,7 @@ void FuzzConfig::loadServerSettings(std::vector<T> & out, const String & desc, c
         out.clear();
         while (std::getline(infile, buf) && !buf.empty())
         {
-            if constexpr (std::is_same_v<T, Tokenizer>)
-            {
-                const size_t pos = buf.find('\t');
-                const String nname = buf.substr(0, pos);
-                const String ntype = buf.substr(pos + 1);
-
-                out.emplace_back(Tokenizer(nname, ntype));
-            }
-            else
-            {
-                out.push_back(buf);
-            }
+            out.push_back(buf);
             buf.resize(0);
             found++;
         }
@@ -551,7 +540,7 @@ void FuzzConfig::loadServerConfigurations()
         "SELECT \"name\" FROM \"system\".\"fail_points\""
         " WHERE \"name\" NOT IN ('keeper_leader_sets_invalid_digest', 'terminate_with_exception', "
         "'terminate_with_std_exception', 'libcxx_hardening_out_of_bounds_assertion')");
-    loadServerSettings<Tokenizer>(this->tokenizers, "tokenizers", R"(SELECT "name", "type" FROM "system"."tokenizers")");
+    loadServerSettings<String>(this->tokenizers, "tokenizers", R"(SELECT "name" FROM "system"."tokenizers")");
 }
 
 String FuzzConfig::getConnectionHostAndPort(const bool secure) const

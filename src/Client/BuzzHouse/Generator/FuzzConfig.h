@@ -310,7 +310,7 @@ public:
     DB::Strings hot_settings;
     DB::Strings disallowed_settings;
     DB::Strings hot_table_settings;
-    std::vector<Tokenizer> tokenizers;
+    DB::Strings tokenizers;
 
     std::optional<ServerCredentials> clickhouse_server;
     std::optional<ServerCredentials> mysql_server;
