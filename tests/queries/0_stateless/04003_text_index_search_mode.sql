@@ -1,3 +1,5 @@
+-- Tags: no-parallel-replicas
+
 SET optimize_or_like_chain = 0;
 
 DROP TABLE IF EXISTS t_search_mode;
