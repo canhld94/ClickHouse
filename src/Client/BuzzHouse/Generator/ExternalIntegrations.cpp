@@ -410,9 +410,12 @@ int MySQLIntegration::performQuery(const String & query)
     {
         MYSQL_RES * result = mysql_store_result(mysql_connection.get());
 
-        while (mysql_fetch_row(result))
-            ;
-        mysql_free_result(result);
+        if (result)
+        {
+            while (mysql_fetch_row(result))
+                ;
+            mysql_free_result(result);
+        }
     }
     return 0;
 }
@@ -808,7 +811,7 @@ int SQLiteIntegration::performQuery(const String & query)
         return 1;
     }
     out_file << query << std::endl;
-    if ((res = sqlite3_exec(sqlite_connection.get(), query.c_str(), nullptr, nullptr, &err_msg) != SQLITE_OK))
+    if ((res = sqlite3_exec(sqlite_connection.get(), query.c_str(), nullptr, nullptr, &err_msg)) != SQLITE_OK)
     {
         LOG_ERROR(fc.log, "SQLite query: {} Error: {}", query, err_msg);
         sqlite3_free(err_msg);
@@ -1338,7 +1341,7 @@ void MongoDBIntegration::documentAppendAnyValue(
         dynamic_cast<IntType *>(tp) || dynamic_cast<FloatType *>(tp) || dynamic_cast<DateType *>(tp) || dynamic_cast<DateTimeType *>(tp)
         || dynamic_cast<DecimalType *>(tp) || dynamic_cast<StringType *>(tp) || dynamic_cast<const BoolType *>(tp)
         || dynamic_cast<EnumType *>(tp) || dynamic_cast<UUIDType *>(tp) || dynamic_cast<IPv4Type *>(tp) || dynamic_cast<IPv6Type *>(tp)
-        || dynamic_cast<JSONType *>(tp) || dynamic_cast<GeoType *>(tp))
+        || dynamic_cast<JSONType *>(tp) || dynamic_cast<GeoType *>(tp) || dynamic_cast<TimeType *>(tp))
     {
         documentAppendBottomType<bsoncxx::v_noabi::builder::stream::document>(rg, cname, document, tp);
     }
@@ -1394,7 +1397,7 @@ bool MongoDBIntegration::performTableIntegration(
             }
             for (const auto & entry : entries)
             {
-                if (miss_cols && rg.nextSmallNumber() < 4)
+                if (!miss_cols || rg.nextSmallNumber() >= 4)
                 {
                     /// Sometimes the column is missing
                     documentAppendAnyValue(rg, entry.columnPathRef(""), document, entry.getBottomType());
