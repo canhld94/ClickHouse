@@ -1711,7 +1711,7 @@ void loadFuzzerServerSettings(const FuzzConfig & fc)
         {{"bool_false_representation", CHSetting(nastyStrings, {}, false)},
          {"bool_true_representation", CHSetting(nastyStrings, {}, false)},
          {"format_binary_max_array_size", CHSetting(rowsRange, {}, false)},
-         {"format_binary_max_object_size,", CHSetting(bytesRange, {}, false)},
+         {"format_binary_max_object_size", CHSetting(bytesRange, {}, false)},
          {"format_binary_max_string_size", CHSetting(rowsRange, {}, false)},
          {"format_capn_proto_enum_comparising_mode",
           CHSetting(
