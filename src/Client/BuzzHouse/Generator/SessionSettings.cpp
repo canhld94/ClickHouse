@@ -332,6 +332,7 @@ std::unordered_map<String, CHSetting> performanceSettings
        {"use_join_disjunctions_push_down", trueOrFalseSetting},
        /// ClickHouse cloud setting
        {"use_page_cache_with_distributed_cache", trueOrFalseSetting},
+       {"use_partition_pruning", trueOrFalseSetting},
        {"use_primary_key", trueOrFalseSetting},
        {"use_query_condition_cache", trueOrFalseSetting},
        {"use_skip_indexes", trueOrFalseSetting},
