@@ -12,6 +12,7 @@ ENGINE = ReplicatedMergeTree('/clickhouse/tables/{database}/03985_prewarm_index_
 ORDER BY a SETTINGS prewarm_mark_cache = 1;
 
 SYSTEM DROP MARK CACHE;
+SYSTEM DROP INDEX MARK CACHE;
 
 SYSTEM STOP FETCHES t_prewarm_idx_cache_2;
 
@@ -21,6 +22,8 @@ SELECT count() FROM t_prewarm_idx_cache_1 WHERE b < 10000 AND NOT ignore(*) SETT
 
 -- Check that prewarm works on fetch.
 SYSTEM DROP MARK CACHE;
+SYSTEM DROP INDEX MARK CACHE;
+
 SYSTEM START FETCHES t_prewarm_idx_cache_2;
 SYSTEM SYNC REPLICA t_prewarm_idx_cache_2;
 SELECT count() FROM t_prewarm_idx_cache_2 WHERE b < 10000 AND NOT ignore(*) SETTINGS log_comment = 'prewarm on fetch';
@@ -36,6 +39,7 @@ SELECT count() FROM t_prewarm_idx_cache_2 WHERE b < 10000 AND NOT ignore(*) SETT
 
 -- Check that prewarm works on restart.
 SYSTEM DROP MARK CACHE;
+SYSTEM DROP INDEX MARK CACHE;
 
 DETACH TABLE t_prewarm_idx_cache_1;
 DETACH TABLE t_prewarm_idx_cache_2;
