@@ -78,7 +78,7 @@ static String numberColumn(RandomGenerator & rg, const bool can_negative, String
     if (iffunc)
     {
         buf += "if(";
-        buf += numberColumnEntry(rg, can_negative && rg.nextBool(), true);
+        buf += numberColumnEntry(rg, false, true);
         buf += ",";
     }
     buf += "CAST(";
