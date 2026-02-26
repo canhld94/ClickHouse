@@ -147,7 +147,7 @@
     </storage_configuration>
     <filesystem_caches>
         <cache_for_readbigat>
-            <path>/tmp/cache_for_readbigat/</path>
+            <path>./cache_for_readbigat/</path>
             <max_size>1Gi</max_size>
             <max_file_segment_size>1Mi</max_file_segment_size>
             <boundary_alignment>1Mi</boundary_alignment>
