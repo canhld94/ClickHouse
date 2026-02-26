@@ -24,9 +24,7 @@ Create a new git worktree for ClickHouse development with submodules hardlinked 
 ### 2. Validate inputs
 
 - Ensure `$0` (branch name) is provided. If not, use `AskUserQuestion` to ask the user for a branch name.
-- Use `AskUserQuestion` to ask the user for the **worktree destination path**. Suggest two options:
-  - `<MAIN_REPO>/../CHWorktree/<branch-name>` (default)
-  - `<MAIN_REPO>/../<MAIN_REPO_NAME>-<branch-name>` — sibling of the main repo directory, named after both the repo and the branch (e.g. `../ClickHouse-my-feature`)
+- Use `AskUserQuestion` to ask the user for the **worktree destination path**. Suggest `<MAIN_REPO>/../<MAIN_REPO_NAME>-<branch-name>` as the default — this places the worktree as a sibling of the main repo directory, named after both the repo and the branch (e.g. `../ClickHouse-my-feature`). The user may enter a different path if preferred.
 
 Let `WORKTREE_PATH` be the chosen path (resolved to an absolute path).
 
