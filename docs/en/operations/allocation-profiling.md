@@ -192,7 +192,7 @@ You can also fetch global and per-query heap profiles directly from the UI.
 
 To access it, open in your browser:
 
-```
+```text
 http://localhost:8123/jemalloc
 ```
 
