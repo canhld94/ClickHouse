@@ -1,12 +1,10 @@
 #include <Functions/Embedding/EmbeddingModelRegistry.h>
 
 #include <Columns/ColumnArray.h>
-#include <Columns/ColumnNullable.h>
 #include <Columns/ColumnString.h>
 #include <Columns/ColumnsNumber.h>
 #include <Core/Settings.h>
 #include <DataTypes/DataTypeArray.h>
-#include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Functions/FunctionFactory.h>
 #include <Functions/FunctionHelpers.h>
@@ -67,9 +65,13 @@ public:
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
                 "Function {} requires 1 or 2 arguments, got {}", getName(), arguments.size());
 
-        if (!isString(removeNullable(arguments[0].type)))
+        /// Nullable(String) would require returning Nullable(Array(Float32)), which ClickHouse
+        /// forbids. Force the caller to handle NULLs explicitly (coalesce(x, ''), IS NOT NULL, etc.)
+        /// rather than silently coerce NULL to an empty array and lose information.
+        if (!isString(arguments[0].type))
             throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
-                "Illegal type {} of first argument of function {}", arguments[0].type->getName(), getName());
+                "Illegal type {} of first argument of function {} (Nullable(String) is not supported; use coalesce())",
+                arguments[0].type->getName(), getName());
 
         if (arguments.size() == 2 && !isNativeInteger(arguments[1].type))
             throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT,
@@ -81,11 +83,7 @@ public:
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t) const override
     {
-        const auto * nullable_col = checkAndGetColumn<ColumnNullable>(arguments[0].column.get());
-        const NullMap * null_map = nullable_col ? &nullable_col->getNullMapData() : nullptr;
-        const auto * col_str = nullable_col
-            ? checkAndGetColumn<ColumnString>(&nullable_col->getNestedColumn())
-            : checkAndGetColumn<ColumnString>(arguments[0].column.get());
+        const auto * col_str = checkAndGetColumn<ColumnString>(arguments[0].column.get());
         if (!col_str)
             throw Exception(ErrorCodes::ILLEGAL_COLUMN,
                 "Illegal column {} of first argument of function {}", arguments[0].column->getName(), getName());
@@ -97,17 +95,10 @@ public:
         dims = model->validateDims(dims);
 
         const size_t rows = col_str->size();
-
-        // Collect non-null texts
         std::vector<std::string_view> texts;
-        std::vector<size_t> row_to_batch;
         texts.reserve(rows);
-        row_to_batch.resize(rows, SIZE_MAX);
-
         for (size_t i = 0; i < rows; ++i)
         {
-            if (null_map && (*null_map)[i]) continue;
-            row_to_batch[i] = texts.size();
             auto sv = col_str->getDataAt(i);
             texts.emplace_back(sv.data(), sv.size());
         }
@@ -122,14 +113,8 @@ public:
         res_offsets.reserve(rows);
 
         size_t current_offset = 0;
-        for (size_t i = 0; i < rows; ++i)
+        for (const auto & emb : embeddings)
         {
-            if (row_to_batch[i] == SIZE_MAX)
-            {
-                res_offsets.push_back(current_offset);
-                continue;
-            }
-            const auto & emb = embeddings[row_to_batch[i]];
             res_data.insert(emb.begin(), emb.end());
             current_offset += emb.size();
             res_offsets.push_back(current_offset);
@@ -160,7 +145,7 @@ prefix dimension without retraining.
     FunctionDocumentation::ReturnedValue ret = {"L2-normalized embedding vector.", {"Array(Float32)"}};
     FunctionDocumentation::Category cat = FunctionDocumentation::Category::NLP;
     factory.registerFunction<FunctionEmbedding>(
-        {description, syntax, args, {}, ret, {}, {25, 12}, cat});
+        {description, syntax, args, {}, ret, {}, {26, 4}, cat});
 }
 
 } // namespace DB
