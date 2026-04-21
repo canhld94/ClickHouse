@@ -171,6 +171,18 @@ list (APPEND OBJECT_LIBS $<TARGET_OBJECTS:clickhouse_functions_kusto>)
 add_subdirectory(TimeSeries)
 list (APPEND OBJECT_LIBS $<TARGET_OBJECTS:clickhouse_functions_time_series>)
 
+add_subdirectory(Embedding)
+list (APPEND OBJECT_LIBS $<TARGET_OBJECTS:clickhouse_functions_embedding>)
+
+if (TARGET ch_contrib::onnxruntime)
+    list (APPEND PRIVATE_LIBS ch_contrib::onnxruntime)
+endif()
+
+if (TARGET ch_contrib::llama_cpp)
+    list (APPEND PRIVATE_LIBS ch_contrib::llama_cpp)
+endif()
+
+
 if (TARGET ch_contrib::datasketches)
     add_subdirectory(UniqTheta)
     list (APPEND OBJECT_LIBS $<TARGET_OBJECTS:clickhouse_functions_uniqtheta>)

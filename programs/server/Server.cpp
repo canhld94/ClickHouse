@@ -109,6 +109,7 @@
 #include <Server/TCPHandlerFactory.h>
 #include <Server/TCPServer.h>
 #include <Common/SensitiveDataMasker.h>
+#include <Functions/Embedding/EmbeddingModelRegistry.h>
 #include <Common/ThreadFuzzer.h>
 #include <Common/getHashOfLoadedBinary.h>
 #include <Common/filesystemHelpers.h>
@@ -2451,6 +2452,8 @@ try
 
             global_context->updateStorageConfiguration(config());
             global_context->updateInterserverCredentials(config());
+
+            EmbeddingModelRegistry::instance().reloadConfig(config());
 
             {
                 const size_t max_cache_size_in_bytes = static_cast<size_t>(

@@ -390,3 +390,27 @@
 [submodule "contrib/zmij"]
 	path = contrib/zmij
 	url = https://github.com/vitaut/zmij.git
+[submodule "contrib/onnxruntime"]
+	path = contrib/onnxruntime
+	url = https://github.com/canhld94/onnxruntime
+[submodule "contrib/pytorch_cpuinfo"]
+	path = contrib/pytorch_cpuinfo
+	url = https://github.com/pytorch/cpuinfo
+[submodule "contrib/onnx"]
+	path = contrib/onnx
+	url = https://github.com/onnx/onnx
+[submodule "contrib/eigen"]
+	path = contrib/eigen
+	url = https://github.com/eigen-mirror/eigen
+[submodule "contrib/microsoft-gsl"]
+	path = contrib/microsoft-gsl
+	url = https://github.com/microsoft/GSL
+[submodule "contrib/safeint"]
+	path = contrib/safeint
+	url = https://github.com/dcleblanc/SafeInt
+[submodule "contrib/date"]
+	path = contrib/date
+	url = https://github.com/HowardHinnant/date
+[submodule "contrib/llama.cpp"]
+	path = contrib/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp.git

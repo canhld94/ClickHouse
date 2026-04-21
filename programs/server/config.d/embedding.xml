@@ -1,0 +1,15 @@
+<clickhouse>
+    <!-- Embedding models for embedding() / semanticChunks() functions.
+         The built-in static model is always available without configuration.
+         Add ONNX models here for higher quality embeddings. -->
+    <!--
+    <embedding>
+        <model>
+            <id>gemma</id>
+            <type>onnx</type>
+            <model_path>/path/to/model.onnx</model_path>
+            <tokenizer_path>/path/to/tokenizer.json</tokenizer_path>
+        </model>
+    </embedding>
+    -->
+</clickhouse>
